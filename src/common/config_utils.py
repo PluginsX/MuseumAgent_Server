@@ -88,10 +88,10 @@ def get_global_config() -> dict:
 def get_global_ini_config() -> ConfigParser:
     """
     获取INI全局配置（只读）
-    
+
     Returns:
         全局INI配置对象
-    
+
     Raises:
         RuntimeError: 配置未加载
     """

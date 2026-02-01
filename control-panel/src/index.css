@@ -1,0 +1,173 @@
+/* 全局纯粹黑白灰主题 */
+body {
+  color: #ffffff;
+  background-color: #000000;
+  margin: 0;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Ant Design 纯粹黑白灰主题 */
+[data-theme='dark'] {
+  --ant-primary-color: #808080; /* 纯灰色作为主色调 */
+  --ant-layout-body-background: #000000;
+  --ant-component-background: #1a1a1a;
+  --ant-border-color-split: #333333;
+  --ant-text-color: #ffffff;
+  --ant-text-color-secondary: #cccccc;
+  --ant-text-color-placeholder: #999999;
+  --ant-text-color-disabled: #666666;
+  --ant-text-color-heading: #ffffff;
+  --ant-text-color-link: #808080;
+  --ant-bg-container: #1a1a1a;
+  --ant-bg-container-disabled: #2a2a2a;
+  --ant-bg-layout: #000000;
+  --ant-border-color-base: #333333;
+  --ant-border-color-inverse: #ffffff;
+  --ant-box-shadow-card: 0 6px 16px 0 rgba(0, 0, 0, 0.5);
+  --ant-box-shadow-toggle-button: 0 2px 4px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* 避免影响Ant Design组件 */
+#root a {
+  font-weight: 500;
+  color: #808080;
+  text-decoration: inherit;
+}
+#root a:hover {
+  color: #aaaaaa;
+}
+
+#root h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+  color: #ffffff;
+}
+
+/* 避免影响Ant Design按钮样式 */
+:not(.ant-btn) > button {
+  border-radius: 8px;
+  border: 1px solid #333333;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+:not(.ant-btn) > button:hover {
+  border-color: #808080;
+  background-color: #2a2a2a;
+  color: #ffffff;
+}
+:not(.ant-btn) > button:focus,
+:not(.ant-btn) > button:focus-visible {
+  outline: 2px solid #808080;
+  outline-offset: 2px;
+}
+
+/* 确保文字在各种状态下都清晰可见 */
+.ant-btn-primary {
+  background-color: #404040 !important;
+  border-color: #404040 !important;
+  color: #ffffff !important;
+}
+
+.ant-btn-primary:hover,
+.ant-btn-primary:focus {
+  background-color: #606060 !important;
+  border-color: #606060 !important;
+  color: #ffffff !important;
+}
+
+.ant-btn-primary[disabled],
+.ant-btn-primary.disabled {
+  background-color: #202020 !important;
+  border-color: #202020 !important;
+  color: #666666 !important;
+}
+
+/* 表格行悬停效果 */
+.ant-table-tbody > tr.ant-table-row:hover > td {
+  background-color: #2a2a2a !important;
+}
+
+/* 卡片背景 */
+.ant-card {
+  background-color: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+}
+
+/* 输入框 */
+.ant-input {
+  background-color: #1a1a1a !important;
+  border-color: #333333 !important;
+  color: #ffffff !important;
+}
+
+.ant-input:focus,
+.ant-input:hover {
+  border-color: #808080 !important;
+  box-shadow: 0 0 0 2px rgba(128, 128, 128, 0.2) !important;
+}
+
+/* 选择框 */
+.ant-select-selector {
+  background-color: #1a1a1a !important;
+  border-color: #333333 !important;
+}
+
+.ant-select-selector:focus,
+.ant-select-selector:hover {
+  border-color: #808080 !important;
+  box-shadow: 0 0 0 2px rgba(128, 128, 128, 0.2) !important;
+}
+
+/* 下拉菜单 */
+.ant-select-dropdown,
+.ant-popover-inner {
+  background-color: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+}
+
+/* 确保文字对比度足够 */
+.ant-typography,
+.ant-descriptions-item-label,
+.ant-descriptions-item-content,
+.ant-form-item-label > label {
+  color: #ffffff !important;
+}
+
+/* Switch 开关 */
+.ant-switch-checked {
+  background-color: #606060 !important;
+}
+
+/* 文字链接 */
+.ant-typography a,
+a.ant-typography {
+  color: #808080 !important;
+}
+
+.ant-typography a:hover,
+a.ant-typography:hover {
+  color: #aaaaaa !important;
+}
+
+/* 移除浅色主题支持，保持纯粹的黑白灰主题 */
+@media (prefers-color-scheme: light) {
+  body {
+    color: #ffffff;
+    background-color: #000000;
+  }
+  #root a:hover {
+    color: #aaaaaa;
+  }
+  :not(.ant-btn) > button {
+    background-color: #1a1a1a;
+    border-color: #333333;
+    color: #ffffff;
+  }
+}

@@ -1,157 +1,98 @@
 # -*- coding: utf-8 -*-
 """
-LLM服务调用模块 - 封装不同提供商调用逻辑，处理异常
+LLM服务调用模块 - OpenAI Compatible API 格式
 """
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from src.common.config_utils import get_config_by_key, get_global_config
+import requests
+
+from src.common.config_utils import get_global_config
 
 
 class LLMClient:
-    """通用化LLM客户端，支持动态切换提供商"""
+    """OpenAI 兼容格式 LLM 客户端"""
     
     def __init__(self) -> None:
-        """从全局配置中读取LLM所有参数"""
+        """从全局配置读取 LLM 参数"""
         config = get_global_config()
         llm_config = config.get("llm", {})
         
-        self.provider = llm_config.get("provider", "dashscope")
-        self.model = llm_config.get("model", "qwen-turbo")
+        self.base_url = (os.getenv("LLM_BASE_URL") or llm_config.get("base_url", "")).rstrip("/")
         self.api_key = os.getenv("LLM_API_KEY") or llm_config.get("api_key", "")
+        self.model = os.getenv("LLM_MODEL") or llm_config.get("model", "qwen-turbo")
         self.parameters = llm_config.get("parameters", {})
         self.prompt_template = llm_config.get("prompt_template", "")
         
-        # 请求超时（秒）
         server_config = config.get("server", {})
         self.timeout = server_config.get("request_timeout", 30)
     
     def generate_prompt(self, user_input: str, scene_type: str = "public") -> str:
-        """
-        填充提示词模板，生成完整LLM请求提示词
-        
-        Args:
-            user_input: 用户自然语言输入
-            scene_type: 场景类型
-        
-        Returns:
-            完整提示词字符串
-        """
+        """填充提示词模板"""
         return self.prompt_template.format(
             scene_type=scene_type,
             user_input=user_input
         )
     
-    def call_dashscope(self, prompt: str) -> str:
+    def _chat_completions(self, prompt: str) -> str:
         """
-        调用阿里通义千问（DashScope）API
+        调用 OpenAI 兼容的 Chat Completions API
         
-        Args:
-            prompt: 完整提示词
-        
-        Returns:
-            LLM纯JSON响应字符串
-        
-        Raises:
-            RuntimeError: API调用失败
+        POST {base_url}/chat/completions
         """
-        try:
-            import dashscope
-            from dashscope import Generation
-        except ImportError as e:
-            raise RuntimeError("dashscope SDK未安装，请执行: pip install dashscope") from e
+        if not self.base_url or not self.api_key:
+            raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
         
-        if not self.api_key:
-            raise RuntimeError("LLM API Key未配置，请在config.json或环境变量LLM_API_KEY中设置")
-        
-        dashscope.api_key = self.api_key
-        
-        messages = [{"role": "user", "content": prompt}]
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": self.parameters.get("temperature", 0.2),
+            "max_tokens": self.parameters.get("max_tokens", 1024),
+            "top_p": self.parameters.get("top_p", 0.9),
+        }
         
         try:
-            response = Generation.call(
-                model=self.model,
-                messages=messages,
-                result_format="message",
-                temperature=self.parameters.get("temperature", 0.2),
-                max_tokens=self.parameters.get("max_tokens", 1024),
-                top_p=self.parameters.get("top_p", 0.9),
-                api_key=self.api_key,
+            resp = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
             )
-        except Exception as e:
-            raise RuntimeError(f"DashScope API调用异常: {str(e)}") from e
+        except requests.RequestException as e:
+            raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
         
-        if response.status_code != 200:
-            error_msg = f"API Key无效或额度不足" if response.status_code == 401 else response.message
-            raise RuntimeError(f"DashScope API调用失败 [code={response.status_code}]: {error_msg}")
+        if resp.status_code != 200:
+            err_body = resp.text
+            try:
+                err_json = resp.json()
+                err_body = err_json.get("error", {}).get("message", err_body)
+            except Exception:
+                pass
+            raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
         
-        # 提取响应文本（兼容 message 与 text 两种格式）
-        try:
-            if not hasattr(response, "output") or not response.output:
-                raise RuntimeError("LLM响应格式异常：无有效输出内容")
-            out = response.output
-            if hasattr(out, "text") and out.text:
-                text = out.text
-            elif hasattr(out, "choices") and out.choices:
-                msg = out.choices[0].message
-                text = msg.get("content", "") or getattr(msg, "content", "") if msg else ""
-            else:
-                text = str(out)
-        except (AttributeError, IndexError, KeyError) as e:
-            raise RuntimeError(f"LLM响应格式异常: {str(e)}") from e
+        data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError("LLM 响应中无 choices")
         
-        if not text or not text.strip():
-            raise RuntimeError("LLM返回内容为空")
+        msg = choices[0].get("message", {})
+        text = msg.get("content", "")
+        if not text or not str(text).strip():
+            raise RuntimeError("LLM 返回内容为空")
         
-        return text.strip()
-    
-    def call_openai(self, prompt: str) -> str:
-        """
-        调用OpenAI兼容API（预留）
-        
-        Args:
-            prompt: 完整提示词
-        
-        Returns:
-            LLM纯JSON响应字符串
-        """
-        raise NotImplementedError("OpenAI提供商尚未实现，请在config.json中配置provider为dashscope")
-    
-    def call_ernie(self, prompt: str) -> str:
-        """
-        调用文心一言API（预留）
-        
-        Args:
-            prompt: 完整提示词
-        
-        Returns:
-            LLM纯JSON响应字符串
-        """
-        raise NotImplementedError("文心一言提供商尚未实现，请在config.json中配置provider为dashscope")
+        return str(text).strip()
     
     def parse_user_input(
         self,
         user_input: str,
         scene_type: str = "public"
     ) -> str:
-        """
-        根据配置的LLM提供商，解析用户输入并返回纯JSON响应字符串
-        
-        Args:
-            user_input: 用户自然语言输入
-            scene_type: 场景类型
-        
-        Returns:
-            LLM解析的纯JSON字符串
-        """
+        """解析用户输入，返回 LLM 的纯 JSON 响应字符串"""
         prompt = self.generate_prompt(user_input, scene_type)
-        
-        if self.provider == "dashscope":
-            return self.call_dashscope(prompt)
-        elif self.provider == "openai":
-            return self.call_openai(prompt)
-        elif self.provider == "ernie":
-            return self.call_ernie(prompt)
-        else:
-            raise RuntimeError(f"不支持的LLM提供商: {self.provider}，有效值为: dashscope, openai, ernie")
+        return self._chat_completions(prompt)

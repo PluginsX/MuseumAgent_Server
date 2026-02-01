@@ -6,6 +6,7 @@ from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from src.common.config_utils import get_config_by_key
 from src.common.log_utils import get_logger
@@ -25,14 +26,26 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# 配置CORS（必须在应用创建后、启动前添加）
+# 配置（必须在应用创建后、启动前添加）
 try:
     from src.common.config_utils import load_config, get_global_config
     load_config()
     allow_origins = get_config_by_key("server", "cors_allow_origins")
+    admin_cfg = get_global_config().get("admin_panel", {})
+    session_secret = admin_cfg.get("session_secret", "change-me-in-production")
+    session_max_age = admin_cfg.get("session_max_age", 86400)
 except Exception:
     allow_origins = ["*"]
+    session_secret = "change-me-in-production"
+    session_max_age = 86400
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=session_secret,
+    max_age=session_max_age,
+    same_site="lax",
+    https_only=False,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
@@ -40,6 +53,57 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 挂载管理员控制面板：优先提供新版 SPA 静态资源，不存在则使用旧版 HTML
+import os
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+_spa_dir = Path(__file__).resolve().parent.parent.parent / "control-panel" / "dist"
+if _spa_dir.exists():
+    # 挂载静态文件
+    app.mount("/Control/static", StaticFiles(directory=str(_spa_dir)), name="control-static")
+    
+    # 处理SPA路由 - 对于所有Control下的路径，如果文件不存在则返回index.html
+    @app.get("/Control/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = _spa_dir / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        else:
+            # 对于不存在的路径，返回index.html让前端路由处理
+            return FileResponse(str(_spa_dir / "index.html"))
+    
+    # 根路径特殊处理
+    @app.get("/Control")
+    async def serve_control_root():
+        return FileResponse(str(_spa_dir / "index.html"))
+else:
+    from src.api.admin_api import router as admin_router
+    app.include_router(admin_router)
+
+# 挂载新版 API（JWT 认证）
+from src.api.auth_api import router as auth_router
+from src.api.config_api import router as config_router
+from src.api.embedding_api import router as embedding_router
+from src.api.monitor_api import router as monitor_router
+from src.api.users_api import router as users_router
+app.include_router(auth_router)
+app.include_router(config_router)
+app.include_router(embedding_router)
+app.include_router(monitor_router)
+app.include_router(users_router)
+
+
+@app.on_event("startup")
+def startup_event():
+    """启动时初始化数据库并创建默认管理员"""
+    try:
+        from src.db.seed import seed_admin
+        seed_admin()
+    except Exception:
+        pass
 
 # 全局CommandGenerator实例（延迟初始化）
 _command_generator: CommandGenerator | None = None
