@@ -1,0 +1,37 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "reload": false,
+    "cors_allow_origins": ["*"],
+    "request_limit": 200,
+    "request_timeout": 30
+  },
+  "llm": {
+    "provider": "dashscope",
+    "model": "qwen-turbo",
+    "api_key": "your-own-llm-api-key",
+    "parameters": {
+      "temperature": 0.2,
+      "max_tokens": 1024,
+      "top_p": 0.9
+    },
+    "prompt_template": "你是博物馆文物智能解析专家，需严格按要求解析用户需求并返回纯JSON格式结果，无多余文字。返回字段：artifact_name（文物名称，字符串）、operation（文物操作指令，字符串，可选值：zoom_pattern、restore_scene、introduce、spirit_interact、query_param）、keywords（解析关键词，数组）。用户场景：{scene_type}，用户输入：{user_input}。"
+  },
+  "artifact_knowledge_base": {
+    "type": "sqlite",
+    "path": "./data/museum_artifact.db",
+    "table_name": "museum_artifact_info",
+    "valid_operations": ["zoom_pattern", "restore_scene", "introduce", "spirit_interact", "query_param"]
+  },
+  "response": {
+    "success_code": 200,
+    "fail_code": 400,
+    "auth_fail_code": 401,
+    "data_none_code": 404,
+    "success_msg": "请求处理成功",
+    "fail_msg": "请求处理失败",
+    "auth_fail_msg": "接口认证失败",
+    "data_none_msg": "未查询到相关文物数据"
+  }
+}

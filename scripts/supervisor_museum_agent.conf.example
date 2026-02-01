@@ -1,0 +1,25 @@
+; Supervisor 进程守护配置示例
+; 复制此文件为 museum_agent_server.conf 到 /etc/supervisor/conf.d/
+; 并根据实际部署路径修改 command 和 directory
+
+[program:museum_agent_server]
+; 服务启动命令，指定 Python 路径与项目入口
+command=/usr/bin/python3 /opt/MuseumAgent_Server/main.py
+; 项目工作目录
+directory=/opt/MuseumAgent_Server
+; 运行用户
+user=root
+; 服务启动后自动运行
+autostart=true
+; 异常退出后自动重启
+autorestart=true
+; 标准错误输出重定向到标准输出
+redirect_stderr=true
+; 运行日志路径
+stdout_logfile=/opt/MuseumAgent_Server/logs/supervisor.log
+; 错误日志路径
+stderr_logfile=/opt/MuseumAgent_Server/logs/supervisor_error.log
+; 进程启动等待时间
+startsecs=5
+; 最大重启次数
+startretries=3
