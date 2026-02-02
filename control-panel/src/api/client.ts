@@ -22,6 +22,7 @@ api.interceptors.response.use(
       const base = import.meta.env.BASE_URL || '';
       window.location.href = `${base}login`;
     }
+    // 对于其他错误，保留完整的错误对象以便前端处理
     return Promise.reject(err);
   }
 );

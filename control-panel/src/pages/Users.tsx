@@ -17,7 +17,16 @@ export default function Users() {
     setLoading(true);
     usersApi.list()
       .then((r) => setUsers(r.data))  // 直接使用返回的数据，不需要包装在 users 属性中
-      .catch(() => message.error('获取用户列表失败'))
+      .catch((e: any) => {
+        console.error('获取用户列表失败:', e);
+        let errorMessage = '获取用户列表失败';
+        if (e.response?.data?.detail) {
+          errorMessage = e.response.data.detail;
+        } else if (e.message) {
+          errorMessage = e.message;
+        }
+        message.error(errorMessage);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -42,7 +51,16 @@ export default function Users() {
         message.success('删除成功');
         loadUsers();
       })
-      .catch(() => message.error('删除失败'));
+      .catch((e: any) => {
+        console.error('删除失败:', e);
+        let errorMessage = '删除失败';
+        if (e.response?.data?.detail) {
+          errorMessage = e.response.data.detail;
+        } else if (e.message) {
+          errorMessage = e.message;
+        }
+        message.error(errorMessage);
+      });
   };
 
   const handleOk = async () => {
@@ -72,8 +90,27 @@ export default function Users() {
       }
       setModalVisible(false);
       loadUsers();
-    } catch (e) {
+    } catch (e: any) {
       console.error('保存失败:', e);
+      console.log('错误对象详情:', e);
+      console.log('错误响应:', e.response);
+      console.log('错误数据:', e.response?.data);
+      // 提取并显示具体的错误信息
+      let errorMessage = '操作失败';
+      if (e.response?.data?.detail) {
+        errorMessage = e.response.data.detail;
+        console.log('使用detail错误信息:', errorMessage);
+      } else if (e.message) {
+        errorMessage = e.message;
+        console.log('使用message错误信息:', errorMessage);
+      } else {
+        console.log('使用默认错误信息:', errorMessage);
+      }
+      
+      // 临时测试：同时使用alert和message
+      alert('错误信息: ' + errorMessage);  // 这个应该总是显示
+      message.error(errorMessage);  // 这个是我们要修复的
+      console.log('message.error已调用，参数:', errorMessage);
     }
   };
 
@@ -89,7 +126,16 @@ export default function Users() {
         message.success(`用户${!currentStatus ? '启用' : '禁用'}成功`);
         loadUsers(); // 重新加载用户列表
       })
-      .catch(() => message.error('更新用户状态失败'));
+      .catch((e: any) => {
+        console.error('更新用户状态失败:', e);
+        let errorMessage = '更新用户状态失败';
+        if (e.response?.data?.detail) {
+          errorMessage = e.response.data.detail;
+        } else if (e.message) {
+          errorMessage = e.message;
+        }
+        message.error(errorMessage);
+      });
     }
   };
 

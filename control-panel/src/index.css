@@ -1,3 +1,18 @@
+/* 确保Ant Design Message组件正常显示 */
+.ant-message {
+  z-index: 10000 !important;
+}
+
+.ant-message-notice {
+  background-color: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+  color: #ffffff !important;
+}
+
+.ant-message-notice-content {
+  color: #ffffff !important;
+}
+
 /* 全局纯粹黑白灰主题 */
 body {
   color: #ffffff;
