@@ -63,6 +63,11 @@ class EmbeddingClient:
         dimensions = self.parameters.get("dimensions")
         if dimensions is not None:
             payload["dimensions"] = dimensions
+            
+        # 添加编码格式参数
+        encoding_format = self.parameters.get("encoding_format")
+        if encoding_format is not None:
+            payload["encoding_format"] = encoding_format
         
         try:
             resp = requests.post(

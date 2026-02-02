@@ -20,7 +20,8 @@ class ArtifactKnowledgeBase:
         self.db_type = kb_config.get("type", "sqlite")
         self.db_path = kb_config.get("path", "./data/museum_artifact.db")
         self.table_name = kb_config.get("table_name", "museum_artifact_info")
-        self.valid_operations = kb_config.get("valid_operations", [])
+        # 移除硬编码的操作指令验证，完全依赖客户端动态注册
+        self.valid_operations = []
         
         # 解析路径为绝对路径
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -106,15 +107,17 @@ class ArtifactKnowledgeBase:
     
     def validate_operation(self, operation: str) -> bool:
         """
-        校验操作指令是否在合法列表中
+        已废弃：操作验证完全由客户端会话管理
         
         Args:
             operation: 操作指令
         
         Returns:
-            是否合法
+            总是返回False，强制使用会话级验证
         """
-        return operation in self.valid_operations if operation else False
+        # 在新的架构中，操作验证完全由客户端会话管理
+        # 这里保留方法签名以保持接口兼容性
+        return False
     
     def get_standard_artifact_data(self, artifact_name: str) -> Dict[str, Any]:
         """

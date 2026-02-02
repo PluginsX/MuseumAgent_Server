@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, message, Space, Typography } from 'antd';
+import { Button, Card, Divider, Form, Input, message, Select, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { configApi } from '../api/client';
 
@@ -25,10 +25,15 @@ export default function ConfigEmbedding() {
           console.log('API Key length:', (d.api_key as string).length);
         }
         
+        // 设置默认值
+        const parameters = d.parameters as Record<string, unknown> || {};
+        
         form.setFieldsValue({
           base_url: d.base_url,
           api_key: d.api_key,
           model: d.model,
+          dimensions: parameters.dimensions !== undefined ? parameters.dimensions : null,
+          encoding_format: parameters.encoding_format || 'float',
         });
         
         // 验证表单值是否设置成功
@@ -55,6 +60,10 @@ export default function ConfigEmbedding() {
         base_url: values.base_url,
         api_key: values.api_key,
         model: values.model,
+        parameters: {
+          dimensions: values.dimensions,
+          encoding_format: values.encoding_format,
+        },
       });
       message.success('保存成功，重启服务后生效');
     } catch (e: unknown) {
@@ -134,6 +143,32 @@ export default function ConfigEmbedding() {
           </Form.Item>
           <Form.Item name="model" label="Model" rules={[{ required: true }]}>
             <Input placeholder="text-embedding-v4" />
+          </Form.Item>
+          
+          <Divider orientation="left">高级参数</Divider>
+          
+          <Form.Item name="dimensions" label="向量维度">
+            <Select 
+              placeholder="选择维度" 
+              allowClear
+              options={[
+                { value: 256, label: '256 (轻量级)' },
+                { value: 512, label: '512 (标准)' },
+                { value: 1024, label: '1024 (高质量)' },
+                { value: 1536, label: '1536 (高精度)' },
+                { value: 2048, label: '2048 (超高精度)' },
+              ]}
+            />
+          </Form.Item>
+          
+          <Form.Item name="encoding_format" label="编码格式">
+            <Select 
+              defaultValue="float" 
+              options={[
+                { value: 'float', label: 'Float (浮点数)' },
+                { value: 'base64', label: 'Base64 (压缩格式)' },
+              ]}
+            />
           </Form.Item>
           <Form.Item>
             <Space>

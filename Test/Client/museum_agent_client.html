@@ -165,6 +165,45 @@
             background: #c0392b;
         }
 
+        /* 指令集配置样式 */
+        #operationCheckboxes {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.5rem;
+            background: var(--bg-color);
+        }
+
+        #operationCheckboxes div {
+            padding: 0.25rem 0;
+        }
+
+        #customOperationList {
+            font-family: monospace;
+            background: var(--bg-color);
+        }
+
+        .toast {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .toast-success {
+            background: #27ae60;
+        }
+
+        .toast-error {
+            background: #e74c3c;
+        }
+
+        .toast-warning {
+            background: #f39c12;
+        }
+
+        .toast-info {
+            background: #3498db;
+        }
+
         /* 聊天区域 */
         .chat-container {
             display: flex;
@@ -309,12 +348,18 @@
                 <h3>客户端配置</h3>
                 <div class="form-group">
                     <label for="clientType">客户端类型</label>
-                    <select id="clientType">
+                    <select id="clientType" onchange="updateOperationPresets()">
                         <option value="test">测试客户端</option>
-                        <option value="qiling">器灵</option>
-                        <option value="official">官方</option>
-                        <option value="third">第三方</option>
+                        <option value="web3d">Web3D展示端</option>
+                        <option value="spirit">器灵桌面宠物</option>
+                        <option value="mobile">移动端</option>
+                        <option value="api">API调用者</option>
+                        <option value="custom">自定义</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label for="clientId">客户端ID</label>
+                    <input type="text" id="clientId" placeholder="自动生成或手动输入">
                 </div>
                 <div class="form-group">
                     <label for="spiritId">器灵ID</label>
@@ -331,6 +376,42 @@
             </div>
 
             <div class="config-section">
+                <h3>指令集配置 <span style="font-size: 0.8rem; color: #e74c3c;">✨ 新功能</span></h3>
+                <div class="form-group">
+                    <label for="operationMode">指令集模式</label>
+                    <select id="operationMode" onchange="toggleOperationConfig()">
+                        <option value="preset">预设模式</option>
+                        <option value="custom">自定义模式</option>
+                    </select>
+                </div>
+                
+                <div id="presetOperations" class="form-group">
+                    <label>预设指令集</label>
+                    <div id="operationCheckboxes">
+                        <!-- 动态生成的预设指令复选框 -->
+                    </div>
+                </div>
+                
+                <div id="customOperations" class="form-group" style="display: none;">
+                    <label for="customOperationList">自定义指令集（每行一个）</label>
+                    <textarea id="customOperationList" rows="4" placeholder="例如：&#10;zoom_pattern&#10;restore_scene&#10;introduce"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn btn-secondary" onclick="previewCommandSet()">预览指令集</button>
+                    <button class="btn" onclick="registerSession()" id="registerBtn">注册会话</button>
+                </div>
+                
+                <div id="sessionInfo" style="display: none;">
+                    <div style="background: #d5f4e6; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                        <strong>会话状态:</strong> <span id="sessionStatus">未注册</span><br>
+                        <strong>会话ID:</strong> <span id="sessionIdDisplay">-</span><br>
+                        <strong>过期时间:</strong> <span id="sessionExpiry">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-section">
                 <h3>快速访问</h3>
                 <button class="btn btn-secondary" onclick="window.open(getCurrentServerUrl() + '/Control', '_blank')">管理面板</button>
                 <button class="btn btn-secondary" onclick="window.open(getCurrentServerUrl() + '/docs', '_blank')">API文档</button>
@@ -340,7 +421,9 @@
                 <h3>配置说明</h3>
                 <p style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">各配置项说明：</p>
                 <ul style="font-size: 0.8rem; color: #666; margin-left: 1rem; margin-bottom: 0.5rem;">
-                    <li>客户端类型：用于日志统计，不影响业务逻辑</li>
+                    <li>客户端类型：影响预设指令集的选择</li>
+                    <li>指令集模式：预设模式使用标准指令集，自定义模式可自由配置</li>
+                    <li>注册会话：动态指令集需要先注册会话才能生效</li>
                     <li>器灵ID：第三方客户端可传空，服务端不做业务处理</li>
                     <li>场景类型：study/leisure/public，默认public</li>
                 </ul>
@@ -390,6 +473,9 @@
         // 全局状态
         let isConnected = false;
         let isProcessing = false;
+        let sessionId = null;
+        let sessionExpiryTime = null;
+        let heartbeatInterval = null;
 
         // DOM 元素
         const chatMessages = document.getElementById('chatMessages');
@@ -401,6 +487,8 @@
         // 页面加载完成
         document.addEventListener('DOMContentLoaded', function() {
             loadSettings();
+            initializeOperationSets();
+            updateOperationPresets();
             addEventListeners();
             addWelcomeMessage();
         });
@@ -419,13 +507,16 @@
             document.getElementById('serverUrl').addEventListener('change', saveSettings);
             document.getElementById('timeout').addEventListener('change', saveSettings);
             document.getElementById('clientType').addEventListener('change', saveSettings);
+            document.getElementById('clientId').addEventListener('change', saveSettings);
             document.getElementById('spiritId').addEventListener('change', saveSettings);
             document.getElementById('sceneType').addEventListener('change', saveSettings);
+            document.getElementById('operationMode').addEventListener('change', saveSettings);
+            document.getElementById('customOperationList').addEventListener('change', saveSettings);
         }
 
         // 添加欢迎消息
         function addWelcomeMessage() {
-            addBotMessage("欢迎使用博物馆智能体测试客户端！\n\n我可以帮您：\n• 介绍文物信息\n• 放大查看文物细节\n• 还原文物历史场景\n• 与器灵进行交互\n• 查询文物参数\n\n请在输入框中输入您的问题，例如：'讲讲蟠龙盖罍的纹样'");
+            addBotMessage("欢迎使用博物馆智能体测试客户端！\n\n✨ 新功能：支持动态指令集配置\n\n我可以帮您：\n• 介绍文物信息\n• 放大查看文物细节\n• 还原文物历史场景\n• 与器灵进行交互\n• 查询文物参数\n\n新增功能：\n• 动态配置不同客户端的指令集\n• 会话级指令集管理\n• 实时预览可用指令\n\n请先配置指令集并注册会话，然后在输入框中输入您的问题，例如：'讲讲蟠龙盖罍的纹样'");
         }
 
         // 获取当前服务器URL（用于快速访问按钮）
@@ -503,11 +594,18 @@
                     scene_type: getSceneType()
                 };
 
+                // 如果有会话ID，添加到请求头
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                
+                if (sessionId) {
+                    headers['session-id'] = sessionId;
+                }
+
                 const response = await fetch(`${getServerUrl()}/api/agent/parse`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify(requestData),
                     signal: AbortSignal.timeout(getTimeout() * 1000)
                 });
@@ -533,14 +631,31 @@
             if (result.code === 200 && result.data) {
                 const command = result.data;
                 
-                // 构建响应消息
-                let responseText = `已解析您的请求：\n\n`;
-                responseText += `• 文物名称: ${command.artifact_name || '未知'}\n`;
-                responseText += `• 操作指令: ${command.operation || '未知'}\n`;
-                responseText += `• 关键词: ${command.keywords ? command.keywords.join(', ') : '无'}\n`;
+                // 调试信息：在控制台输出原始数据
+                console.log('=== API响应调试信息 ===');
+                console.log('完整响应:', result);
+                console.log('命令数据:', command);
+                console.log('操作指令:', command.operation);
+                console.log('文物名称:', command.artifact_name);
+                console.log('关键词:', command.keywords);
+                console.log('回复内容:', command.response);
+                console.log('=======================');
                 
+                // 直接显示完整的标准化指令字段
+                let responseText = `📋 完整响应字段：\n\n`;
+                
+                // 严格按照要求显示四个核心字段
+                responseText += `artifact_name: ${JSON.stringify(command.artifact_name)}\n`;
+                responseText += `operation: ${JSON.stringify(command.operation)}\n`;
+                responseText += `keywords: ${JSON.stringify(command.keywords)}\n`;
+                responseText += `response: ${JSON.stringify(command.response)}\n`;
+                
+                // 额外显示其他有用字段
+                if (command.artifact_id) {
+                    responseText += `artifact_id: ${JSON.stringify(command.artifact_id)}\n`;
+                }
                 if (command.tips) {
-                    responseText += `\n${command.tips}`;
+                    responseText += `tips: ${JSON.stringify(command.tips)}\n`;
                 }
 
                 addBotMessage(responseText, command);
@@ -684,14 +799,16 @@
                 position: 'fixed',
                 top: '20px',
                 right: '20px',
-                background: type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db',
                 color: 'white',
-                padding: '10px 20px',
-                borderRadius: '4px',
-                zIndex: '1000',
+                padding: '12px 20px',
+                borderRadius: '6px',
+                zIndex: '10000',
                 opacity: '0',
                 transform: 'translateX(100%)',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
             });
 
             document.body.appendChild(toast);
@@ -705,9 +822,9 @@
             // 自动隐藏
             setTimeout(() => {
                 toast.style.opacity = '0';
-                toast.style.transform = 'translateX(100%)';
+                toast.style.transform = 'translateX(100%) scale(0.8)';
                 setTimeout(() => toast.remove(), 300);
-            }, 2000);
+            }, 3000);
         }
 
         // 获取配置值
@@ -723,6 +840,15 @@
             return document.getElementById('clientType').value;
         }
 
+        function getClientId() {
+            let clientId = document.getElementById('clientId').value.trim();
+            if (!clientId) {
+                clientId = `${getClientType()}-client-${Date.now()}`;
+                document.getElementById('clientId').value = clientId;
+            }
+            return clientId;
+        }
+
         function getSpiritId() {
             return document.getElementById('spiritId').value.trim();
         }
@@ -731,14 +857,26 @@
             return document.getElementById('sceneType').value;
         }
 
+        function getOperationMode() {
+            return document.getElementById('operationMode').value;
+        }
+
+        function getCustomOperations() {
+            const opsText = document.getElementById('customOperationList').value.trim();
+            return opsText ? opsText.split('\n').filter(op => op.trim()) : [];
+        }
+
         // 保存设置到 localStorage
         function saveSettings() {
             const settings = {
                 serverUrl: getServerUrl(),
                 timeout: getTimeout(),
                 clientType: getClientType(),
+                clientId: getClientId(),
                 spiritId: getSpiritId(),
-                sceneType: getSceneType()
+                sceneType: getSceneType(),
+                operationMode: getOperationMode(),
+                customOperations: getCustomOperations()
             };
             localStorage.setItem('museum_agent_settings', JSON.stringify(settings));
         }
@@ -752,13 +890,257 @@
                     if (settings.serverUrl) document.getElementById('serverUrl').value = settings.serverUrl;
                     if (settings.timeout) document.getElementById('timeout').value = settings.timeout;
                     if (settings.clientType) document.getElementById('clientType').value = settings.clientType;
+                    if (settings.clientId) document.getElementById('clientId').value = settings.clientId;
                     if (settings.spiritId) document.getElementById('spiritId').value = settings.spiritId;
                     if (settings.sceneType) document.getElementById('sceneType').value = settings.sceneType;
+                    if (settings.operationMode) document.getElementById('operationMode').value = settings.operationMode;
+                    if (settings.customOperations && settings.customOperations.length > 0) {
+                        document.getElementById('customOperationList').value = settings.customOperations.join('\n');
+                    }
                 } catch (e) {
                     console.warn('加载设置失败:', e);
                 }
             }
         }
+
+        // 指令集预设配置
+        const OPERATION_PRESETS = {
+            'web3d': ['zoom_pattern', 'restore_scene', 'introduce', 'query_param'],
+            'spirit': ['spirit_interact', 'introduce', 'query_param'],
+            'mobile': ['introduce', 'query_param'],
+            'api': ['zoom_pattern', 'restore_scene', 'introduce', 'spirit_interact', 'query_param'],
+            'test': ['introduce', 'query_param'],
+            'custom': []
+        };
+
+        const ALL_OPERATIONS = [
+            'zoom_pattern',
+            'restore_scene', 
+            'introduce',
+            'spirit_interact',
+            'query_param'
+        ];
+
+        // 初始化指令集配置
+        function initializeOperationSets() {
+            const container = document.getElementById('operationCheckboxes');
+            container.innerHTML = '';
+            
+            ALL_OPERATIONS.forEach(op => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '0.5rem';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `op_${op}`;
+                checkbox.value = op;
+                checkbox.style.marginRight = '0.5rem';
+                
+                const label = document.createElement('label');
+                label.htmlFor = `op_${op}`;
+                label.textContent = op;
+                label.style.fontSize = '0.9rem';
+                label.style.cursor = 'pointer';
+                
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+
+        // 根据客户端类型更新预设指令集
+        function updateOperationPresets() {
+            const clientType = getClientType();
+            const presetOps = OPERATION_PRESETS[clientType] || [];
+            
+            // 重置所有复选框
+            ALL_OPERATIONS.forEach(op => {
+                const checkbox = document.getElementById(`op_${op}`);
+                if (checkbox) {
+                    checkbox.checked = presetOps.includes(op);
+                }
+            });
+        }
+
+        // 切换指令集配置模式
+        function toggleOperationConfig() {
+            const mode = getOperationMode();
+            const presetDiv = document.getElementById('presetOperations');
+            const customDiv = document.getElementById('customOperations');
+            
+            if (mode === 'preset') {
+                presetDiv.style.display = 'block';
+                customDiv.style.display = 'none';
+            } else {
+                presetDiv.style.display = 'none';
+                customDiv.style.display = 'block';
+            }
+        }
+
+        // 获取当前选中的指令集
+        function getCurrentOperations() {
+            const mode = getOperationMode();
+            
+            if (mode === 'preset') {
+                const selectedOps = [];
+                ALL_OPERATIONS.forEach(op => {
+                    const checkbox = document.getElementById(`op_${op}`);
+                    if (checkbox && checkbox.checked) {
+                        selectedOps.push(op);
+                    }
+                });
+                return selectedOps;
+            } else {
+                return getCustomOperations();
+            }
+        }
+
+        // 预览当前指令集
+        function previewCommandSet() {
+            const operations = getCurrentOperations();
+            const clientType = getClientType();
+            
+            let previewText = `📋 当前指令集预览:\n\n`;
+            previewText += `客户端类型: ${clientType}\n`;
+            previewText += `指令集模式: ${getOperationMode()}\n`;
+            previewText += `可用指令 (${operations.length}个):\n`;
+            
+            if (operations.length > 0) {
+                operations.forEach((op, index) => {
+                    previewText += `  ${index + 1}. ${op}\n`;
+                });
+            } else {
+                previewText += `  (无可用指令)\n`;
+            }
+            
+            previewText += `\n💡 提示: 注册会话后，LLM将只使用这些指令进行解析`;
+            
+            addBotMessage(previewText);
+        }
+
+        // 注册会话
+        async function registerSession() {
+            const operations = getCurrentOperations();
+            
+            if (operations.length === 0) {
+                showToast('请至少选择一个指令', 'warning');
+                return;
+            }
+
+            showLoading('registerBtn', '注册中...');
+
+            try {
+                const registrationData = {
+                    client_metadata: {
+                        client_id: getClientId(),
+                        client_type: getClientType(),
+                        client_version: "1.0.0",
+                        platform: "web-test-client",
+                        capabilities: {
+                            max_concurrent_requests: 3,
+                            supported_scenes: ["study", "leisure", "public"],
+                            preferred_response_format: "json"
+                        }
+                    },
+                    operation_set: operations
+                };
+
+                const response = await fetch(`${getServerUrl()}/api/session/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(registrationData),
+                    signal: AbortSignal.timeout(getTimeout() * 1000)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    sessionId = result.session_id;
+                    sessionExpiryTime = new Date(result.expires_at);
+                    
+                    updateSessionDisplay('已注册', sessionId, sessionExpiryTime);
+                    startHeartbeat();
+                    
+                    showToast('会话注册成功！', 'success');
+                    addBotMessage(`✅ 会话注册成功!
+
+会话ID: ${sessionId}
+过期时间: ${sessionExpiryTime.toLocaleString()}
+
+现在发送的消息将使用您配置的指令集进行解析。`);
+                } else {
+                    throw new Error(result.detail || '注册失败');
+                }
+
+            } catch (error) {
+                showToast(`注册失败: ${error.message}`, 'error');
+                addBotMessage(`❌ 会话注册失败: ${error.message}`);
+            } finally {
+                hideLoading('registerBtn', '注册会话');
+            }
+        }
+
+        // 更新会话显示
+        function updateSessionDisplay(status, id, expiry) {
+            document.getElementById('sessionStatus').textContent = status;
+            document.getElementById('sessionIdDisplay').textContent = id || '-';
+            document.getElementById('sessionExpiry').textContent = expiry ? expiry.toLocaleString() : '-';
+            document.getElementById('sessionInfo').style.display = 'block';
+        }
+
+        // 启动心跳
+        function startHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+            
+            heartbeatInterval = setInterval(async () => {
+                if (sessionId) {
+                    try {
+                        await fetch(`${getServerUrl()}/api/session/heartbeat`, {
+                            method: 'POST',
+                            headers: {
+                                'session-id': sessionId
+                            },
+                            signal: AbortSignal.timeout(5000)
+                        });
+                    } catch (error) {
+                        console.warn('心跳失败:', error);
+                    }
+                }
+            }, 5 * 60 * 1000); // 每5分钟发送一次心跳
+        }
+
+        // 注销会话
+        async function unregisterSession() {
+            if (!sessionId) return;
+            
+            try {
+                await fetch(`${getServerUrl()}/api/session/unregister`, {
+                    method: 'DELETE',
+                    headers: {
+                        'session-id': sessionId
+                    }
+                });
+            } catch (error) {
+                console.warn('会话注销失败:', error);
+            } finally {
+                sessionId = null;
+                sessionExpiryTime = null;
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+                updateSessionDisplay('未注册', '-', '-');
+            }
+        }
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', function() {
+            unregisterSession();
+        });
 
         // 导出函数供外部调用
         window.testConnection = testConnection;
@@ -766,6 +1148,14 @@
         window.clearChat = clearChat;
         window.sendExample = sendExample;
         window.getCurrentServerUrl = getCurrentServerUrl;
+        window.previewCommandSet = previewCommandSet;
+        window.registerSession = registerSession;
+        window.updateOperationPresets = updateOperationPresets;
+        window.toggleOperationConfig = toggleOperationConfig;
+        window.previewCommandSet = previewCommandSet;
+        window.registerSession = registerSession;
+        window.updateOperationPresets = updateOperationPresets;
+        window.toggleOperationConfig = toggleOperationConfig;
     </script>
 </body>
 </html>

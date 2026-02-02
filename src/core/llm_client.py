@@ -29,10 +29,13 @@ class LLMClient:
         self.timeout = server_config.get("request_timeout", 30)
     
     def generate_prompt(self, user_input: str, scene_type: str = "public") -> str:
-        """填充提示词模板"""
+        """填充提示词模板（传统模式兼容）"""
+        # 为传统模式提供默认值，确保与动态模式提示词兼容
         return self.prompt_template.format(
             scene_type=scene_type,
-            user_input=user_input
+            user_input=user_input,
+            valid_operations="introduce, query_param, general_chat",
+            context_note="（传统模式，使用基础指令集）"
         )
     
     def _chat_completions(self, prompt: str) -> str:
@@ -56,6 +59,18 @@ class LLMClient:
             "max_tokens": self.parameters.get("max_tokens", 1024),
             "top_p": self.parameters.get("top_p", 0.9),
         }
+        
+        # 添加可选参数
+        if self.parameters.get("stream") is not None:
+            payload["stream"] = self.parameters["stream"]
+        if self.parameters.get("seed") is not None:
+            payload["seed"] = self.parameters["seed"]
+        if self.parameters.get("presence_penalty") is not None:
+            payload["presence_penalty"] = self.parameters["presence_penalty"]
+        if self.parameters.get("frequency_penalty") is not None:
+            payload["frequency_penalty"] = self.parameters["frequency_penalty"]
+        if self.parameters.get("n") is not None:
+            payload["n"] = self.parameters["n"]
         
         try:
             resp = requests.post(

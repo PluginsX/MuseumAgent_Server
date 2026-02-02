@@ -16,6 +16,7 @@ class StandardCommand(BaseModel):
     operation_params: Optional[Dict[str, Any]] = None
     keywords: Optional[List[str]] = None
     tips: Optional[str] = None
+    response: Optional[str] = None  # 通用对话回复内容
 
 
 class AgentParseResponse(BaseModel):

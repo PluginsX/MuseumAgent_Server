@@ -4,7 +4,7 @@
 """
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -89,11 +89,13 @@ from src.api.config_api import router as config_router
 from src.api.embedding_api import router as embedding_router
 from src.api.monitor_api import router as monitor_router
 from src.api.users_api import router as users_router
+from src.api.session_api import router as session_router
 app.include_router(auth_router)
 app.include_router(config_router)
 app.include_router(embedding_router)
 app.include_router(monitor_router)
 app.include_router(users_router)
+app.include_router(session_router)
 
 
 @app.on_event("startup")
@@ -129,7 +131,7 @@ async def root():
     summary="智能体解析接口",
     description="接收用户自然语言输入，返回标准化文物操作指令",
 )
-async def parse_agent(request: AgentParseRequest):
+async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)):
     """
     博物馆智能体核心解析接口
     
@@ -150,18 +152,20 @@ async def parse_agent(request: AgentParseRequest):
             f"scene_type={request.scene_type}"
         )
         
-        # 调用指令生成器
+        # 调用指令生成器（支持会话感知）
         generator = _get_command_generator()
         command_dict = generator.generate_standard_command(
             user_input=request.user_input,
-            scene_type=request.scene_type or "public"
+            scene_type=request.scene_type or "public",
+            session_id=session_id  # 传递会话ID
         )
         
-        # 构造StandardCommand
-        command = StandardCommand(**command_dict)
+        # 直接透传原始数据（避免Pydantic模型干扰）
+        print(f"[DEBUG] API层 - 接收的command_dict: {command_dict}")
         
-        # 返回成功响应
-        return success_response(data=command.model_dump())
+        # 返回成功响应（直接使用原始字典）
+        print(f"[DEBUG] API层 - 透传原始数据: {command_dict}")
+        return success_response(data=command_dict)
         
     except ValueError as e:
         logger.warning(f"参数/解析异常: {str(e)}, 请求: user_input={request.user_input}")

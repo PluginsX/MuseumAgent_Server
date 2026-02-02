@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, InputNumber, message, Space, Typography } from 'antd';
+import { Button, Card, Divider, Form, Input, InputNumber, message, Space, Switch, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { configApi } from '../api/client';
 
@@ -25,13 +25,21 @@ export default function ConfigLLM() {
           console.log('API Key length:', (d.api_key as string).length);
         }
         
+        // 设置默认值
+        const parameters = d.parameters as Record<string, number> || {};
+        
         form.setFieldsValue({
           base_url: d.base_url,
           api_key: d.api_key,
           model: d.model,
-          temperature: (d.parameters as Record<string, number>)?.temperature,
-          max_tokens: (d.max_tokens as number) || (d.parameters as Record<string, number>)?.max_tokens,
-          top_p: (d.parameters as Record<string, number>)?.top_p,
+          temperature: parameters.temperature !== undefined ? parameters.temperature : 0.2,
+          max_tokens: parameters.max_tokens !== undefined ? parameters.max_tokens : 1024,
+          top_p: parameters.top_p !== undefined ? parameters.top_p : 0.9,
+          stream: parameters.stream !== undefined ? parameters.stream : false,
+          seed: parameters.seed !== undefined ? parameters.seed : null,
+          presence_penalty: parameters.presence_penalty !== undefined ? parameters.presence_penalty : 0,
+          frequency_penalty: parameters.frequency_penalty !== undefined ? parameters.frequency_penalty : 0,
+          n: parameters.n !== undefined ? parameters.n : 1,
         });
         
         // 验证表单值是否设置成功
@@ -62,6 +70,11 @@ export default function ConfigLLM() {
           temperature: values.temperature,
           max_tokens: values.max_tokens,
           top_p: values.top_p,
+          stream: values.stream,
+          seed: values.seed,
+          presence_penalty: values.presence_penalty,
+          frequency_penalty: values.frequency_penalty,
+          n: values.n,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -150,6 +163,28 @@ export default function ConfigLLM() {
     </Form.Item>
     <Form.Item name="top_p" label="Top P">
     <InputNumber min={0} max={1} step={0.1} style={{ width: '100%' }} />
+    </Form.Item>
+    
+    <Divider orientation="left">高级参数</Divider>
+    
+    <Form.Item name="stream" label="流式响应" valuePropName="checked">
+    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+    </Form.Item>
+    
+    <Form.Item name="seed" label="随机种子">
+    <InputNumber min={0} max={999999} placeholder="用于可复现性" style={{ width: '100%' }} />
+    </Form.Item>
+    
+    <Form.Item name="presence_penalty" label="存在惩罚">
+    <InputNumber min={-2} max={2} step={0.1} placeholder="-2.0到2.0" style={{ width: '100%' }} />
+    </Form.Item>
+    
+    <Form.Item name="frequency_penalty" label="频率惩罚">
+    <InputNumber min={-2} max={2} step={0.1} placeholder="-2.0到2.0" style={{ width: '100%' }} />
+    </Form.Item>
+    
+    <Form.Item name="n" label="生成选项数">
+    <InputNumber min={1} max={5} defaultValue={1} placeholder="1-5" style={{ width: '100%' }} />
     </Form.Item>
     <Form.Item>
     <Space>

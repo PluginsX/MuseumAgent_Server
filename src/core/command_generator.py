@@ -6,16 +6,25 @@ import json
 from typing import Any, Dict
 
 from src.core.llm_client import LLMClient
-from src.core.knowledge_base import ArtifactKnowledgeBase
+from src.core.dynamic_llm_client import DynamicLLMClient
+# 知识库查询已移至RAG模块，在LLM处理之前执行
 
 
 class CommandGenerator:
     """通用化指令生成器，整合LLM解析与知识库数据"""
     
-    def __init__(self) -> None:
-        """实例化LLMClient与ArtifactKnowledgeBase"""
-        self.llm_client = LLMClient()
-        self.knowledge_base = ArtifactKnowledgeBase()
+    def __init__(self, use_dynamic_llm: bool = True) -> None:
+        """实例化LLMClient与ArtifactKnowledgeBase
+        
+        Args:
+            use_dynamic_llm: 是否使用动态LLM客户端（支持会话感知）
+        """
+        self.use_dynamic_llm = use_dynamic_llm
+        if use_dynamic_llm:
+            self.llm_client = DynamicLLMClient()
+        else:
+            self.llm_client = LLMClient()
+        # 知识库查询已移至RAG模块处理
     
     def parse_llm_response(self, llm_response: str) -> Dict[str, Any]:
         """
@@ -46,7 +55,8 @@ class CommandGenerator:
     def generate_standard_command(
         self,
         user_input: str,
-        scene_type: str = "public"
+        scene_type: str = "public",
+        session_id: str = None
     ) -> Dict[str, Any]:
         """
         生成通用化标准化指令（核心业务逻辑）
@@ -54,6 +64,7 @@ class CommandGenerator:
         Args:
             user_input: 用户自然语言输入
             scene_type: 场景类型
+            session_id: 会话ID（用于动态指令集）
         
         Returns:
             标准化指令字典，符合StandardCommand模型格式
@@ -62,44 +73,62 @@ class CommandGenerator:
             ValueError: 参数校验失败、LLM解析异常
             RuntimeError: 知识库查询失败、操作非法
         """
-        # 1. 调用LLM解析用户输入
-        llm_raw = self.llm_client.parse_user_input(user_input, scene_type)
+        # 1. 调用LLM解析用户输入（必须使用会话感知的动态LLM）
+        print(f"[DEBUG] CommandGenerator - use_dynamic_llm: {self.use_dynamic_llm}, session_id: {session_id}")
+        
+        # 强制使用动态LLM客户端，必须有有效的会话ID
+        if not self.use_dynamic_llm:
+            raise RuntimeError("系统配置错误：必须启用动态LLM模式")
+            
+        if not session_id:
+            raise ValueError("缺少会话ID：所有请求必须在有效会话上下文中执行")
+        
+        print(f"[DEBUG] 使用动态LLM客户端处理会话: {session_id}")
+        llm_raw = self.llm_client.parse_user_input_with_session(
+            session_id=session_id,
+            user_input=user_input,
+            scene_type=scene_type
+        )
         
         # 2. 解析LLM JSON响应
         llm_data = self.parse_llm_response(llm_raw)
+        print(f"[DEBUG] LLM原始响应数据: {llm_data}")
+        print(f"[DEBUG] LLM响应中是否包含response字段: {'response' in llm_data}")
         
         # 3. 提取核心字段
         artifact_name = llm_data.get("artifact_name") or llm_data.get("artifactName")
         operation = llm_data.get("operation")
         keywords = llm_data.get("keywords") or []
         
-        # 4. 空值校验
-        if not artifact_name or not str(artifact_name).strip():
-            raise ValueError("LLM解析结果中文物名称为空")
+        # 4. 指令集包含验证（最小化处理）
         if not operation or not str(operation).strip():
-            raise ValueError("LLM解析结果中操作指令为空")
-        if not isinstance(keywords, list):
-            keywords = []
+            raise ValueError("LLM未能识别出有效的操作指令")
         
-        artifact_name = str(artifact_name).strip()
         operation = str(operation).strip()
         
-        # 5. 校验操作指令合法性
-        if not self.knowledge_base.validate_operation(operation):
-            valid_ops = self.knowledge_base.valid_operations
-            raise ValueError(f"操作指令不合法，有效值为: {', '.join(valid_ops)}")
+        # 5. 验证指令是否在客户端注册的指令集中
+        from ..session.session_manager import session_manager
+        session_ops = session_manager.get_operations_for_session(session_id)
+        if not session_ops:
+            raise ValueError("当前会话未注册任何指令集")
         
-        # 6. 从知识库获取标准化文物数据
-        artifact_data = self.knowledge_base.get_standard_artifact_data(artifact_name)
+        if operation not in session_ops:
+            raise ValueError(f"指令'{operation}'不在当前会话注册的指令集中，支持的指令: {', '.join(session_ops)}")
         
-        # 7. 整合生成标准化指令
+        print(f"[CommandGenerator] 指令'{operation}'通过验证，属于客户端注册指令集")
+        
+        # 6. 直接返回LLM原始响应数据（透传模式）
+        print(f"[DEBUG] 透传LLM原始响应数据")
+        # 确保必要的字段存在
         command = {
-            "artifact_id": artifact_data.get("artifact_id"),
-            "artifact_name": artifact_data.get("artifact_name"),
-            "operation": operation,
-            "operation_params": artifact_data.get("operation_params") or {},
+            "artifact_id": llm_data.get("artifact_id"),
+            "artifact_name": llm_data.get("artifact_name"),
+            "operation": operation,  # 使用验证后的operation
+            "operation_params": llm_data.get("operation_params", {}),
             "keywords": keywords,
-            "tips": artifact_data.get("tips", "")
+            "tips": llm_data.get("tips"),
+            "response": llm_data.get("response", "")
         }
+        print(f"[DEBUG] 透传的指令数据: {command}")
         
         return command
