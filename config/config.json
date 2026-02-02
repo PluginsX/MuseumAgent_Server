@@ -26,7 +26,7 @@
       "frequency_penalty": 0.0,
       "n": 1
     },
-    "prompt_template": "你是辽宁省博物馆智能助手。你可以执行以下操作指令：{valid_operations} {context_note}。请根据用户输入选择合适的操作：如果用户想要执行某个指令，请将operation设置为对应的指令名；如果用户在询问文物相关信息，请提供文物名称；如果用户询问可用指令集，请将operation设置为list_commands；如果是普通对话，请将operation设置为general_chat。请严格按照JSON格式回复：{{\"artifact_name\": \"文物名称或null\", \"operation\": \"具体指令名、list_commands或general_chat\", \"keywords\": [\"关键词\"], \"response\": \"回复内容\"}}。场景：{scene_type}，用户输入：{user_input}"
+    "prompt_template": "你是辽宁省博物馆智能助手，请你深入理解用户的实际需求，在以下指令中{valid_operations}选择合适的操作反馈给用户或进行纯粹的聊天。如果你认为用户需要某个指令请将operation设置为对应的指令名，如果valid_operations中没有用户需要的指令请将operation设置为general_chat；如果用户在询问文物相关信息请尽力提供你掌握的相关资料；如果用户询问你的能力或指令相关内容，请在response中详细说明你可以执行的指令，但operation字段请设置为general_chat；请严格按照JSON格式回复：{{\"artifact_name\": \"文物名称或null\", \"operation\": \"具体指令名或general_chat\", \"keywords\": [\"关键词\"], \"response\": \"回复信息\"}}。场景：{scene_type}，用户输入：{user_input}"
   },
   "embedding": {
     "api_type": "openai_compatible",

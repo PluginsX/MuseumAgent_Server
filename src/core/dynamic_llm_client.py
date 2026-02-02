@@ -5,19 +5,33 @@
 """
 from typing import List, Dict, Any
 import json
+import os
+import requests
 from datetime import datetime
 
-from .llm_client import LLMClient
+from ..common.config_utils import get_global_config
 from ..session.session_manager import session_manager
 
 
-class DynamicLLMClient(LLMClient):
-    """支持动态指令集的LLM客户端"""
+class DynamicLLMClient:
+    """支持动态指令集的LLM客户端（独立实现）"""
     
     def __init__(self):
-        super().__init__()
+        """初始化LLM配置"""
+        config = get_global_config()
+        llm_config = config.get("llm", {})
+        
+        self.base_url = (os.getenv("LLM_BASE_URL") or llm_config.get("base_url", "")).rstrip("/")
+        self.api_key = os.getenv("LLM_API_KEY") or llm_config.get("api_key", "")
+        self.model = os.getenv("LLM_MODEL") or llm_config.get("model", "qwen-turbo")
+        self.parameters = llm_config.get("parameters", {})
+        self.prompt_template = llm_config.get("prompt_template", "")
+        
+        server_config = config.get("server", {})
+        self.timeout = server_config.get("request_timeout", 30)
+        
         # 缓存基础指令集（用于无会话情况下的fallback）
-        self.base_operations = ["introduce", "query_param"]
+        self.base_operations = ["general_chat"]
         self.session_aware = True
     
     def generate_dynamic_prompt(self, session_id: str, user_input: str, 
@@ -31,17 +45,14 @@ class DynamicLLMClient(LLMClient):
         # 如果没有有效会话，使用基础指令集
         if not session_operations:
             operations = self.base_operations
-            context_note = "（使用基础指令集，建议重新注册会话）"
         else:
             operations = session_operations
-            context_note = f"（当前会话支持{len(operations)}个指令）"
         
         # 构造动态提示词
         dynamic_prompt = self.prompt_template.format(
             scene_type=scene_type,
             user_input=user_input,
-            valid_operations=", ".join(operations),
-            context_note=context_note
+            valid_operations=", ".join(operations)
         )
         
         # 记录提示词生成日志
@@ -76,14 +87,69 @@ class DynamicLLMClient(LLMClient):
     
     def _chat_completions(self, prompt: str) -> str:
         """
-        重写父类方法，添加会话感知的日志
+        调用 OpenAI 兼容的 Chat Completions API
         """
+        if not self.base_url or not self.api_key:
+            raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
+        
         print(f"[DynamicLLM] Sending prompt to LLM...")
         print(f"[DynamicLLM] Prompt length: {len(prompt)} chars")
         
-        # 调用父类的实际实现
-        result = super()._chat_completions(prompt)
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": self.parameters.get("temperature", 0.2),
+            "max_tokens": self.parameters.get("max_tokens", 1024),
+            "top_p": self.parameters.get("top_p", 0.9),
+        }
         
+        # 添加可选参数
+        if self.parameters.get("stream") is not None:
+            payload["stream"] = self.parameters["stream"]
+        if self.parameters.get("seed") is not None:
+            payload["seed"] = self.parameters["seed"]
+        if self.parameters.get("presence_penalty") is not None:
+            payload["presence_penalty"] = self.parameters["presence_penalty"]
+        if self.parameters.get("frequency_penalty") is not None:
+            payload["frequency_penalty"] = self.parameters["frequency_penalty"]
+        if self.parameters.get("n") is not None:
+            payload["n"] = self.parameters["n"]
+        
+        try:
+            resp = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as e:
+            raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
+        
+        if resp.status_code != 200:
+            err_body = resp.text
+            try:
+                err_json = resp.json()
+                err_body = err_json.get("error", {}).get("message", err_body)
+            except Exception:
+                pass
+            raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
+        
+        data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError("LLM 响应中无 choices")
+        
+        msg = choices[0].get("message", {})
+        text = msg.get("content", "")
+        if not text or not str(text).strip():
+            raise RuntimeError("LLM 返回内容为空")
+        
+        result = str(text).strip()
         print(f"[DynamicLLM] Received response: {result[:100]}...")
         return result
 

@@ -5,7 +5,6 @@
 import json
 from typing import Any, Dict
 
-from src.core.llm_client import LLMClient
 from src.core.dynamic_llm_client import DynamicLLMClient
 # 知识库查询已移至RAG模块，在LLM处理之前执行
 
@@ -14,16 +13,14 @@ class CommandGenerator:
     """通用化指令生成器，整合LLM解析与知识库数据"""
     
     def __init__(self, use_dynamic_llm: bool = True) -> None:
-        """实例化LLMClient与ArtifactKnowledgeBase
+        """实例化DynamicLLMClient与ArtifactKnowledgeBase
         
         Args:
             use_dynamic_llm: 是否使用动态LLM客户端（支持会话感知）
         """
-        self.use_dynamic_llm = use_dynamic_llm
-        if use_dynamic_llm:
-            self.llm_client = DynamicLLMClient()
-        else:
-            self.llm_client = LLMClient()
+        # 强制使用动态LLM客户端（传统模式已移除）
+        self.use_dynamic_llm = True
+        self.llm_client = DynamicLLMClient()
         # 知识库查询已移至RAG模块处理
     
     def parse_llm_response(self, llm_response: str) -> Dict[str, Any]:
@@ -100,26 +97,15 @@ class CommandGenerator:
         operation = llm_data.get("operation")
         keywords = llm_data.get("keywords") or []
         
-        # 4. 指令集包含验证（最小化处理）
-        if not operation or not str(operation).strip():
-            raise ValueError("LLM未能识别出有效的操作指令")
+        # 4. 确保operation字段存在（格式验证）
+        if not operation:
+            operation = "general_chat"  # 默认回退到通用对话
         
         operation = str(operation).strip()
         
-        # 5. 验证指令是否在客户端注册的指令集中
-        from ..session.session_manager import session_manager
-        session_ops = session_manager.get_operations_for_session(session_id)
-        if not session_ops:
-            raise ValueError("当前会话未注册任何指令集")
-        
-        if operation not in session_ops:
-            raise ValueError(f"指令'{operation}'不在当前会话注册的指令集中，支持的指令: {', '.join(session_ops)}")
-        
-        print(f"[CommandGenerator] 指令'{operation}'通过验证，属于客户端注册指令集")
-        
-        # 6. 直接返回LLM原始响应数据（透传模式）
+        # 5. 直接返回LLM原始响应数据（透传模式）
         print(f"[DEBUG] 透传LLM原始响应数据")
-        # 确保必要的字段存在
+        # 5. 确保必要的字段存在
         command = {
             "artifact_id": llm_data.get("artifact_id"),
             "artifact_name": llm_data.get("artifact_name"),
