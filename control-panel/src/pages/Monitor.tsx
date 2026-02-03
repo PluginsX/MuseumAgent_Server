@@ -1,4 +1,4 @@
-import { Button, Card, Descriptions, Space, Typography } from 'antd';
+import { Button, Card, Descriptions, Space, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { monitorApi } from '../api/client';
 
@@ -9,26 +9,51 @@ export default function Monitor() {
   const [clearing, setClearing] = useState(false); // 清空日志的加载状态
 
   useEffect(() => {
-    monitorApi.status().then((r) => setStatus(r.data)).catch(() => {});
+    console.log('Monitor component mounted');
+    loadStatus();
     loadLogs();
   }, []);
 
-  const loadLogs = () => {
+  const loadStatus = async () => {
+    try {
+      console.log('Loading status...');
+      const response = await monitorApi.status();
+      console.log('Status response:', response);
+      setStatus(response.data);
+      message.success('状态加载成功');
+    } catch (error: any) {
+      console.error('Status load error:', error);
+      message.error(`状态加载失败: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const loadLogs = async () => {
     setLoading(true);
-    monitorApi.logs({ page: 1, size: 50 })
-      .then((r) => setLogs(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    try {
+      console.log('Loading logs...');
+      const response = await monitorApi.logs({ page: 1, size: 50 });
+      console.log('Logs response:', response);
+      setLogs(response.data);
+      message.success('日志加载成功');
+    } catch (error: any) {
+      console.error('Logs load error:', error);
+      message.error(`日志加载失败: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clearLogs = async () => {
     setClearing(true);
     try {
-      await monitorApi.clearLogs(); // 调用后端API清空日志
-      setLogs({ lines: [], total: 0 }); // 清空本地显示
-      loadLogs(); // 重新加载日志（此时应该为空）
-    } catch (e: unknown) {
-      console.error('清空日志失败:', e);
+      console.log('Clearing logs...');
+      await monitorApi.clearLogs();
+      setLogs({ lines: [], total: 0 });
+      message.success('日志已清空');
+      loadLogs();
+    } catch (error: any) {
+      console.error('Clear logs error:', error);
+      message.error(`清空日志失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setClearing(false);
     }

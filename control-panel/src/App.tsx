@@ -1,6 +1,7 @@
 import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import Clients from './pages/Clients';
 import ConfigEmbedding from './pages/ConfigEmbedding';
 import ConfigLLM from './pages/ConfigLLM';
 import Dashboard from './pages/Dashboard';
@@ -8,6 +9,7 @@ import EmbeddingPage from './pages/EmbeddingPage';
 import Layout from './pages/Layout';
 import Login from './pages/Login';
 import Monitor from './pages/Monitor';
+import SessionConfig from './pages/SessionConfig';
 import Users from './pages/Users';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -44,6 +46,8 @@ export default function App() {
             <Route path="config/llm" element={<ConfigLLM />} />
             <Route path="config/embedding" element={<ConfigEmbedding />} />
             <Route path="embedding" element={<EmbeddingPage />} />
+            <Route path="/clients" element={<Clients />} />
+            <Route path="/session-config" element={<SessionConfig />} />
             <Route path="monitor" element={<Monitor />} />
             <Route path="users" element={<Users />} />
           </Route>

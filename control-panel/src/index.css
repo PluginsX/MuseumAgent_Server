@@ -171,6 +171,15 @@ a.ant-typography:hover {
   color: #aaaaaa !important;
 }
 
+/* 标题颜色 */
+.ant-typography h1,
+.ant-typography h2,
+.ant-typography h3,
+.ant-typography h4,
+.ant-typography h5 {
+  color: #ffffff !important;
+}
+
 /* 移除浅色主题支持，保持纯粹的黑白灰主题 */
 @media (prefers-color-scheme: light) {
   body {
@@ -185,4 +194,102 @@ a.ant-typography:hover {
     border-color: #333333;
     color: #ffffff;
   }
+}
+
+/* 额外的深色主题覆盖规则 */
+.ant-modal-content {
+  background-color: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+}
+
+.ant-modal-header {
+  background-color: #2a2a2a !important;
+  border-bottom: 1px solid #333333 !important;
+}
+
+.ant-modal-title {
+  color: #ffffff !important;
+}
+
+.ant-modal-close {
+  color: #cccccc !important;
+}
+
+.ant-modal-close:hover {
+  color: #ffffff !important;
+}
+
+/* 表格相关深色样式 */
+.ant-table {
+  background-color: #1a1a1a !important;
+}
+
+.ant-table-thead > tr > th {
+  background-color: #2a2a2a !important;
+  color: #ffffff !important;
+  border-bottom: 1px solid #333333 !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid #333333 !important;
+  color: #ffffff !important;
+}
+
+.ant-table-tbody > tr.ant-table-row-selected > td {
+  background-color: #2a2a2a !important;
+}
+
+/* 描述列表深色样式 */
+.ant-descriptions-item-label {
+  color: #cccccc !important;
+}
+
+.ant-descriptions-item-content {
+  color: #ffffff !important;
+}
+
+/* 统计数字深色样式 */
+.ant-statistic-content {
+  color: #ffffff !important;
+}
+
+.ant-statistic-title {
+  color: #cccccc !important;
+}
+
+/* 标签深色样式 */
+.ant-tag {
+  color: #ffffff !important;
+  border: 1px solid #333333 !important;
+}
+
+/* 徽标深色样式 */
+.ant-badge-count {
+  color: #ffffff !important;
+}
+
+/* 预格式化文本深色样式 */
+pre {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  border: 1px solid #333333 !important;
+}
+
+/* 滚动条深色样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #606060;
 }

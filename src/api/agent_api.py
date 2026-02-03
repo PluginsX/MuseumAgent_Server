@@ -91,12 +91,16 @@ from src.api.embedding_api import router as embedding_router
 from src.api.monitor_api import router as monitor_router
 from src.api.users_api import router as users_router
 from src.api.session_api import router as session_router
+from src.api.client_api import router as client_router
+from src.api.session_config_api import router as session_config_router
 app.include_router(auth_router)
 app.include_router(config_router)
 app.include_router(embedding_router)
 app.include_router(monitor_router)
 app.include_router(users_router)
 app.include_router(session_router)
+app.include_router(client_router)
+app.include_router(session_config_router)
 
 
 @app.on_event("startup")
@@ -154,8 +158,20 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
         print(log_step('API', 'START', '开始处理用户请求', 
                       {'client_type': request.client_type, 'scene_type': request.scene_type}))
         
-        # 调用指令生成器（支持会话感知）
+        # 调用指令生成器（使用严格会话管理）
+        from src.session.strict_session_manager import strict_session_manager
         generator = _get_command_generator()
+        
+        # 严格验证会话
+        if session_id:
+            session = strict_session_manager.validate_session(session_id)
+            if not session:
+                print(log_step('SESSION', 'DENY', '会话验证失败，拒绝请求', 
+                              {'session_id': session_id}))
+                return fail_response(msg="会话不存在或已过期，请重新注册")
+            print(log_step('SESSION', 'ALLOW', '会话验证通过', 
+                          {'session_id': session_id[:8]}))
+        
         command_dict = generator.generate_standard_command(
             user_input=request.user_input,
             scene_type=request.scene_type or "public",

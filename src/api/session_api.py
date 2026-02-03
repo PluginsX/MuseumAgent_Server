@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 import json
 
-from ..session.session_manager import session_manager
+from ..session.strict_session_manager import strict_session_manager
 from ..models.command_set_models import validate_command_set, StandardCommandSet
 from ..common.log_formatter import log_step, log_communication
 
@@ -87,8 +87,8 @@ async def register_client_session(registration: ClientRegistrationRequest):
         print(log_step('SESSION', 'REGISTER', '生成新会话ID', 
                       {'session_id': session_id}))
         
-        # 注册会话
-        session = session_manager.register_session(
+        # 注册会话（使用严格管理器）
+        session = strict_session_manager.register_session(
             session_id=session_id,
             client_metadata=registration.client_metadata,
             operation_set=registration.operation_set
@@ -128,7 +128,7 @@ async def session_heartbeat(session_id: str = Header()):
         print(log_step('SESSION', 'HEARTBEAT', '收到心跳请求', 
                       {'session_id': session_id}))
         
-        is_valid = session_manager.heartbeat(session_id)
+        is_valid = strict_session_manager.heartbeat(session_id)
         if is_valid:
             response_data = {
                 "status": "alive",
@@ -158,7 +158,7 @@ async def unregister_session(session_id: str = Header()):
         print(log_step('SESSION', 'UNREGISTER', '收到注销请求', 
                       {'session_id': session_id}))
         
-        if session_manager.unregister_session(session_id):
+        if strict_session_manager.unregister_session(session_id):
             response_data = {
                 "status": "unregistered",
                 "message": "会话已成功注销"
@@ -183,9 +183,9 @@ async def get_session_operations(session_id: str = Header()):
     获取会话支持的操作指令集
     """
     try:
-        operations = session_manager.get_operations_for_session(session_id)
+        operations = strict_session_manager.get_operations_for_session(session_id)
         if operations:
-            session = session_manager.get_session(session_id)
+            session = strict_session_manager.get_session(session_id)
             client_type = session.client_metadata.get("client_type") if session else None
             
             return SessionOperationsResponse(
@@ -205,7 +205,7 @@ async def get_session_info(session_id: str = Header()):
     获取详细的会话信息
     """
     try:
-        session = session_manager.get_session(session_id)
+        session = strict_session_manager.get_session(session_id)
         if session:
             return SessionInfoResponse(
                 session_id=session.session_id,
@@ -228,10 +228,17 @@ async def get_session_stats():
     """
     try:
         return {
-            "active_sessions": session_manager.get_active_session_count(),
-            "total_sessions": len(session_manager.sessions),
+            "active_sessions": len(strict_session_manager.get_all_sessions()),
+            "total_sessions": len(strict_session_manager.sessions),
             "server_time": datetime.now().isoformat(),
-            "sessions_detail": session_manager.get_all_sessions_info()
+            "sessions_detail": [{
+                "session_id": s.session_id,
+                "client_type": s.client_metadata.get("client_type", "unknown"),
+                "operations_count": len(s.operation_set),
+                "created_at": s.created_at.isoformat(),
+                "expires_at": s.expires_at.isoformat(),
+                "is_expired": s.is_expired()
+            } for s in strict_session_manager.sessions.values()]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")

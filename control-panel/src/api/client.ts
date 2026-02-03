@@ -70,3 +70,18 @@ export const usersApi = {
     api.put(`/api/admin/users/${id}`, data),
   delete: (id: number) => api.delete(`/api/admin/users/${id}`),
 };
+
+export const clientsApi = {
+  list: () => api.get('/api/admin/clients/connected'),
+  stats: () => api.get('/api/admin/clients/stats'),
+  getDetails: (sessionId: string) => api.get(`/api/admin/clients/session/${sessionId}`),
+  disconnect: (sessionId: string) => api.delete(`/api/admin/clients/session/${sessionId}`),
+};
+
+// 会话配置管理API
+export const sessionConfigApi = {
+  getCurrent: () => api.get('/api/admin/session-config/current'),
+  update: (configData: any) => api.put('/api/admin/session-config/update', configData),
+  resetDefaults: () => api.post('/api/admin/session-config/reset-defaults'),
+  validate: (configData: any) => api.post('/api/admin/session-config/validate', configData),
+};

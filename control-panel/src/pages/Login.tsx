@@ -24,14 +24,14 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f2f5' }}>
-      <Card title="MuseumAgent 控制面板" style={{ width: 400 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000000' }}>
+      <Card title="MuseumAgent 控制面板" style={{ width: 400, backgroundColor: '#1a1a1a', borderColor: '#333333' }}>
         <Form name="login" onFinish={onFinish} autoComplete="off" size="large">
           <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input prefix={<UserOutlined />} placeholder="用户名" />
+            <Input prefix={<UserOutlined />} placeholder="用户名" style={{ backgroundColor: '#1a1a1a', borderColor: '#333333' }} />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+            <Input.Password prefix={<LockOutlined />} placeholder="密码" style={{ backgroundColor: '#1a1a1a', borderColor: '#333333' }} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} block>

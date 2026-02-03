@@ -7,6 +7,10 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import json
+import logging
+
+# 获取全局logger
+from .log_utils import get_logger
 
 
 class LogFormatter:
@@ -140,14 +144,32 @@ class LogFormatter:
 # 便捷函数
 def log_step(module: str, operation: str, message: str, 
              data: Any = None, step_num: Optional[int] = None):
-    """记录步骤日志"""
-    return LogFormatter.format_step(module, operation, message, data, step_num)
+    """记录步骤日志 - 同时输出到控制台和日志文件"""
+    formatted_log = LogFormatter.format_step(module, operation, message, data, step_num)
+    # 输出到控制台
+    print(formatted_log)
+    # 同时写入日志文件
+    logger = get_logger()
+    logger.info(formatted_log.replace('\n', ' | '))
+    return formatted_log
 
 def log_communication(module: str, direction: str, service: str, 
                      data: Any, metadata: Optional[Dict] = None):
-    """记录通信日志"""
-    return LogFormatter.format_external_communication(module, direction, service, data, metadata)
+    """记录通信日志 - 同时输出到控制台和日志文件"""
+    formatted_log = LogFormatter.format_external_communication(module, direction, service, data, metadata)
+    # 输出到控制台
+    print(formatted_log)
+    # 同时写入日志文件
+    logger = get_logger()
+    logger.info(formatted_log.replace('\n', ' | '))
+    return formatted_log
 
 def log_flow_summary(steps: List[Dict[str, Any]]):
-    """记录流程摘要"""
-    return LogFormatter.format_process_flow(steps)
+    """记录流程摘要 - 同时输出到控制台和日志文件"""
+    formatted_log = LogFormatter.format_process_flow(steps)
+    # 输出到控制台
+    print(formatted_log)
+    # 同时写入日志文件
+    logger = get_logger()
+    logger.info(formatted_log.replace('\n', ' | '))
+    return formatted_log
