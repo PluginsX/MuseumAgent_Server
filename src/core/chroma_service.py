@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from src.common.config_utils import get_global_config
+from src.common.log_formatter import log_step
 from src.core.embedding_client import EmbeddingClient
 
 
@@ -57,8 +58,18 @@ class ChromaService:
 
     def embed_text(self, text: str) -> List[float]:
         """调用 Embedding 服务获取向量"""
-        vectors = self._embedding_client.embed(text)
-        return vectors[0] if vectors else []
+        print(log_step('EMBEDDING', 'START', f'将文本向量化', 
+                      {'text_length': len(text), 'preview': text[:50]}))
+        
+        try:
+            vectors = self._embedding_client.embed(text)
+            vector_result = vectors[0] if vectors else []
+            print(log_step('EMBEDDING', 'SUCCESS', f'向量化完成', 
+                          {'vector_dimension': len(vector_result)}))
+            return vector_result
+        except Exception as e:
+            print(log_step('EMBEDDING', 'ERROR', f'向量化失败: {str(e)}'))
+            raise
 
     def add(
         self,
@@ -159,7 +170,14 @@ class ChromaService:
         text_type: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """向量搜索"""
+        print(log_step('RAG', 'VECTORIZE', f'准备向量化查询文本', 
+                      {'query_length': len(query_text)}))
+        
         query_embedding = self.embed_text(query_text)
+        
+        print(log_step('RAG', 'QUERY', f'执行向量相似度搜索', 
+                      {'top_k': top_k, 'vector_dimension': len(query_embedding)}))
+        
         where = {}
         if artifact_id:
             where["artifact_id"] = artifact_id
@@ -180,6 +198,10 @@ class ChromaService:
                 "metadata": res["metadatas"][0][i] if res["metadatas"] else {},
                 "distance": res["distances"][0][i] if res.get("distances") else None,
             })
+        
+        print(log_step('RAG', 'RESULTS', f'搜索完成', 
+                      {'found_count': len(out), 'top_distances': [item.get('distance') for item in out[:3]]}))
+        
         return out
 
     def count(self) -> int:

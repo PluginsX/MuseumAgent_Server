@@ -10,6 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from src.common.config_utils import get_config_by_key
 from src.common.log_utils import get_logger
+from src.common.log_formatter import log_step, log_communication
 from src.common.response_utils import (
     data_none_response,
     fail_response,
@@ -143,14 +144,15 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
     logger = get_logger()
     
     try:
-        # 记录访问日志
+        # 记录客户端消息接收
         ui_preview = request.user_input[:50] + ("..." if len(request.user_input) > 50 else "")
-        logger.info(
-            f"请求时间={datetime.now().isoformat()} "
-            f"client_type={request.client_type or 'unknown'} "
-            f"user_input={ui_preview} "
-            f"scene_type={request.scene_type}"
-        )
+        print(log_communication('CLIENT', 'RECEIVE', 'User Message', 
+                               request.dict(), 
+                               {'session_id': session_id, 'preview': ui_preview}))
+        
+        # 记录处理开始
+        print(log_step('API', 'START', '开始处理用户请求', 
+                      {'client_type': request.client_type, 'scene_type': request.scene_type}))
         
         # 调用指令生成器（支持会话感知）
         generator = _get_command_generator()
@@ -160,11 +162,15 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
             session_id=session_id  # 传递会话ID
         )
         
-        # 直接透传原始数据（避免Pydantic模型干扰）
-        print(f"[DEBUG] API层 - 接收的command_dict: {command_dict}")
+        # 记录处理完成
+        print(log_step('API', 'SUCCESS', '请求处理完成', 
+                      {'operation': command_dict.get('operation'), 
+                       'artifact_name': command_dict.get('artifact_name')}))
+        
+        # 记录响应发送
+        print(log_communication('CLIENT', 'SEND', 'Agent Response', command_dict))
         
         # 返回成功响应（直接使用原始字典）
-        print(f"[DEBUG] API层 - 透传原始数据: {command_dict}")
         return success_response(data=command_dict)
         
     except ValueError as e:

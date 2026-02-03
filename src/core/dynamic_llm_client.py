@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..common.config_utils import get_global_config
 from ..session.session_manager import session_manager
+from ..common.log_formatter import log_step, log_communication
 
 
 class DynamicLLMClient:
@@ -48,12 +49,10 @@ class DynamicLLMClient:
         else:
             operations = session_operations
         
-        # 构造动态提示词
-        dynamic_prompt = self.prompt_template.format(
-            scene_type=scene_type,
-            user_input=user_input,
-            valid_operations=", ".join(operations)
-        )
+        # 构造动态提示词（使用安全的字符串替换）
+        dynamic_prompt = self.prompt_template.replace('{scene_type}', scene_type)
+        dynamic_prompt = dynamic_prompt.replace('{user_input}', user_input)
+        dynamic_prompt = dynamic_prompt.replace('{valid_operations}', ", ".join(operations))
         
         # 记录提示词生成日志
         print(f"[DynamicLLM] Session: {session_id}")
@@ -92,21 +91,35 @@ class DynamicLLMClient:
         if not self.base_url or not self.api_key:
             raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
         
-        print(f"[DynamicLLM] Sending prompt to LLM...")
-        print(f"[DynamicLLM] Prompt length: {len(prompt)} chars")
+        print(log_step('LLM', 'SEND', '发送提示词到LLM', 
+                      {'prompt_length': len(prompt), 'model': self.model}))
         
         url = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        # 构建消息内容，添加系统提示词强制JSON格式
+        system_message = "你是一个API助手。必须严格按照JSON格式回复，不要添加任何额外解释。"
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt}
+        ]
+        
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": self.parameters.get("temperature", 0.2),
+            "messages": messages,
+            "temperature": self.parameters.get("temperature", 0.1),  # 降低温度增加确定性
             "max_tokens": self.parameters.get("max_tokens", 1024),
-            "top_p": self.parameters.get("top_p", 0.9),
+            "top_p": self.parameters.get("top_p", 0.1),  # 降低top_p增加一致性
         }
+        
+        # 添加JSON格式强制参数（如果模型支持）
+        try:
+            payload["response_format"] = {"type": "json_object"}
+            print(log_step('LLM', 'INFO', '启用JSON格式强制约束'))
+        except:
+            print(log_step('LLM', 'WARNING', '当前模型不支持JSON格式强制，使用提示词约束'))
         
         # 添加可选参数
         if self.parameters.get("stream") is not None:
@@ -120,6 +133,10 @@ class DynamicLLMClient:
         if self.parameters.get("n") is not None:
             payload["n"] = self.parameters["n"]
         
+        # 记录发送的完整请求
+        print(log_communication('LLM', 'SEND', 'External LLM API', 
+                               payload, {'endpoint': url}))
+        
         try:
             resp = requests.post(
                 url,
@@ -128,6 +145,7 @@ class DynamicLLMClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
+            print(log_step('LLM', 'ERROR', 'LLM请求异常', {'error': str(e)}))
             raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
         
         if resp.status_code != 200:
@@ -137,6 +155,8 @@ class DynamicLLMClient:
                 err_body = err_json.get("error", {}).get("message", err_body)
             except Exception:
                 pass
+            print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
+                          {'status_code': resp.status_code, 'error': err_body}))
             raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
         
         data = resp.json()
@@ -150,7 +170,14 @@ class DynamicLLMClient:
             raise RuntimeError("LLM 返回内容为空")
         
         result = str(text).strip()
-        print(f"[DynamicLLM] Received response: {result[:100]}...")
+        
+        # 记录接收到的完整响应
+        print(log_communication('LLM', 'RECEIVE', 'External LLM API', 
+                               {'full_response': result, 'usage': data.get('usage', {})},
+                               {'response_length': len(result)}))
+        
+        print(log_step('LLM', 'RECEIVE', '成功接收LLM响应', 
+                      {'response_length': len(result)}))
         return result
 
 

@@ -8,6 +8,7 @@ from typing import List, Union
 import requests
 
 from src.common.config_utils import get_global_config
+from src.common.log_formatter import log_step, log_communication
 
 
 class EmbeddingClient:
@@ -50,6 +51,10 @@ class EmbeddingClient:
         if isinstance(texts, str):
             texts = [texts]
         
+        print(log_communication('EMBEDDING', 'SEND', 'Embedding Service', 
+                               {'text_count': len(texts), 
+                                'first_text_preview': texts[0][:50] if texts else ''}))
+        
         url = f"{self.base_url}/embeddings"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -77,6 +82,7 @@ class EmbeddingClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
+            print(log_step('EMBEDDING', 'ERROR', f'网络请求异常: {str(e)}'))
             raise RuntimeError(f"Embedding 请求异常: {str(e)}") from e
         
         if resp.status_code != 200:
@@ -86,6 +92,8 @@ class EmbeddingClient:
                 err_body = err_json.get("error", {}).get("message", err_body)
             except Exception:
                 pass
+            print(log_step('EMBEDDING', 'ERROR', f'API调用失败', 
+                          {'status_code': resp.status_code, 'error': err_body}))
             raise RuntimeError(
                 f"Embedding API 调用失败 [code={resp.status_code}]: {err_body}"
             )
@@ -94,4 +102,9 @@ class EmbeddingClient:
         emb_list = data.get("data", [])
         # 按 index 排序（部分 API 可能乱序返回）
         emb_list.sort(key=lambda x: x.get("index", 0))
+        
+        print(log_communication('EMBEDDING', 'RECEIVE', 'Embedding Service', 
+                               {'vector_count': len(emb_list), 
+                                'dimension': len(emb_list[0]['embedding']) if emb_list else 0}))
+        
         return [item["embedding"] for item in emb_list]

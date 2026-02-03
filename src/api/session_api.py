@@ -12,6 +12,7 @@ import json
 
 from ..session.session_manager import session_manager
 from ..models.command_set_models import validate_command_set, StandardCommandSet
+from ..common.log_formatter import log_step, log_communication
 
 router = APIRouter(prefix="/api/session", tags=["会话管理"])
 
@@ -62,8 +63,14 @@ async def register_client_session(registration: ClientRegistrationRequest):
     客户端首次连接时调用此接口注册自己的能力集
     """
     try:
+        # 记录客户端注册请求
+        print(log_communication('CLIENT', 'RECEIVE', 'Client Registration', 
+                               registration.dict(), 
+                               {'client_type': registration.client_metadata.get('client_type')}))
+        
         # 简化验证：只要求基本字段存在
         if not registration.client_metadata or not isinstance(registration.operation_set, list):
+            print(log_step('CLIENT', 'ERROR', '无效的客户端注册数据格式'))
             raise HTTPException(status_code=400, detail="无效的客户端注册数据格式")
         
         # 验证客户端类型
@@ -72,9 +79,13 @@ async def register_client_session(registration: ClientRegistrationRequest):
         if client_type_str not in [t.value for t in ClientTypeEnum]:
             # 如果不是标准类型，使用CUSTOM
             registration.client_metadata["client_type"] = "custom"
+            print(log_step('CLIENT', 'WARNING', '非标准客户端类型，使用custom', 
+                          {'original_type': client_type_str}))
         
         # 生成唯一会话ID
         session_id = str(uuid.uuid4())
+        print(log_step('SESSION', 'REGISTER', '生成新会话ID', 
+                      {'session_id': session_id}))
         
         # 注册会话
         session = session_manager.register_session(
@@ -82,6 +93,18 @@ async def register_client_session(registration: ClientRegistrationRequest):
             client_metadata=registration.client_metadata,
             operation_set=registration.operation_set
         )
+        
+        print(log_step('SESSION', 'SUCCESS', '会话注册成功', 
+                      {'operations': len(registration.operation_set), 
+                       'expires_at': session.expires_at.isoformat()}))
+        
+        # 记录注册成功的响应
+        response_data = {
+            "session_id": session_id,
+            "expires_at": session.expires_at.isoformat(),
+            "supported_features": ["dynamic_operations", "session_management", "heartbeat"]
+        }
+        print(log_communication('CLIENT', 'SEND', 'Registration Success', response_data))
         
         # 返回注册成功响应
         return ClientRegistrationResponse(
@@ -102,14 +125,24 @@ async def session_heartbeat(session_id: str = Header()):
     客户端定期调用以维持会话活跃
     """
     try:
+        print(log_step('SESSION', 'HEARTBEAT', '收到心跳请求', 
+                      {'session_id': session_id}))
+        
         is_valid = session_manager.heartbeat(session_id)
         if is_valid:
+            response_data = {
+                "status": "alive",
+                "session_valid": True
+            }
+            print(log_communication('CLIENT', 'SEND', 'Heartbeat Response', response_data))
             return HeartbeatResponse(
                 status="alive",
                 timestamp=datetime.now().isoformat(),
                 session_valid=True
             )
         else:
+            print(log_step('SESSION', 'ERROR', '心跳失败：会话不存在或已过期', 
+                          {'session_id': session_id}))
             raise HTTPException(status_code=404, detail="会话不存在或已过期")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"心跳处理失败: {str(e)}")
@@ -122,13 +155,23 @@ async def unregister_session(session_id: str = Header()):
     客户端主动断开连接时调用
     """
     try:
+        print(log_step('SESSION', 'UNREGISTER', '收到注销请求', 
+                      {'session_id': session_id}))
+        
         if session_manager.unregister_session(session_id):
+            response_data = {
+                "status": "unregistered",
+                "message": "会话已成功注销"
+            }
+            print(log_communication('CLIENT', 'SEND', 'Unregister Response', response_data))
             return {
                 "status": "unregistered", 
                 "timestamp": datetime.now().isoformat(),
                 "message": "会话已成功注销"
             }
         else:
+            print(log_step('SESSION', 'ERROR', '注销失败：会话不存在', 
+                          {'session_id': session_id}))
             raise HTTPException(status_code=404, detail="会话不存在")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"会话注销失败: {str(e)}")
