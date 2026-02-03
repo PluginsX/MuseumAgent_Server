@@ -63,13 +63,23 @@ class ChromaService:
         
         try:
             vectors = self._embedding_client.embed(text)
-            vector_result = vectors[0] if vectors else []
+            # 安全获取向量结果
+            vector_result = []
+            if vectors and isinstance(vectors, list):
+                if vectors and isinstance(vectors[0], list):
+                    vector_result = vectors[0]
+            
+            # 验证向量是否为空
+            if not vector_result:
+                raise RuntimeError("向量化返回空结果")
+            
             print(log_step('EMBEDDING', 'SUCCESS', f'向量化完成', 
                           {'vector_dimension': len(vector_result)}))
             return vector_result
         except Exception as e:
             print(log_step('EMBEDDING', 'ERROR', f'向量化失败: {str(e)}'))
-            raise
+            # 重新抛出异常，让调用者处理
+            raise RuntimeError(f"向量化失败: {str(e)}") from e
 
     def add(
         self,

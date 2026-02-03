@@ -53,18 +53,23 @@ def vectorize_text(
     _: dict = Depends(get_current_user),
 ):
     """向量化单条文本"""
-    client = EmbeddingClient()
-    t0 = time.time()
-    vectors = client.embed(body.text)
-    elapsed = time.time() - t0
-    dim = len(vectors[0]) if vectors else 0
-    return {
-        "text": body.text,
-        "vector": vectors[0] if vectors else [],
-        "model": client.model,
-        "dimension": dim,
-        "processing_time": round(elapsed, 3),
-    }
+    try:
+        client = EmbeddingClient()
+        t0 = time.time()
+        vectors = client.embed(body.text)
+        elapsed = time.time() - t0
+        dim = len(vectors[0]) if vectors else 0
+        return {
+            "text": body.text,
+            "vector": vectors[0] if vectors else [],
+            "model": client.model,
+            "dimension": dim,
+            "processing_time": round(elapsed, 3),
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"向量化失败: {str(e)}")
 
 
 @router.post("/vectorize/batch")
@@ -93,14 +98,19 @@ def store_vector(
     _: dict = Depends(get_current_user),
 ):
     """存储向量化文本到 ChromaDB"""
-    svc = _chroma()
-    doc_id = svc.add(
-        document=body.text_content,
-        artifact_id=body.artifact_id,
-        artifact_name=body.artifact_name or body.artifact_id,
-        metadata_extra=body.metadata,
-    )
-    return {"id": doc_id, "artifact_id": body.artifact_id}
+    try:
+        svc = _chroma()
+        doc_id = svc.add(
+            document=body.text_content,
+            artifact_id=body.artifact_id,
+            artifact_name=body.artifact_name or body.artifact_id,
+            metadata_extra=body.metadata,
+        )
+        return {"id": doc_id, "artifact_id": body.artifact_id}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"存储失败: {str(e)}")
 
 
 @router.get("/artifact/{artifact_id}")
@@ -131,21 +141,31 @@ def search_vectors(
     _: dict = Depends(get_current_user),
 ):
     """向量搜索"""
-    svc = _chroma()
-    results = svc.search(
-        query_text=body.query_text,
-        top_k=body.top_k,
-        artifact_id=body.artifact_id,
-        text_type=body.text_type,
-    )
-    return {"results": results}
+    try:
+        svc = _chroma()
+        results = svc.search(
+            query_text=body.query_text,
+            top_k=body.top_k,
+            artifact_id=body.artifact_id,
+            text_type=body.text_type,
+        )
+        return {"results": results}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
 
 
 @router.get("/stats")
 def get_embedding_stats(_: dict = Depends(get_current_user)):
     """知识库统计"""
-    svc = _chroma()
-    return svc.stats()
+    try:
+        svc = _chroma()
+        return svc.stats()
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取统计失败: {str(e)}")
 
 
 @router.delete("/clear")

@@ -42,6 +42,9 @@ class EmbeddingClient:
         
         Returns:
             向量列表，每个文本对应一个 float 列表
+        
+        Raises:
+            RuntimeError: 当 API 响应格式不符合 OpenAI 标准时
         """
         if not self.base_url or not self.api_key:
             raise RuntimeError(
@@ -98,13 +101,74 @@ class EmbeddingClient:
                 f"Embedding API 调用失败 [code={resp.status_code}]: {err_body}"
             )
         
-        data = resp.json()
+        # 验证响应格式
+        try:
+            data = resp.json()
+        except Exception as e:
+            print(log_step('EMBEDDING', 'ERROR', f'响应不是有效的JSON格式: {str(e)}'))
+            raise RuntimeError(f"Embedding API 返回的响应不是有效的 JSON 格式: {str(e)}") from e
+        
+        # 验证 OpenAI 标准格式：必须包含 data 字段
+        if "data" not in data:
+            print(log_step('EMBEDDING', 'ERROR', '响应缺少data字段'))
+            raise RuntimeError(
+                "Embedding API 响应格式错误：缺少 'data' 字段。"
+                "OpenAI Embeddings API 标准格式应为: {\"data\": [{\"embedding\": [...]}]}"
+            )
+        
         emb_list = data.get("data", [])
+        
+        # 验证 data 字段是否为数组
+        if not isinstance(emb_list, list):
+            print(log_step('EMBEDDING', 'ERROR', f'data字段类型错误: {type(emb_list)}'))
+            raise RuntimeError(
+                f"Embedding API 响应格式错误：'data' 字段必须是数组类型，实际类型为 {type(emb_list).__name__}"
+            )
+        
+        # 验证每个数据项的格式
+        for i, item in enumerate(emb_list):
+            if not isinstance(item, dict):
+                print(log_step('EMBEDDING', 'ERROR', f'数据项{i}不是字典类型'))
+                raise RuntimeError(
+                    f"Embedding API 响应格式错误：data[{i}] 必须是字典类型，实际类型为 {type(item).__name__}"
+                )
+            
+            if "embedding" not in item:
+                print(log_step('EMBEDDING', 'ERROR', f'数据项{i}缺少embedding字段'))
+                raise RuntimeError(
+                    f"Embedding API 响应格式错误：data[{i}] 缺少 'embedding' 字段。"
+                    "OpenAI Embeddings API 标准格式应为: {\"embedding\": [...]}"
+                )
+            
+            embedding = item["embedding"]
+            
+            # 验证 embedding 是否为列表
+            if not isinstance(embedding, list):
+                print(log_step('EMBEDDING', 'ERROR', f'数据项{i}的embedding不是列表类型'))
+                raise RuntimeError(
+                    f"Embedding API 响应格式错误：data[{i}].embedding 必须是数组类型，实际类型为 {type(embedding).__name__}"
+                )
+            
+            # 验证 embedding 中的每个元素是否为数字
+            for j, value in enumerate(embedding):
+                if not isinstance(value, (int, float)):
+                    print(log_step('EMBEDDING', 'ERROR', 
+                                f'数据项{i}的embedding[{j}]不是数字类型: {type(value)}'))
+                    raise RuntimeError(
+                        f"Embedding API 响应格式错误：data[{i}].embedding[{j}] 必须是数字类型，实际类型为 {type(value).__name__}"
+                    )
+        
         # 按 index 排序（部分 API 可能乱序返回）
         emb_list.sort(key=lambda x: x.get("index", 0))
         
+        # 安全获取维度信息
+        dimension = 0
+        if emb_list and emb_list[0].get('embedding'):
+            dimension = len(emb_list[0]['embedding'])
+        
         print(log_communication('EMBEDDING', 'RECEIVE', 'Embedding Service', 
                                {'vector_count': len(emb_list), 
-                                'dimension': len(emb_list[0]['embedding']) if emb_list else 0}))
+                                'dimension': dimension}))
         
-        return [item["embedding"] for item in emb_list]
+        # 安全返回嵌入向量
+        return [item.get("embedding", []) for item in emb_list]

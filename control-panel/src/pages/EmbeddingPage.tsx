@@ -82,8 +82,31 @@ export default function EmbeddingPage() {
       
       message.success('向量化成功！');
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } };
-      message.error(err.response?.data?.detail || '向量化失败');
+      console.error('向量化错误:', e);
+      const err = e as { 
+        response?: { 
+          data?: { 
+            detail?: string;
+            message?: string;
+          } 
+        } 
+      };
+      
+      // 提取错误信息，优先使用 detail，其次使用 message，最后使用默认值
+      const errorMsg = err.response?.data?.detail || 
+                     err.response?.data?.message || 
+                     '向量化失败';
+      
+      // 判断是否为格式错误，提供更友好的提示
+      if (errorMsg.includes('格式错误') || errorMsg.includes('格式') || errorMsg.includes('OpenAI')) {
+        message.error({
+          content: '向量化失败',
+          description: errorMsg,
+          duration: 8,
+        });
+      } else {
+        message.error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
