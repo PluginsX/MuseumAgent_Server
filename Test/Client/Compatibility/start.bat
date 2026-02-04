@@ -17,7 +17,7 @@ if %errorlevel% neq 0 (
 
 REM 获取脚本目录
 set "SCRIPT_DIR=%~dp0"
-set "PORT=8000"
+set "PORT=10086"
 
 echo 当前工作目录: %SCRIPT_DIR%
 echo.
@@ -38,23 +38,19 @@ if not exist "%SCRIPT_DIR%assets\css\style.css" (
 
 echo.
 echo 选择启动选项:
-echo 1. 启动Web服务器 (端口 8000)
-echo 2. 启动Web服务器 (自定义端口)
-echo 3. 仅打开浏览器 (假设服务器已在运行)
-echo 4. 启动服务器并自动打开浏览器
-echo 5. 退出
+echo 1. 启动Web服务器 (本地访问 - localhost)
+echo 2. 启动Web服务器 (局域网访问 - 0.0.0.0)
+echo 3. 退出
 echo.
 
-choice /c 12345 /m "请选择选项"
-if %errorlevel% equ 1 goto start_server_default
-if %errorlevel% equ 2 goto start_server_custom
-if %errorlevel% equ 3 goto open_browser_only
-if %errorlevel% equ 4 goto start_and_open
-if %errorlevel% equ 5 goto exit_script
+choice /c 123 /m "请选择选项"
+if %errorlevel% equ 1 goto start_localhost
+if %errorlevel% equ 2 goto start_lan
+if %errorlevel% equ 3 goto exit_script
 
-:start_server_default
+:start_localhost
 echo.
-echo 正在启动Web服务器 (端口 %PORT%)...
+echo 正在启动Web服务器 (本地访问)...
 echo 访问地址: http://localhost:%PORT%
 echo 按 Ctrl+C 停止服务器
 echo.
@@ -62,38 +58,15 @@ cd /d "%SCRIPT_DIR%"
 python -m http.server %PORT%
 goto end
 
-:start_server_custom
+:start_lan
 echo.
-set /p CUSTOM_PORT=请输入端口号 (默认8000): 
-if "%CUSTOM_PORT%"=="" set CUSTOM_PORT=8000
-echo.
-echo 正在启动Web服务器 (端口 %CUSTOM_PORT%)...
-echo 访问地址: http://localhost:%CUSTOM_PORT%
+echo 正在启动Web服务器 (局域网访问)...
+echo 本机访问地址: http://localhost:%PORT%
+echo 局域网访问地址: http://[本机IP地址]:%PORT%
 echo 按 Ctrl+C 停止服务器
 echo.
 cd /d "%SCRIPT_DIR%"
-python -m http.server %CUSTOM_PORT%
-goto end
-
-:open_browser_only
-echo.
-echo 正在打开浏览器...
-start http://localhost:8000
-echo 浏览器已打开，请确保Web服务器正在运行
-goto end
-
-:start_and_open
-echo.
-echo 正在启动Web服务器并打开浏览器...
-echo 访问地址: http://localhost:%PORT%
-echo 按 Ctrl+C 停止服务器
-echo.
-
-REM 启动服务器并在新窗口中打开浏览器
-cd /d "%SCRIPT_DIR%"
-start "" cmd /c "python -m http.server %PORT% & pause"
-timeout /t 2 /nobreak >nul
-start http://localhost:%PORT%
+python -m http.server %PORT% --bind 0.0.0.0
 goto end
 
 :error_exit
