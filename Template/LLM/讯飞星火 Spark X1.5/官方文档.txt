@@ -1,2 +1,0 @@
-讯飞星火Spark X1.5语言模型
-官方文档链接：https://www.xfyun.cn/doc/spark/X1http.html
