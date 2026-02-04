@@ -42,8 +42,9 @@ async def get_connected_clients():
                 "created_at": session.created_at.isoformat(),
                 "expires_at": session.expires_at.isoformat(),
                 "is_active": session.is_active(),
-                "operation_set": session.operation_set,
-                "operation_count": len(session.operation_set) if session.operation_set else 0,
+                "function_names": session.client_metadata.get("function_names", []),
+                "function_count": len(session.client_metadata.get("functions", [])),
+                "supports_openai_standard": len(session.client_metadata.get("functions", [])) > 0,
                 "last_heartbeat": session.last_heartbeat.isoformat(),
                 "time_since_heartbeat": (datetime.now() - session.last_heartbeat).total_seconds()
             }
@@ -76,7 +77,9 @@ async def get_client_details(session_id: str):
         client_details = {
             "session_id": session_id,
             "client_metadata": session.client_metadata,
-            "operation_set": session.operation_set,
+            "functions": session.client_metadata.get("functions", []),
+            "function_count": len(session.client_metadata.get("functions", [])),
+            "supports_openai_standard": len(session.client_metadata.get("functions", [])) > 0,
             "created_at": session.created_at.isoformat(),
             "expires_at": session.expires_at.isoformat(),
             "is_active": session.is_active(),

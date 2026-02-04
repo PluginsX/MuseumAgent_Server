@@ -15,10 +15,9 @@ from ..common.log_formatter import log_step, log_communication
 
 @dataclass
 class EnhancedClientSession:
-    """增强版客户端会话数据结构"""
+    """增强版客户端会话数据结构（基于函数调用）"""
     session_id: str
     client_metadata: Dict[str, Any]
-    operation_set: List[str]
     created_at: datetime
     last_heartbeat: datetime
     last_activity: datetime  # 新增：最后活动时间
@@ -92,21 +91,21 @@ class StrictSessionManager:
         print(log_step('SESSION', 'CONFIG', '会话管理器配置加载完成', self.config))
     def _load_config(self):
         """加载会话管理配置"""
+        # 默认配置
+        default_config = {
+            'session_timeout_minutes': 15,
+            'inactivity_timeout_minutes': 5,
+            'heartbeat_timeout_minutes': 2,
+            'cleanup_interval_seconds': 30,
+            'deep_validation_interval_seconds': 300,
+            'enable_auto_cleanup': True,
+            'enable_heartbeat_monitoring': True,
+            'log_level': 'INFO'
+        }
+        
         try:
             config = get_global_config()
             session_config = config.get('session_management', {})
-            
-            # 默认配置
-            default_config = {
-                'session_timeout_minutes': 15,
-                'inactivity_timeout_minutes': 5,
-                'heartbeat_timeout_minutes': 2,
-                'cleanup_interval_seconds': 30,
-                'deep_validation_interval_seconds': 300,
-                'enable_auto_cleanup': True,
-                'enable_heartbeat_monitoring': True,
-                'log_level': 'INFO'
-            }
             
             # 合并配置
             self.config = {**default_config, **session_config}
@@ -219,16 +218,14 @@ class StrictSessionManager:
             for session_id, session in self.sessions.items():
                 # 严格验证条件
                 if (session.is_registered and 
-                    not session.is_expired() and 
-                    session.operation_set and
-                    len(session.operation_set) > 0):
+                    not session.is_expired()):
                     valid_sessions[session_id] = session
                 else:
                     invalid_count += 1
                     print(log_step('SESSION', 'INVALID', f'发现无效会话 {session_id[:8]}', 
                                   {'registered': session.is_registered,
                                    'expired': session.is_expired(),
-                                   'operations': len(session.operation_set)}))
+                                   'function_count': len(session.client_metadata.get('functions', []))}))
             
             if invalid_count > 0:
                 self.sessions = valid_sessions
@@ -236,9 +233,8 @@ class StrictSessionManager:
                               {'removed_invalid': invalid_count,
                                'remaining_valid': len(valid_sessions)}))
     
-    def register_session(self, session_id: str, client_metadata: Dict[str, Any], 
-                        operation_set: List[str]) -> EnhancedClientSession:
-        """严格会话注册"""
+    def register_session(self, session_id: str, client_metadata: Dict[str, Any]) -> EnhancedClientSession:
+        """严格会话注册（基于函数调用）"""
         with self._lock:
             # 检查是否已存在相同会话
             if session_id in self.sessions:
@@ -254,7 +250,6 @@ class StrictSessionManager:
             session = EnhancedClientSession(
                 session_id=session_id,
                 client_metadata=client_metadata,
-                operation_set=operation_set,
                 created_at=now,
                 last_heartbeat=now,
                 last_activity=now,
@@ -267,7 +262,7 @@ class StrictSessionManager:
             print(log_step('SESSION', 'REGISTER', '新会话注册成功', 
                           {'session_id': session_id[:8],
                            'client_type': client_metadata.get('client_type', 'unknown'),
-                           'operations_count': len(operation_set),
+                           'function_count': len(client_metadata.get('functions', [])),
                            'expires_in': self.session_timeout.total_seconds()/60}))
             
             print(log_communication('SESSION', 'CREATE', 'Session Registration',
@@ -325,16 +320,48 @@ class StrictSessionManager:
                           {'session_id': session_id[:8], 'reason': '会话不存在或已过期'}))
             return False
     
-    def get_operations_for_session(self, session_id: str) -> List[str]:
-        """获取会话操作集"""
+    def register_session_with_functions(self, session_id: str, client_metadata: Dict[str, Any], 
+                                      functions: List[Dict[str, Any]]) -> EnhancedClientSession:
+        """注册支持OpenAI标准函数调用的会话
+        
+        Args:
+            session_id: 会话ID
+            client_metadata: 客户端元数据
+            functions: OpenAI标准函数定义列表
+        
+        Returns:
+            注册的会话对象
+        """
+        # 验证所有函数定义都符合OpenAI标准
+        from ..models.function_calling_models import is_valid_openai_function
+        valid_functions = []
+        function_names = []
+        
+        # 支持空函数列表（普通对话模式）
+        if functions:
+            for func_def in functions:
+                if is_valid_openai_function(func_def):
+                    valid_functions.append(func_def)
+                    function_names.append(func_def.get("name", "unknown"))
+                else:
+                    print(log_step('SESSION', 'WARNING', f'跳过不符合OpenAI标准的函数: {func_def.get("name", "unknown")}'))
+        
+        # 存储验证后的函数定义（可能是空列表）
+        client_metadata["functions"] = valid_functions
+        client_metadata["function_names"] = function_names
+        
+        print(log_step('SESSION', 'REGISTER', f'注册会话（函数数量: {len(valid_functions)}）', 
+                      {'session_id': session_id[:8], 'functions': function_names if function_names else '普通对话模式'}))
+        
+        return self.register_session(session_id, client_metadata)
+
+    def get_functions_for_session(self, session_id: str) -> List[Dict[str, Any]]:
+        """获取会话支持的函数定义"""
         session = self.validate_session(session_id)
         if session:
-            operations = session.operation_set.copy()
-            if "general_chat" not in operations:
-                operations.append("general_chat")
-            return operations
-        return ["general_chat"]
-    
+            return session.client_metadata.get("functions", [])
+        return []
+
     def unregister_session(self, session_id: str) -> bool:
         """主动注销会话"""
         with self._lock:

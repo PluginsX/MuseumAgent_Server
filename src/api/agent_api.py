@@ -2,6 +2,7 @@
 """
 智能体核心API - 定义/api/agent/parse标准化接口
 """
+import json
 from datetime import datetime
 
 from fastapi import FastAPI, Header
@@ -18,7 +19,6 @@ from src.common.response_utils import (
 )
 from src.core.command_generator import CommandGenerator
 from src.models.request_models import AgentParseRequest
-from src.models.response_models import AgentParseResponse, StandardCommand
 
 # 初始化FastAPI应用
 app = FastAPI(
@@ -93,6 +93,8 @@ from src.api.users_api import router as users_router
 from src.api.session_api import router as session_router
 from src.api.client_api import router as client_router
 from src.api.session_config_api import router as session_config_router
+from src.api.function_api import router as function_router  # OpenAI标准函数API
+
 app.include_router(auth_router)
 app.include_router(config_router)
 app.include_router(embedding_router)
@@ -101,6 +103,7 @@ app.include_router(users_router)
 app.include_router(session_router)
 app.include_router(client_router)
 app.include_router(session_config_router)
+app.include_router(function_router)  # 添加OpenAI标准函数API路由
 
 
 @app.on_event("startup")
@@ -132,7 +135,8 @@ async def root():
 
 @app.post(
     "/api/agent/parse",
-    response_model=AgentParseResponse,
+    # 移除response_model以避免FastAPI自动转换StandardCommand模型
+    # response_model=AgentParseResponse,
     summary="智能体解析接口",
     description="接收用户自然语言输入，返回标准化文物操作指令",
 )
@@ -178,6 +182,10 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
             session_id=session_id  # 传递会话ID
         )
         
+        # 输出CommandGenerator返回的数据
+        print(f"[DEBUG] API层接收到CommandGenerator返回的数据:")
+        print(json.dumps(command_dict, indent=2, ensure_ascii=False))
+        
         # 记录处理完成
         print(log_step('API', 'SUCCESS', '请求处理完成', 
                       {'operation': command_dict.get('operation'), 
@@ -186,8 +194,21 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
         # 记录响应发送
         print(log_communication('CLIENT', 'SEND', 'Agent Response', command_dict))
         
-        # 返回成功响应（直接使用原始字典）
-        return success_response(data=command_dict)
+        # 输出LLM原始响应（直通转发前）
+        print(f"[DEBUG] LLM原始响应准备直通转发:")
+        print(json.dumps(command_dict, indent=2, ensure_ascii=False))
+        
+        # 构造最小化的API响应格式，保持LLM原始数据完整性
+        print(f"[DIRECT] 构造直通转发响应")
+        
+        direct_response = {
+            "code": 200,
+            "msg": "请求处理成功",
+            "data": command_dict
+        }
+        
+        print(f"[DIRECT] 直接转发LLM原始数据给客户端")
+        return direct_response
         
     except ValueError as e:
         logger.warning(f"参数/解析异常: {str(e)}, 请求: user_input={request.user_input}")

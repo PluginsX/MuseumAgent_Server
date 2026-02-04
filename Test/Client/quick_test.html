@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快速测试修复</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        textarea { width: 100%; height: 150px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h2>客户端修复验证测试</h2>
+    
+    <div>
+        <button onclick="testRegisterSession()">测试会话注册</button>
+        <button onclick="testHeartbeat()">测试心跳功能</button>
+        <button onclick="testSendMessage()">测试消息发送</button>
+    </div>
+    
+    <div id="testResults"></div>
+    
+    <textarea id="functionDefs" placeholder="函数定义（可选）">[
+  {
+    "name": "test_function",
+    "description": "测试函数",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "test_param": {
+          "type": "string",
+          "description": "测试参数"
+        }
+      },
+      "required": ["test_param"]
+    }
+  }
+]</textarea>
+
+    <script>
+        // 模拟必要的类和配置
+        const Config = {
+            DEFAULT_SERVER_URL: 'https://localhost:8000',
+            DEFAULT_TIMEOUT: 30,
+            HEARTBEAT_INTERVAL: 2 * 60 * 1000
+        };
+
+        class StateManager {
+            constructor() {
+                this.isConnected = false;
+                this.isProcessing = false;
+                this.sessionId = null;
+                this.sessionExpiryTime = null;
+                this.heartbeatInterval = null;
+            }
+            
+            setConnected(connected) {
+                this.isConnected = connected;
+                console.log('连接状态更新:', connected);
+            }
+            
+            setProcessing(processing) {
+                this.isProcessing = processing;
+            }
+            
+            setSession(sessionId, expiryTime) {
+                this.sessionId = sessionId;
+                this.sessionExpiryTime = expiryTime;
+                console.log('会话设置:', sessionId, expiryTime);
+            }
+            
+            clearSession() {
+                this.sessionId = null;
+                this.sessionExpiryTime = null;
+                if (this.heartbeatInterval) {
+                    clearInterval(this.heartbeatInterval);
+                    this.heartbeatInterval = null;
+                }
+            }
+        }
+
+        class ConfigManager {
+            static getServerUrl() {
+                return Config.DEFAULT_SERVER_URL;
+            }
+            
+            static getTimeout() {
+                return Config.DEFAULT_TIMEOUT;
+            }
+            
+            static getFunctionMode() {
+                return document.getElementById('functionDefs').value.trim() ? 'with-functions' : 'chat-only';
+            }
+            
+            static getFunctionDefinitions() {
+                return document.getElementById('functionDefs').value.trim();
+            }
+            
+            static getClientType() {
+                return 'test-client';
+            }
+            
+            static getClientId() {
+                return 'test_' + Date.now();
+            }
+            
+            static getSpiritId() {
+                return '';
+            }
+            
+            static getSceneType() {
+                return 'public';
+            }
+        }
+
+        class Toast {
+            static show(message, type = 'info') {
+                console.log(`Toast [${type}]:`, message);
+                const resultDiv = document.getElementById('testResults');
+                const toastDiv = document.createElement('div');
+                toastDiv.className = `test-result ${type === 'success' ? 'success' : 'error'}`;
+                toastDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                resultDiv.appendChild(toastDiv);
+            }
+        }
+
+        class ChatManager {
+            static addBotMessage(message) {
+                console.log('Bot消息:', message);
+                const resultDiv = document.getElementById('testResults');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'test-result success';
+                msgDiv.innerHTML = `<strong>🤖 Bot:</strong> ${message.replace(/\n/g, '<br>')}`;
+                resultDiv.appendChild(msgDiv);
+            }
+        }
+
+        class UIController {
+            static showLoading(buttonId, loadingText) {
+                console.log('显示加载:', buttonId, loadingText);
+            }
+            
+            static hideLoading(buttonId, originalText) {
+                console.log('隐藏加载:', buttonId, originalText);
+            }
+        }
+
+        // 全局状态管理器
+        const stateManager = new StateManager();
+
+        // 修复后的NetworkManager
+        class NetworkManager {
+            static async registerSession() {
+                const mode = ConfigManager.getFunctionMode();
+                let functions = null;
+
+                if (mode === 'with-functions') {
+                    const functionDefValue = ConfigManager.getFunctionDefinitions();
+                    if (functionDefValue) {
+                        try {
+                            const parsedFunctions = JSON.parse(functionDefValue);
+                            if (Array.isArray(parsedFunctions)) {
+                                functions = parsedFunctions;
+                                for (let i = 0; i < functions.length; i++) {
+                                    const func = functions[i];
+                                    if (!func.name || !func.description || !func.parameters) {
+                                        throw new Error(`第${i+1}个函数定义缺少必要字段`);
+                                    }
+                                }
+                            } else {
+                                throw new Error('函数定义必须是数组格式');
+                            }
+                        } catch (e) {
+                            Toast.show(`函数定义JSON格式错误: ${e.message}`, 'error');
+                            return;
+                        }
+                    }
+                }
+
+                UIController.showLoading('registerBtn', '注册中...');
+
+                try {
+                    const registrationData = {
+                        client_metadata: {
+                            client_id: ConfigManager.getClientId(),
+                            client_type: ConfigManager.getClientType(),
+                            client_version: "1.0.0",
+                            platform: "web-test-client",
+                            capabilities: {
+                                max_concurrent_requests: 3,
+                                supported_scenes: ["study", "leisure", "public"],
+                                preferred_response_format: "json",
+                                function_calling_supported: (mode === 'with-functions')
+                            }
+                        },
+                        functions: (mode === 'with-functions' && functions) ? functions : []
+                    };
+
+                    const response = await fetch(`${ConfigManager.getServerUrl()}/api/session/register`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(registrationData),
+                        signal: AbortSignal.timeout(ConfigManager.getTimeout() * 1000)
+                    });
+
+                    if (!response.ok) {
+                        let errorMessage = `HTTP ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            errorMessage = errorData.detail || errorData.message || errorMessage;
+                        } catch (e) {
+                            errorMessage = `服务器返回错误: ${response.status} ${response.statusText}`;
+                        }
+                        throw new Error(errorMessage);
+                    }
+
+                    const result = await response.json();
+
+                    stateManager.setSession(result.session_id, new Date(result.expires_at));
+                    stateManager.setConnected(true);
+                    NetworkManager.startHeartbeat(); // 修复：使用类名调用
+                    
+                    let successMessage = `✅ 会话注册成功!\n\n`;
+                    successMessage += `会话ID: ${result.session_id}\n`;
+                    successMessage += `过期时间: ${new Date(result.expires_at).toLocaleString()}\n`;
+                    successMessage += `支持功能: ${result.supported_features.join(', ')}\n`;
+                    
+                    if (mode === 'with-functions') {
+                        if (functions && functions.length > 0) {
+                            successMessage += `\n已注册函数 (${functions.length}个):\n`;
+                            functions.forEach((func, index) => {
+                                successMessage += `  ${index + 1}. ${func.name}: ${func.description}\n`;
+                            });
+                            successMessage += `\n当前为函数调用模式，支持复杂操作。`;
+                        } else {
+                            successMessage += `\n当前为函数调用模式，但未提供函数定义，将使用普通对话处理。`;
+                        }
+                    } else {
+                        successMessage += `\n当前为普通对话模式，适用于基础问答和咨询。`;
+                    }
+
+                    Toast.show('会话注册成功！', 'success');
+                    ChatManager.addBotMessage(successMessage);
+                } catch (error) {
+                    console.error('注册会话失败:', error);
+                    Toast.show(`注册失败: ${error.message}`, 'error');
+                    ChatManager.addBotMessage(`❌ 会话注册失败: ${error.message}`);
+                } finally {
+                    UIController.hideLoading('registerBtn', '注册会话');
+                }
+            }
+
+            static startHeartbeat() {
+                if (stateManager.heartbeatInterval) {
+                    clearInterval(stateManager.heartbeatInterval);
+                }
+                
+                stateManager.heartbeatInterval = setInterval(async () => {
+                    if (stateManager.sessionId) {
+                        try {
+                            const response = await fetch(`${ConfigManager.getServerUrl()}/api/session/heartbeat`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'session-id': stateManager.sessionId
+                                },
+                                signal: AbortSignal.timeout(5000)
+                            });
+                            
+                            if (!response.ok) {
+                                console.warn('心跳失败:', response.status);
+                                stateManager.clearSession();
+                            } else {
+                                stateManager.setConnected(true);
+                            }
+                        } catch (error) {
+                            console.warn('心跳请求异常:', error);
+                            if (error.name !== 'AbortError') {
+                                stateManager.setConnected(false);
+                            }
+                        }
+                    }
+                }, Config.HEARTBEAT_INTERVAL);
+            }
+
+            static async processMessage(message) {
+                stateManager.setProcessing(true);
+                UIController.showLoading('sendBtn', '处理中...');
+                
+                try {
+                    const requestData = {
+                        user_input: message,
+                        client_type: ConfigManager.getClientType(),
+                        spirit_id: ConfigManager.getSpiritId(),
+                        scene_type: ConfigManager.getSceneType()
+                    };
+
+                    const headers = {
+                        'Content-Type': 'application/json',
+                    };
+                    
+                    if (stateManager.sessionId) {
+                        headers['session-id'] = stateManager.sessionId;
+                    }
+
+                    const response = await fetch(`${ConfigManager.getServerUrl()}/api/agent/parse`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(requestData),
+                        signal: AbortSignal.timeout(ConfigManager.getTimeout() * 1000)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        NetworkManager.handleSuccessResponse(result); // 修复：使用类名调用
+                    } else {
+                        NetworkManager.handleErrorResponse(result, response.status); // 修复：使用类名调用
+                    }
+
+                } catch (error) {
+                    NetworkManager.handleNetworkError(error); // 修复：使用类名调用
+                } finally {
+                    stateManager.setProcessing(false);
+                    UIController.hideLoading('sendBtn', '发送');
+                }
+            }
+
+            static handleSuccessResponse(result) {
+                if (result.code === 200 && result.data) {
+                    const command = result.data;
+                    const rawResponse = JSON.stringify(command, null, 2);
+                    ChatManager.addBotMessage(rawResponse);
+                } else {
+                    ChatManager.addBotMessage(`请求处理失败: ${result.msg || '未知错误'}`);
+                }
+            }
+
+            static handleErrorResponse(result, status) {
+                let errorMsg = `请求失败 (${status})`;
+                if (result.msg) {
+                    errorMsg = result.msg;
+                } else if (status === 404) {
+                    errorMsg = '未查询到相关文物数据';
+                } else if (status === 400) {
+                    errorMsg = '请求参数错误';
+                } else if (status === 401) {
+                    errorMsg = '接口认证失败';
+                }
+                ChatManager.addBotMessage(errorMsg);
+            }
+
+            static handleNetworkError(error) {
+                if (error.name === 'AbortError') {
+                    ChatManager.addBotMessage('请求超时，请检查服务器地址和网络连接');
+                } else {
+                    ChatManager.addBotMessage(`网络错误: ${error.message}`);
+                }
+            }
+        }
+
+        // 全局函数
+        function testRegisterSession() {
+            NetworkManager.registerSession();
+        }
+
+        function testHeartbeat() {
+            if (stateManager.sessionId) {
+                NetworkManager.startHeartbeat();
+                Toast.show('心跳测试已启动', 'success');
+            } else {
+                Toast.show('请先注册会话', 'error');
+            }
+        }
+
+        function testSendMessage() {
+            if (stateManager.sessionId) {
+                NetworkManager.processMessage('你好，这是一个测试消息');
+            } else {
+                Toast.show('请先注册会话', 'error');
+            }
+        }
+
+        // 页面加载完成提示
+        document.addEventListener('DOMContentLoaded', function() {
+            Toast.show('测试页面加载完成，请点击按钮进行测试', 'success');
+        });
+    </script>
+</body>
+</html>

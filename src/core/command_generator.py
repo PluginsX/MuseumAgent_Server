@@ -2,6 +2,7 @@
 """
 标准化指令生成模块（重构版）- 作为各专业模块的协调器
 """
+import json
 from datetime import datetime
 from typing import Any, Dict
 
@@ -9,7 +10,7 @@ from src.core.dynamic_llm_client import DynamicLLMClient
 from src.core.modules.rag_processor import RAGProcessor
 from src.core.modules.prompt_builder import PromptBuilder
 from src.core.modules.response_parser import ResponseParser
-from src.session.session_manager import session_manager
+from src.session.strict_session_manager import strict_session_manager
 # RAG模块：在LLM处理之前执行检索增强
 
 
@@ -56,60 +57,70 @@ class CommandGenerator:
         session_id: str = None
     ) -> Dict[str, Any]:
         """
-        生成通用化标准化指令（协调器模式）
+        生成标准化指令 - 严格基于OpenAI Function Calling标准
+        完全移除传统操作集模式，只支持函数调用
         
         Args:
             user_input: 用户自然语言输入
             scene_type: 场景类型
-            session_id: 会话ID（用于动态指令集）
+            session_id: 会话ID（必须提供）
         
         Returns:
-            标准化指令字典
+            标准化指令字典（基于函数调用结果）
         """
-        print(f"[Coordinator] 开始协调处理流程")
-        print(f"[DEBUG] CommandGenerator - use_dynamic_llm: {self.use_dynamic_llm}, session_id: {session_id}")
+        print(f"[Coordinator] 开始OpenAI标准函数调用流程")
         
         # 参数验证
-        if not self.use_dynamic_llm:
-            raise RuntimeError("系统配置错误：必须启用动态LLM模式")
-            
         if not session_id:
             raise ValueError("缺少会话ID：所有请求必须在有效会话上下文中执行")
         
         # 1. 协调RAG检索
-        print(f"[Coordinator] 步骤1: 协调RAG检索")
+        print(f"[Coordinator] 步骤1: 执行RAG检索")
         rag_context = self._perform_rag_retrieval(user_input, top_k=3)
         rag_context["timestamp"] = datetime.now().isoformat()
         
-        # 2. 协调提示词构建
-        print(f"[Coordinator] 步骤2: 协调提示词构建")
+        # 2. 获取会话中的OpenAI标准函数定义
+        print(f"[Coordinator] 步骤2: 获取函数定义（可能为空）")
+        functions = strict_session_manager.get_functions_for_session(session_id)
+        
+        # 支持无函数定义的普通对话模式
+        if not functions:
+            print(f"[Coordinator] 检测到普通对话模式，跳过函数调用流程")
+        else:
+            print(f"[Coordinator] 检测到函数调用模式，函数数量: {len(functions)}")
+        
+        # 3. 构建RAG增强的提示词（基于Function Calling）
+        print(f"[Coordinator] 步骤3: 构建基于Function Calling的提示词")
         rag_instruction = self._build_rag_instruction(rag_context)
         
-        # 3. 获取会话指令集
-        session_ops = session_manager.get_operations_for_session(session_id) or ["general_chat"]
-        
-        # 4. 构建最终提示词
-        print(f"[Coordinator] 步骤3: 构建最终提示词")
-        final_prompt = self.prompt_builder.build_final_prompt(
+        # 4. 生成OpenAI标准函数调用负载
+        print(f"[Coordinator] 步骤4: 生成OpenAI标准函数调用请求")
+        payload = self.llm_client.generate_function_calling_payload(
+            session_id=session_id,
             user_input=user_input,
             scene_type=scene_type,
-            valid_operations=session_ops,
-            rag_instruction=rag_instruction
+            rag_instruction=rag_instruction,
+            functions=functions  # OpenAI标准函数定义
         )
         
-        # 5. 调用LLM
-        print(f"[Coordinator] 步骤4: 调用LLM处理")
-        llm_raw = self.llm_client._chat_completions(final_prompt)
+        # 5. 调用LLM执行函数调用
+        print(f"[Coordinator] 步骤5: 调用LLM处理函数调用")
+        print(f"[DEBUG] 发送到LLM的请求负载:")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         
-        # 6. 解析响应（简化版）
-        print(f"[Coordinator] 步骤5: 解析LLM响应")
-        print(f"[DEBUG] LLM返回原始内容长度: {len(llm_raw)} 字符")
-        llm_data = self.response_parser.parse_llm_response(llm_raw)
-        print(f"[DEBUG] 解析后的数据: {llm_data}")
+        response = self.llm_client._chat_completions_with_functions(payload)
         
-        # 7. 构建最终指令
-        print(f"[Coordinator] 步骤6: 构建标准化指令")
-        command = self.response_parser.build_standard_command(llm_data, rag_context)
+        # 输出LLM原始响应
+        print(f"[DEBUG] 步骤5完成 - LLM原始响应:")
+        print(json.dumps(response, indent=2, ensure_ascii=False))
         
-        print(f"[Coordinator] 处理完成，共检索到 {rag_context.get('total_found', 0)} 个相关文物")
-        return command
+        # 6. 直接转发LLM原始响应，不做任何处理
+        print(f"[Coordinator] 步骤6: 直接转发LLM原始响应")
+        
+        # 输出即将返回的数据
+        print(f"[DEBUG] 步骤6完成 - 即将返回给API层的数据:")
+        print(json.dumps(response, indent=2, ensure_ascii=False))
+        
+        # 直接返回LLM的完整原始响应
+        print(f"[Coordinator] 处理完成，直接转发LLM原始响应")
+        return response

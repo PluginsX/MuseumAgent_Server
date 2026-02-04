@@ -10,7 +10,8 @@ import requests
 from datetime import datetime
 
 from ..common.config_utils import get_global_config
-from ..session.session_manager import session_manager
+# 移除对已删除模块的导入
+# from ..session.session_manager import session_manager
 from ..common.log_formatter import log_step, log_communication
 
 
@@ -38,28 +39,13 @@ class DynamicLLMClient:
     def generate_dynamic_prompt(self, session_id: str, user_input: str, 
                               scene_type: str = "public") -> str:
         """
-        根据会话动态生成提示词
+        根据会话生成提示词（已废弃，现在使用函数调用模式）
         """
-        # 获取会话特定的操作指令集
-        session_operations = session_manager.get_operations_for_session(session_id)
+        # 警告：此方法已废弃，应使用函数调用模式
+        print(f"[DynamicLLM] 警告：调用了已废弃的generate_dynamic_prompt方法")
         
-        # 如果没有有效会话，使用基础指令集
-        if not session_operations:
-            operations = self.base_operations
-        else:
-            operations = session_operations
-        
-        # 构造动态提示词（使用安全的字符串替换）
-        dynamic_prompt = self.prompt_template.replace('{scene_type}', scene_type)
-        dynamic_prompt = dynamic_prompt.replace('{user_input}', user_input)
-        dynamic_prompt = dynamic_prompt.replace('{valid_operations}', ", ".join(operations))
-        
-        # 记录提示词生成日志
-        print(f"[DynamicLLM] Session: {session_id}")
-        print(f"[DynamicLLM] Operations: {operations}")
-        print(f"[DynamicLLM] Prompt: {dynamic_prompt[:100]}...")
-        
-        return dynamic_prompt
+        # 返回基础提示词
+        return f"场景：{scene_type}\n用户输入：{user_input}"
     
     def parse_user_input_with_session(self, session_id: str, user_input: str, 
                                     scene_type: str = "public") -> str:
@@ -72,18 +58,183 @@ class DynamicLLMClient:
         # 调用LLM
         return self._chat_completions(prompt)
     
-    def get_available_operations(self, session_id: str = None) -> List[str]:
+    def get_available_functions(self, session_id: str = None) -> List[Dict[str, Any]]:
         """
-        获取可用操作指令集
+        获取会话支持的OpenAI标准函数定义
         """
         if session_id:
-            session_ops = session_manager.get_operations_for_session(session_id)
-            if session_ops:
-                return session_ops
+            from ..session.strict_session_manager import strict_session_manager
+            functions = strict_session_manager.get_functions_for_session(session_id)
+            if functions:
+                return functions
         
-        # fallback到基础指令集
-        return self.base_operations.copy()
+        # 返回空列表表示不支持函数调用
+        return []
     
+    def generate_function_calling_payload(self, session_id: str, user_input: str, 
+                                        scene_type: str = "public", rag_instruction: str = "", 
+                                        functions: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """生成OpenAI标准函数调用格式的请求
+        
+        Args:
+            session_id: 会话ID
+            user_input: 用户输入
+            scene_type: 场景类型
+            rag_instruction: RAG检索结果
+            functions: OpenAI标准函数定义列表
+        
+        Returns:
+            符合OpenAI API标准的请求负载
+        """
+        # 构建系统消息 - 强制保持对话内容
+        system_message = "你是智能助手。必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 在调用函数时，要先解释将要做什么；3. 用友好自然的语言与用户交流。"
+        user_message = f"场景：{scene_type}\n{rag_instruction}\n用户输入：{user_input}"
+        
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
+        
+        # 构建基础payload
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.parameters.get("temperature", 0.1),
+            "max_tokens": self.parameters.get("max_tokens", 1024),
+            "top_p": self.parameters.get("top_p", 0.1),
+        }
+        
+        # 严格遵循OpenAI标准添加函数调用配置
+        if functions and len(functions) > 0:
+            # 验证所有函数定义都符合OpenAI标准
+            from ..models.function_calling_models import is_valid_openai_function
+            valid_functions = []
+            for func_def in functions:
+                if is_valid_openai_function(func_def):
+                    valid_functions.append(func_def)
+                else:
+                    print(f"[LLM] 警告：跳过不符合OpenAI标准的函数定义: {func_def.get('name', 'unknown')}")
+            
+            if valid_functions:
+                payload["functions"] = valid_functions
+                payload["function_call"] = "auto"
+                print(f"[LLM] 已添加 {len(valid_functions)} 个OpenAI标准函数定义")
+            else:
+                print("[LLM] 警告：没有有效的OpenAI标准函数定义，将使用普通对话模式")
+        else:
+            # 无函数定义时使用普通对话模式
+            print("[LLM] 未提供函数定义，使用普通对话模式")
+            # 可以在这里添加特殊的系统提示词来引导普通对话
+            messages[0]["content"] = f"{system_message}\n\n当前处于普通对话模式，请以友好、专业的态度回答用户问题。"
+        
+        return payload
+
+    def _chat_completions_with_functions(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        调用支持函数调用的Chat Completions API
+        """
+        if not self.base_url or not self.api_key:
+            raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
+        
+        print(log_step('LLM', 'SEND', '发送函数调用请求到LLM', 
+                      {'model': self.model, 'has_functions': 'functions' in payload}))
+        
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        # 记录发送的完整请求
+        print(log_communication('LLM', 'SEND', 'External LLM API', 
+                               payload, {'endpoint': url}))
+        
+        try:
+            resp = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as e:
+            print(log_step('LLM', 'ERROR', 'LLM请求异常', {'error': str(e)}))
+            raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
+        
+        if resp.status_code != 200:
+            err_body = resp.text
+            try:
+                err_json = resp.json()
+                err_body = err_json.get("error", {}).get("message", err_body)
+            except Exception:
+                pass
+            print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
+                          {'status_code': resp.status_code, 'error': err_body}))
+            raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
+        
+        response_data = resp.json()
+        
+        # 记录接收到的完整响应
+        print(log_communication('LLM', 'RECEIVE', 'External LLM API', 
+                               {'full_response': response_data},
+                               {'response_size': len(str(response_data))}))
+        
+        print(log_step('LLM', 'RECEIVE', '成功接收LLM响应', 
+                      {'has_choices': len(response_data.get('choices', [])) > 0}))
+        return response_data
+
+    def parse_function_call_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """解析OpenAI标准函数调用响应
+        
+        Args:
+            response: OpenAI API响应
+            
+        Returns:
+            标准化指令字典（始终包含对话内容）
+        """
+        choices = response.get("choices", [])
+        if not choices:
+            raise RuntimeError("LLM 响应中无 choices")
+        
+        msg = choices[0].get("message", {})
+        function_call = msg.get("function_call")
+        content = msg.get("content", "")
+        
+        # 直接使用LLM返回的内容，不添加后备机制
+        # 如果content为空，则保持为空（用户可接受偶尔的这种情况）
+        
+        if function_call:
+            # 严格解析OpenAI标准的函数调用
+            function_name = function_call.get("name")
+            arguments_str = function_call.get("arguments", "{}")
+            
+            # 解析arguments为JSON对象
+            try:
+                import json
+                arguments = json.loads(arguments_str)
+            except json.JSONDecodeError as e:
+                print(f"[LLM] 警告：函数参数JSON解析失败: {e}")
+                arguments = {}
+            
+            # 构建标准化响应（包含对话内容）
+            result = {
+                "command": function_name,
+                "parameters": arguments,
+                "type": "function_call",
+                "format": "openai_standard",
+                "response": content  # 始终包含对话内容
+            }
+            
+            print(f"[LLM] 成功解析函数调用: {function_name} with {len(arguments)} 参数")
+            return result
+        else:
+            # 没有函数调用时的处理
+            return {
+                "command": "general_chat",
+                "response": content,
+                "type": "direct_response",
+                "format": "openai_standard"
+            }
+
     def _chat_completions(self, prompt: str) -> str:
         """
         调用 OpenAI 兼容的 Chat Completions API

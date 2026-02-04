@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 
 from ..session.strict_session_manager import strict_session_manager
-from ..models.command_set_models import validate_command_set, StandardCommandSet
+# 已移除旧的指令集模型导入 - 现在完全基于OpenAI函数调用标准
 from ..common.log_formatter import log_step, log_communication
 
 router = APIRouter(prefix="/api/session", tags=["会话管理"])
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/session", tags=["会话管理"])
 class ClientRegistrationRequest(BaseModel):
     """客户端注册请求"""
     client_metadata: Dict[str, Any]
-    operation_set: List[str]
+    functions: Optional[List[Dict[str, Any]]] = None  # 新增：函数定义列表
     client_signature: Optional[str] = None
 
 
@@ -68,41 +68,47 @@ async def register_client_session(registration: ClientRegistrationRequest):
                                registration.dict(), 
                                {'client_type': registration.client_metadata.get('client_type')}))
         
-        # 简化验证：只要求基本字段存在
-        if not registration.client_metadata or not isinstance(registration.operation_set, list):
+        # 验证基本字段
+        if not registration.client_metadata:
             print(log_step('CLIENT', 'ERROR', '无效的客户端注册数据格式'))
             raise HTTPException(status_code=400, detail="无效的客户端注册数据格式")
         
-        # 验证客户端类型
-        from ..models.command_set_models import ClientTypeEnum
-        client_type_str = registration.client_metadata.get("client_type", "")
-        if client_type_str not in [t.value for t in ClientTypeEnum]:
-            # 如果不是标准类型，使用CUSTOM
+        # 验证客户端类型（简化处理）
+        client_type_str = registration.client_metadata.get("client_type", "custom")
+        if not client_type_str:
             registration.client_metadata["client_type"] = "custom"
-            print(log_step('CLIENT', 'WARNING', '非标准客户端类型，使用custom', 
-                          {'original_type': client_type_str}))
+            print(log_step('CLIENT', 'INFO', '设置默认客户端类型为custom'))
         
         # 生成唯一会话ID
         session_id = str(uuid.uuid4())
         print(log_step('SESSION', 'REGISTER', '生成新会话ID', 
                       {'session_id': session_id}))
         
-        # 注册会话（使用严格管理器）
-        session = strict_session_manager.register_session(
+        # 函数定义是可选的 - 支持普通对话模式
+        if registration.functions and len(registration.functions) > 0:
+            print(log_step('SESSION', 'INFO', '客户端提供函数定义，启用函数调用模式', 
+                          {'function_count': len(registration.functions)}))
+        else:
+            print(log_step('SESSION', 'INFO', '客户端未提供函数定义，启用普通对话模式'))
+            # 设置空函数列表而不是拒绝注册
+            registration.functions = []
+        
+        # 使用支持OpenAI标准函数调用的会话注册
+        session = strict_session_manager.register_session_with_functions(
             session_id=session_id,
             client_metadata=registration.client_metadata,
-            operation_set=registration.operation_set
+            functions=registration.functions
         )
         
         print(log_step('SESSION', 'SUCCESS', '会话注册成功', 
-                      {'operations': len(registration.operation_set), 
+                      {'functions': len(registration.functions),
                        'expires_at': session.expires_at.isoformat()}))
         
         # 记录注册成功的响应
         response_data = {
             "session_id": session_id,
             "expires_at": session.expires_at.isoformat(),
-            "supported_features": ["dynamic_operations", "session_management", "heartbeat"]
+            "supported_features": ["dynamic_operations", "session_management", "heartbeat", "function_calling"]
         }
         print(log_communication('CLIENT', 'SEND', 'Registration Success', response_data))
         
@@ -111,7 +117,7 @@ async def register_client_session(registration: ClientRegistrationRequest):
             session_id=session_id,
             expires_at=session.expires_at.isoformat(),
             server_timestamp=datetime.now().isoformat(),
-            supported_features=["dynamic_operations", "session_management", "heartbeat"]
+            supported_features=["dynamic_operations", "session_management", "heartbeat", "function_calling"]
         )
         
     except Exception as e:
@@ -177,26 +183,34 @@ async def unregister_session(session_id: str = Header()):
         raise HTTPException(status_code=500, detail=f"会话注销失败: {str(e)}")
 
 
-@router.get("/operations", response_model=SessionOperationsResponse)
-async def get_session_operations(session_id: str = Header()):
+@router.get("/functions", response_model=SessionOperationsResponse)
+async def get_session_functions(session_id: str = Header()):
     """
-    获取会话支持的操作指令集
+    获取会话支持的OpenAI标准函数定义
     """
     try:
-        operations = strict_session_manager.get_operations_for_session(session_id)
-        if operations:
+        # 获取函数名称列表作为操作集的替代
+        functions = strict_session_manager.get_functions_for_session(session_id)
+        function_names = [func.get("name", "unknown") for func in functions]
+        
+        if function_names:
             session = strict_session_manager.get_session(session_id)
             client_type = session.client_metadata.get("client_type") if session else None
             
             return SessionOperationsResponse(
-                operations=operations,
+                operations=function_names,
                 session_id=session_id,
                 client_type=client_type
             )
         else:
-            raise HTTPException(status_code=404, detail="会话不存在或已过期")
+            # 兼容模式：返回基础操作集
+            return SessionOperationsResponse(
+                operations=["general_chat"],
+                session_id=session_id,
+                client_type="basic"
+            )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取操作集失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取函数定义失败: {str(e)}")
 
 
 @router.get("/info", response_model=SessionInfoResponse)
@@ -210,7 +224,7 @@ async def get_session_info(session_id: str = Header()):
             return SessionInfoResponse(
                 session_id=session.session_id,
                 client_metadata=session.client_metadata,
-                operations=session.operation_set,
+                operations=session.client_metadata.get("function_names", []),
                 created_at=session.created_at.isoformat(),
                 expires_at=session.expires_at.isoformat(),
                 is_active=not session.is_expired()
@@ -234,7 +248,7 @@ async def get_session_stats():
             "sessions_detail": [{
                 "session_id": s.session_id,
                 "client_type": s.client_metadata.get("client_type", "unknown"),
-                "operations_count": len(s.operation_set),
+                "function_count": len(s.client_metadata.get("functions", [])),
                 "created_at": s.created_at.isoformat(),
                 "expires_at": s.expires_at.isoformat(),
                 "is_expired": s.is_expired()
@@ -242,22 +256,3 @@ async def get_session_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
-
-
-@router.post("/validate")
-async def validate_command_set_endpoint(command_set: Dict[str, Any]):
-    """
-    验证指令集格式接口
-    """
-    try:
-        is_valid = validate_command_set(command_set)
-        return {
-            "valid": is_valid,
-            "timestamp": datetime.now().isoformat(),
-            "message": "指令集格式正确" if is_valid else "指令集格式错误"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"验证失败: {str(e)}")
-
-
-# 注意：APIRouter不支持exception_handler，异常处理在主应用中统一处理

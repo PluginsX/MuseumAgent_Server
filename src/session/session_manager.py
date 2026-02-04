@@ -239,15 +239,16 @@ class LightweightSessionManager:
             return False
     
     def get_operations_for_session(self, session_id: str) -> List[str]:
-        """获取会话支持的操作指令集（包含内置的基本对话能力）"""
+        """获取会话支持的函数名称（已废弃，建议使用strict_session_manager）"""
         session = self.get_session(session_id)
         if session:
-            # 所有会话都内置支持基本对话能力
-            operations = session.operation_set.copy()
-            if "general_chat" not in operations:
-                operations.append("general_chat")
-            return operations
-        return ["general_chat"]  # 即使没有会话也支持基本对话
+            # 从函数定义中提取名称
+            functions = session.client_metadata.get("functions", [])
+            function_names = [func.get("name", "unknown") for func in functions]
+            if "general_chat" not in function_names:
+                function_names.append("general_chat")
+            return function_names
+        return ["general_chat"]  # 兼容模式
     
     def unregister_session(self, session_id: str) -> bool:
         """主动注销会话"""

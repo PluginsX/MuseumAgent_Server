@@ -5,6 +5,8 @@
 """
 
 from typing import Dict, Any, List
+# FunctionDefinition已重命名为OpenAIFunctionDefinition
+from ...models.function_calling_models import OpenAIFunctionDefinition
 from ...common.config_utils import get_global_config
 from ...common.log_formatter import log_step
 
@@ -17,11 +19,19 @@ class PromptBuilder:
         try:
             config = get_global_config()
             self.rag_templates = config.get('llm', {}).get('rag_templates', {})
+            # 加载系统提示词配置
+            self.system_prompts = config.get('llm', {}).get('system_prompts', {})
         except:
             # 后备方案
             self.rag_templates = {
                 'enabled': '请参考以下相关文物信息来回答：{retrieved_context}',
                 'disabled': ''
+            }
+            # 后备系统提示词，当配置文件加载失败或配置项缺失时，后备提示词确保系统不会崩溃：
+            self.system_prompts = {
+                'base': '你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 用专业友好的语言与用户交流；3. 保持对话的连贯性和可读性。请根据用户需求选择合适的函数并生成正确的参数。',
+                'function_calling': '你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 在调用函数前要说明将要做什么；3. 用专业友好的语言与用户交流。\n\n可用函数：\n{functions_list}\n\n场景：{scene_type}\n{rag_instruction}\n\n用户输入：{user_input}\n\n请分析用户需求，选择合适的函数并生成正确参数，同时用自然语言解释你的操作。',
+                'fallback': '你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 用专业友好的语言与用户交流；3. 保持对话的连贯性。\n\n场景：{scene_type}\n用户输入：{user_input}\n\n请用自然语言与用户进行友好交流，回答用户的问题。'
             }
     
     def build_rag_instruction(self, rag_context: Dict[str, Any]) -> str:
@@ -66,45 +76,97 @@ class PromptBuilder:
         return rag_instruction
     
     def build_final_prompt(self, user_input: str, scene_type: str, 
-                          valid_operations: List[str], rag_instruction: str = "") -> str:
+                          functions: List[Dict[str, Any]] = None, rag_instruction: str = "") -> str:
         """
-        构建最终的完整提示词
+        构建最终的完整提示词（基于Function Calling模式，配置驱动）
         
         Args:
             user_input: 用户输入
             scene_type: 场景类型
-            valid_operations: 可用操作列表
+            functions: 函数定义列表（可选）
             rag_instruction: RAG指令部分
             
         Returns:
             完整的提示词字符串
         """
         try:
-            config = get_global_config()
-            base_prompt = config['llm']['prompt_template']
-            
-            # 安全的字符串替换，避免格式化错误
-            final_prompt = base_prompt.replace('{rag_instruction}', rag_instruction or '')
-            final_prompt = final_prompt.replace('{scene_type}', scene_type)
-            final_prompt = final_prompt.replace('{user_input}', user_input)
-            final_prompt = final_prompt.replace('{valid_operations}', ", ".join(valid_operations))
-            
-            return final_prompt
+            # 根据是否有函数定义选择不同的提示词模板
+            if functions and len(functions) > 0:
+                # 有函数定义时使用函数调用模板
+                return self.build_function_calling_prompt(user_input, scene_type, functions, rag_instruction)
+            else:
+                # 无函数定义时使用基础模板
+                base_template = self.system_prompts.get('base', 
+                    '你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。')
+                
+                # 构建完整提示词
+                full_prompt = f"""{base_template}
+
+场景：{scene_type}
+{rag_instruction}
+用户输入：{user_input}
+
+请用自然语言与用户进行友好交流，回答用户的问题。"""
+                
+                return full_prompt
         except Exception as e:
             print(log_step('PROMPT', 'ERROR', '配置驱动提示词构建失败，使用后备方案', 
                           {'error': str(e)}))
             # 后备方案：使用简化但有效的提示词
-            operations_str = ", ".join(valid_operations) if valid_operations else "general_chat"
             backup_prompt = (
-                f"你是辽宁省博物馆智能助手。请严格按照JSON格式回复：\n"
-                f"{{\n"
-                f"  \"artifact_name\": \"文物名称或null\",\n"
-                f"  \"operation\": \"{operations_str}中的指令或general_chat\",\n"
-                f"  \"keywords\": [\"关键词\"],\n"
-                f"  \"response\": \"回复内容\"\n"
-                f"}}\n"
-                f"用户输入：{user_input}，场景：{scene_type}"
+                f"你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n"
+                f"\n"
+                f"场景：{scene_type}\n"
+                f"{rag_instruction}\n"
+                f"用户输入：{user_input}\n"
+                f"\n"
+                f"请用自然语言与用户进行友好交流，回答用户的问题。"
             )
             print(log_step('PROMPT', 'WARNING', '使用后备提示词', 
                           {'length': len(backup_prompt), 'reason': str(e)}))
             return backup_prompt
+
+    def build_function_calling_prompt(self, user_input: str, scene_type: str, 
+                                    functions: List[Dict[str, Any]], rag_instruction: str = "") -> str:
+        """
+        构建函数调用格式的提示词（配置驱动）
+        
+        Args:
+            user_input: 用户输入
+            scene_type: 场景类型
+            functions: 函数定义列表
+            rag_instruction: RAG指令部分
+            
+        Returns:
+            函数调用格式的提示词字符串
+        """
+        try:
+            # 构建函数列表描述
+            function_descriptions = []
+            for func in functions:
+                desc = f"- {func.get('name', 'unknown')}: {func.get('description', 'No description')}"
+                function_descriptions.append(desc)
+            
+            functions_text = "\n".join(function_descriptions)
+            
+            # 使用配置中的系统提示词
+            system_prompt_template = self.system_prompts.get('function_calling', 
+                '你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n\n可用函数：\n{functions_list}\n\n场景：{scene_type}\n{rag_instruction}\n\n用户输入：{user_input}\n\n请调用适当的函数并提供正确的参数，同时用自然语言回应用户。')
+            
+            # 安全的字符串替换
+            system_prompt = system_prompt_template.replace('{functions_list}', functions_text)
+            system_prompt = system_prompt.replace('{scene_type}', scene_type)
+            system_prompt = system_prompt.replace('{rag_instruction}', rag_instruction or '')
+            system_prompt = system_prompt.replace('{user_input}', user_input)
+            
+            return system_prompt
+        except Exception as e:
+            print(log_step('PROMPT', 'ERROR', '函数调用提示词构建失败', 
+                          {'error': str(e)}))
+            # 使用后备方案
+            fallback_template = self.system_prompts.get('fallback',
+                '你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n\n场景：{scene_type}\n用户输入：{user_input}\n\n请调用适当的函数并提供正确的参数，同时用自然语言回应用户。')
+            
+            fallback_prompt = fallback_template.replace('{scene_type}', scene_type)
+            fallback_prompt = fallback_prompt.replace('{user_input}', user_input)
+            return fallback_prompt
