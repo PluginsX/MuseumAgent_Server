@@ -14,9 +14,9 @@
   },
   "llm": {
     "api_type": "openai_compatible",
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "qwen-turbo",
+    "base_url": "http://localhost:11434/v1",
+    "api_key": "ollama",
+    "model": "qwen2:7b",
     "parameters": {
       "temperature": 0.2,
       "max_tokens": 1024,
@@ -43,7 +43,7 @@
   },
   "embedding": {
     "api_type": "openai_compatible",
-    "base_url": "http://192.168.3.2:5000/v1",
+    "base_url": "http://localhost:5000/v1",
     "api_key": "sk-ccahwXzZsrbLaXIidBQsnv8FVIbk8Y1BjgUdnFiHjFiuGSW3",
     "model": "Qwen3-Embedding-4B",
     "parameters": {
@@ -78,8 +78,8 @@
     "jwt_expire_seconds": 3600
   },
   "session_management": {
-    "session_timeout_minutes": 15,
-    "inactivity_timeout_minutes": 3,
+    "session_timeout_minutes": 60,
+    "inactivity_timeout_minutes": 5,
     "heartbeat_timeout_minutes": 2,
     "cleanup_interval_seconds": 30,
     "deep_validation_interval_seconds": 300,
