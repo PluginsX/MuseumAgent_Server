@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from src.core.dynamic_llm_client import DynamicLLMClient
-from src.core.modules.rag_processor import RAGProcessor
+from src.core.modules.semantic_retrieval_processor import SemanticRetrievalProcessor
 from src.core.modules.prompt_builder import PromptBuilder
 from src.core.modules.response_parser import ResponseParser
 from src.session.strict_session_manager import strict_session_manager
@@ -28,7 +28,7 @@ class CommandGenerator:
         self.llm_client = DynamicLLMClient()
         
         # 初始化各专业模块
-        self.rag_processor = RAGProcessor()
+        self.rag_processor = SemanticRetrievalProcessor()
         self.prompt_builder = PromptBuilder()
         self.response_parser = ResponseParser()
     
