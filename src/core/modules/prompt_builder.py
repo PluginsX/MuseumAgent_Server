@@ -57,9 +57,9 @@ class PromptBuilder:
         for i, artifact in enumerate(relevant_artifacts[:2], 1):  # 最多使用前2个最相关的
             artifact_info = artifact.get('info', {})
             context_part = (
-                f"{i}. 文物名称: {artifact['artifact_name']}\n"
-                f"   文物ID: {artifact['artifact_id']}\n"
-                f"   相关描述: {artifact['document'][:200]}...\n"
+                f"{i}. 文物名称: {artifact.get('title', '未知')}\n"
+                f"   文物ID: {artifact.get('id', '未知')}\n"
+                f"   相关描述: {artifact.get('content', '')[:200]}...\n"
                 f"   详细信息: {artifact_info.get('tips', '暂无详细信息')}\n"
             )
             context_parts.append(context_part)

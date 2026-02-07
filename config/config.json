@@ -14,7 +14,7 @@
   },
   "llm": {
     "api_type": "openai_compatible",
-    "base_url": "http://localhost:11434/v1",
+    "base_url": "http://127.0.0.1:11434/v1",
     "api_key": "ollama",
     "model": "qwen2:7b",
     "parameters": {
@@ -39,16 +39,6 @@
     "rag_templates": {
       "enabled": "请参考以下相关文物信息来回答：{retrieved_context}",
       "disabled": ""
-    }
-  },
-  "embedding": {
-    "api_type": "openai_compatible",
-    "base_url": "http://localhost:5000/v1",
-    "api_key": "sk-ccahwXzZsrbLaXIidBQsnv8FVIbk8Y1BjgUdnFiHjFiuGSW3",
-    "model": "Qwen3-Embedding-4B",
-    "parameters": {
-      "dimensions": 1024,
-      "encoding_format": "float"
     }
   },
   "artifact_knowledge_base": {
@@ -88,7 +78,7 @@
     "log_level": "INFO"
   },
   "semantic_retrieval": {
-    "base_url": "http://localhost:8080/api/v1",
+    "base_url": "http://localhost:12315/api/v1",
     "api_key": "",
     "timeout": 300,
     "search_params": {

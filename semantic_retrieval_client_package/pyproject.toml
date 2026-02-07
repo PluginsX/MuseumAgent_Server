@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic-retrieval-client"
+version = "1.0.0"
+description = "语义检索系统 Python 客户端库"
+authors = [
+    { name = "Semantic Retrieval System Team", email = "contact@semantic-retrieval-system.com" }
+]
+maintainers = [
+    { name = "Semantic Retrieval System Team", email = "contact@semantic-retrieval-system.com" }
+]
+license = { text = "MIT License" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.28.0"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Client"
+]
+keywords = ["semantic", "retrieval", "client", "api"]
+
+[project.urls]
+Homepage = "https://github.com/PluginsX/SemanticRetrievalSystem"
+Repository = "https://github.com/PluginsX/SemanticRetrievalSystem"
+Documentation = "https://semantic-retrieval-system.readthedocs.io/"
+Changelog = "https://github.com/PluginsX/SemanticRetrievalSystem/releases"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=22.0.0",
+    "isort>=5.0.0",
+    "flake8>=4.0.0",
+    "mypy>=0.950"
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.8.0"
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

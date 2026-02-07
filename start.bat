@@ -2,7 +2,7 @@
 REM Simple startup script for MuseumAgent Server
 
 REM Check if virtual environment exists
-if not exist "env\Scripts\python.exe" (
+if not exist "venv\Scripts\python.exe" (
     echo ERROR: Virtual environment not found!
     echo Please check if env directory exists
     pause
@@ -14,7 +14,7 @@ echo Starting MuseumAgent Server...
 echo Using virtual environment: %~dp0env
 echo.
 
-"%~dp0env\Scripts\python.exe" "%~dp0main.py"
+"%~dp0venv\Scripts\python.exe" "%~dp0main.py"
 
 REM Keep window open after server stops
 echo.

@@ -255,14 +255,6 @@ session-id: {session_id} (可选)
 #### 配置管理
 ```
 GET/PUT /api/admin/config/llm
-GET/PUT /api/admin/config/embedding
-```
-
-#### 向量管理
-```
-POST /api/admin/embedding/vectorize
-POST /api/admin/embedding/store
-POST /api/admin/embedding/search
 ```
 
 #### 监控接口
@@ -436,10 +428,7 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_API_KEY=your-api-key
 LLM_MODEL=qwen-turbo
 
-# Embedding 配置
-EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL=text-embedding-v4
+
 
 # 服务器配置
 SERVER_HOST=localhost
@@ -464,16 +453,7 @@ SERVER_PORT=8000
       "max_tokens": 1024,
       "top_p": 0.1
     }
-  },
-  "embedding": {
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "api_key": "your-api-key",
-    "model": "text-embedding-v4",
-    "parameters": {
-      "dimensions": 1536,
-      "encoding_format": "float"
-    }
-  }
+   }
 }
 ```
 

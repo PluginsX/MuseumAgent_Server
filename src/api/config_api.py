@@ -77,60 +77,6 @@ def update_llm_config(
     return llm
 
 
-# ---------- Embedding ----------
-class EmbeddingConfigUpdate(BaseModel):
-    base_url: Optional[str] = None
-    api_key: Optional[str] = None
-    model: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
-
-
-@router.get("/embedding")
-def get_embedding_config(_: dict = Depends(get_current_user)):
-    """获取 Embedding 配置（API Key 脱敏）"""
-    cfg = get_global_config()
-    emb = cfg.get("embedding", {}).copy()
-    if "api_key" in emb and emb["api_key"]:
-        emb["api_key"] = _mask_api_key(emb["api_key"])
-    return emb
-
-
-@router.get("/embedding/raw")
-def get_embedding_config_raw(_: dict = Depends(get_current_user)):
-    """获取 Embedding 配置（完整API Key，仅限管理员配置页面使用）"""
-    cfg = get_global_config()
-    emb = cfg.get("embedding", {}).copy()
-    return emb
-
-
-@router.put("/embedding")
-def update_embedding_config(
-    body: EmbeddingConfigUpdate,
-    _: dict = Depends(get_current_user),
-):
-    """更新 Embedding 配置"""
-    import os
-    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    emb = data.setdefault("embedding", {})
-    if body.base_url is not None:
-        emb["base_url"] = body.base_url
-    if body.api_key is not None and body.api_key.strip():
-        emb["api_key"] = body.api_key.strip()
-    if body.model is not None:
-        emb["model"] = body.model
-    if body.parameters is not None:
-        emb["parameters"] = {**(emb.get("parameters") or {}), **body.parameters}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    from src.common.config_utils import load_config
-    load_config()
-    return get_global_config().get("embedding", {})
-
-
 # ---------- Server ----------
 @router.get("/server")
 def get_server_config(_: dict = Depends(get_current_user)):
@@ -168,32 +114,4 @@ def validate_llm_config(
         return {"valid": False, "message": str(e)}
 
 
-class TestEmbeddingRequest(BaseModel):
-    base_url: str
-    api_key: str
-    model: str
-    test_text: str = "测试文本"
 
-
-@router.post("/embedding/test")
-def test_embedding_config(
-    body: TestEmbeddingRequest,
-    _: dict = Depends(get_current_user),
-):
-    """测试 Embedding 连接"""
-    import requests
-    url = (body.base_url or "").rstrip("/") + "/embeddings"
-    try:
-        r = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {body.api_key}", "Content-Type": "application/json"},
-            json={"model": body.model, "input": body.test_text},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            dim = len(data.get("data", [{}])[0].get("embedding", []))
-            return {"valid": True, "message": "连接成功", "dimension": dim}
-        return {"valid": False, "message": r.text or f"HTTP {r.status_code}"}
-    except Exception as e:
-        return {"valid": False, "message": str(e)}
