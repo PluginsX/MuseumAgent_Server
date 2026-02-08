@@ -38,7 +38,7 @@ class CommandGenerator:
         """
         return self.response_parser.parse_llm_response(llm_response)
     
-    def _perform_rag_retrieval(self, user_input: str, top_k: int = 3) -> Dict[str, Any]:
+    def _perform_rag_retrieval(self, user_input: str, top_k: int = None) -> Dict[str, Any]:
         """
         执行RAG检索（委托给RAGProcessor）
         """
@@ -76,7 +76,7 @@ class CommandGenerator:
         
         # 1. 协调RAG检索
         print(f"[Coordinator] 步骤1: 执行RAG检索")
-        rag_context = self._perform_rag_retrieval(user_input, top_k=3)
+        rag_context = self._perform_rag_retrieval(user_input)
         rag_context["timestamp"] = datetime.now().isoformat()
         
         # 2. 获取会话中的OpenAI标准函数定义
@@ -100,7 +100,7 @@ class CommandGenerator:
             user_input=user_input,
             scene_type=scene_type,
             rag_instruction=rag_instruction,
-            functions=functions  # OpenAI标准函数定义
+            functions=functions  # 从会话中获取的已验证函数定义
         )
         
         # 5. 调用LLM执行函数调用

@@ -8,19 +8,19 @@
     ],
     "request_limit": 200,
     "request_timeout": 30,
-    "ssl_enabled": true,
+    "ssl_enabled": false,
     "ssl_cert_file": "./security/SSL/www.soulflaw.com_nginx/www.soulflaw.com_bundle.pem",
     "ssl_key_file": "./security/SSL/www.soulflaw.com_nginx/www.soulflaw.com.key"
   },
   "llm": {
     "api_type": "openai_compatible",
-    "base_url": "http://127.0.0.1:11434/v1",
-    "api_key": "ollama",
-    "model": "qwen2:7b",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key": "sk-a7558f9302974d1891906107f6033939",
+    "model": "qwen-turbo",
     "parameters": {
-      "temperature": 0.2,
+      "temperature": 0.1,
       "max_tokens": 1024,
-      "top_p": 0.9,
+      "top_p": 0.1,
       "stream": false,
       "presence_penalty": 0,
       "frequency_penalty": 0,
@@ -68,13 +68,13 @@
     "jwt_expire_seconds": 3600
   },
   "session_management": {
-    "session_timeout_minutes": 60,
+    "session_timeout_minutes": 15,
     "inactivity_timeout_minutes": 5,
     "heartbeat_timeout_minutes": 2,
     "cleanup_interval_seconds": 30,
     "deep_validation_interval_seconds": 300,
-    "enable_auto_cleanup": true,
-    "enable_heartbeat_monitoring": true,
+    "enable_auto_cleanup": false,
+    "enable_heartbeat_monitoring": false,
     "log_level": "INFO"
   },
   "semantic_retrieval": {
@@ -83,7 +83,7 @@
     "timeout": 300,
     "search_params": {
       "top_k": 3,
-      "threshold": 0.7
+      "threshold": 0.5
     }
   }
 }

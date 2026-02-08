@@ -81,7 +81,7 @@ class DynamicLLMClient:
             user_input: 用户输入
             scene_type: 场景类型
             rag_instruction: RAG检索结果
-            functions: OpenAI标准函数定义列表
+            functions: 从会话中获取的已验证函数定义列表
         
         Returns:
             符合OpenAI API标准的请求负载
@@ -104,23 +104,12 @@ class DynamicLLMClient:
             "top_p": self.parameters.get("top_p", 0.1),
         }
         
-        # 严格遵循OpenAI标准添加函数调用配置
+        # 直接使用从会话中获取的已验证函数定义
         if functions and len(functions) > 0:
-            # 验证所有函数定义都符合OpenAI标准
-            from ..models.function_calling_models import is_valid_openai_function
-            valid_functions = []
-            for func_def in functions:
-                if is_valid_openai_function(func_def):
-                    valid_functions.append(func_def)
-                else:
-                    print(f"[LLM] 警告：跳过不符合OpenAI标准的函数定义: {func_def.get('name', 'unknown')}")
-            
-            if valid_functions:
-                payload["functions"] = valid_functions
-                payload["function_call"] = "auto"
-                print(f"[LLM] 已添加 {len(valid_functions)} 个OpenAI标准函数定义")
-            else:
-                print("[LLM] 警告：没有有效的OpenAI标准函数定义，将使用普通对话模式")
+            # 会话中的函数已经经过验证，直接使用
+            payload["functions"] = functions
+            payload["function_call"] = "auto"
+            print(f"[LLM] 已添加 {len(functions)} 个已验证的函数定义")
         else:
             # 无函数定义时使用普通对话模式
             print("[LLM] 未提供函数定义，使用普通对话模式")

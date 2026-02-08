@@ -152,8 +152,6 @@ export default function Users() {
           size="small"
           checked={record.is_active}
           onChange={(_) => toggleUserStatus(record.id, record.is_active)}
-          checkedChildren="启用"
-          unCheckedChildren="禁用"
         />
       ),
     },
@@ -215,7 +213,7 @@ export default function Users() {
           </Form.Item>
           {editingUser && (
             <Form.Item name="is_active" label="状态" valuePropName="checked">
-              <Switch size="small" checkedChildren="启用" unCheckedChildren="禁用" />
+              <Switch size="small" />
             </Form.Item>
           )}
           {editingUser && (

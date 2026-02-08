@@ -85,6 +85,74 @@ def get_server_config(_: dict = Depends(get_current_user)):
     return cfg.get("server", {})
 
 
+# ---------- SRS (SemanticRetrievalSystem) ----------
+class SRSConfigUpdate(BaseModel):
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    timeout: Optional[int] = None
+    search_params: Optional[Dict[str, Any]] = None
+
+
+@router.get("/srs")
+def get_srs_config(_: dict = Depends(get_current_user)):
+    """获取 SRS 配置（API Key 脱敏）"""
+    cfg = get_global_config()
+    srs = cfg.get("semantic_retrieval", {}).copy()
+    if "api_key" in srs and srs["api_key"]:
+        srs["api_key"] = _mask_api_key(srs["api_key"])
+    srs["version"] = 1
+    return srs
+
+
+@router.get("/srs/raw")
+def get_srs_config_raw(_: dict = Depends(get_current_user)):
+    """获取 SRS 配置（完整API Key，仅限管理员配置页面使用）"""
+    cfg = get_global_config()
+    srs = cfg.get("semantic_retrieval", {}).copy()
+    srs["version"] = 1
+    return srs
+
+
+@router.put("/srs")
+def update_srs_config(
+    body: SRSConfigUpdate,
+    _: dict = Depends(get_current_user),
+):
+    """更新 SRS 配置（写入 config.json，需重启生效）"""
+    import os
+    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    srs = data.setdefault("semantic_retrieval", {})
+    if body.base_url is not None:
+        srs["base_url"] = body.base_url
+    if body.api_key is not None:
+        srs["api_key"] = body.api_key
+    if body.timeout is not None:
+        srs["timeout"] = body.timeout
+    if body.search_params is not None:
+        srs["search_params"] = {**(srs.get("search_params") or {}), **body.search_params}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    from src.common.config_utils import load_config
+    load_config()
+    
+    # 尝试重新加载语义检索处理器的配置
+    try:
+        from src.core.modules.semantic_retrieval_processor import SemanticRetrievalProcessor
+        processor = SemanticRetrievalProcessor()
+        processor.reload_config()
+    except:
+        pass
+    
+    srs = get_global_config().get("semantic_retrieval", {}).copy()
+    if "api_key" in srs and srs["api_key"]:
+        srs["api_key"] = _mask_api_key(srs["api_key"])
+    return srs
+
+
 # ---------- Validate / Test ----------
 class ValidateLLMRequest(BaseModel):
     base_url: str
@@ -105,6 +173,35 @@ def validate_llm_config(
             url,
             headers={"Authorization": f"Bearer {body.api_key}", "Content-Type": "application/json"},
             json={"model": body.model, "messages": [{"role": "user", "content": "hi"}]},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return {"valid": True, "message": "连接成功"}
+        return {"valid": False, "message": r.text or f"HTTP {r.status_code}"}
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
+
+
+class ValidateSRSRequest(BaseModel):
+    base_url: str
+    api_key: str
+
+
+@router.post("/srs/validate")
+def validate_srs_config(
+    body: ValidateSRSRequest,
+    _: dict = Depends(get_current_user),
+):
+    """验证 SRS 配置是否可用"""
+    import requests
+    url = (body.base_url or "").rstrip("/") + "/health"
+    try:
+        headers = {"Content-Type": "application/json"}
+        if body.api_key:
+            headers["Authorization"] = f"Bearer {body.api_key}"
+        r = requests.get(
+            url,
+            headers=headers,
             timeout=10,
         )
         if r.status_code == 200:

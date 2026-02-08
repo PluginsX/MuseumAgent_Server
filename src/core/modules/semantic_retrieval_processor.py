@@ -24,8 +24,10 @@ class SemanticRetrievalProcessor:
             retrieval_config = config.get('semantic_retrieval', {})
             self.base_url = retrieval_config.get('base_url', 'http://localhost:12315/api/v1')
             self.api_key = retrieval_config.get('api_key', None)
-            self.top_k_default = retrieval_config.get('top_k', 3)
-            self.threshold_default = retrieval_config.get('threshold', 0.5)
+            # 从search_params中获取搜索参数
+            search_params = retrieval_config.get('search_params', {})
+            self.top_k_default = search_params.get('top_k', 3)
+            self.threshold_default = search_params.get('threshold', 0.5)
         except:
             # 后备配置
             self.base_url = 'http://localhost:12315/api/v1'
@@ -39,6 +41,30 @@ class SemanticRetrievalProcessor:
             api_key=self.api_key
         )
     
+    def reload_config(self) -> None:
+        """
+        重新加载配置
+        """
+        try:
+            config = get_global_config()
+            # 从全局配置中获取语义检索系统的连接信息
+            retrieval_config = config.get('semantic_retrieval', {})
+            self.base_url = retrieval_config.get('base_url', 'http://localhost:12315/api/v1')
+            self.api_key = retrieval_config.get('api_key', None)
+            # 从search_params中获取搜索参数
+            search_params = retrieval_config.get('search_params', {})
+            self.top_k_default = search_params.get('top_k', 3)
+            self.threshold_default = search_params.get('threshold', 0.5)
+            
+            # 更新语义检索客户端
+            self.client = SemanticRetrievalClient(
+                base_url=self.base_url,
+                api_key=self.api_key
+            )
+        except:
+            # 后备配置
+            pass
+    
     def perform_retrieval(self, query: str, top_k: int = None) -> Dict[str, Any]:
         """
         执行语义检索
@@ -50,6 +76,9 @@ class SemanticRetrievalProcessor:
         Returns:
             检索结果字典
         """
+        # 重新加载配置，确保使用最新的值
+        self.reload_config()
+        
         if top_k is None:
             top_k = self.top_k_default
         

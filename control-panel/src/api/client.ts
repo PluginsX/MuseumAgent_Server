@@ -39,6 +39,10 @@ export const configApi = {
   getServer: () => api.get('/api/admin/config/server'),
   validateLLM: (data: { base_url: string; api_key: string; model: string }) =>
     api.post('/api/admin/config/llm/validate', data),
+  getSRS: () => api.get('/api/admin/config/srs/raw'),
+  updateSRS: (data: Record<string, unknown>) => api.put('/api/admin/config/srs', data),
+  validateSRS: (data: { base_url: string; api_key: string }) =>
+    api.post('/api/admin/config/srs/validate', data),
 };
 
 export const monitorApi = {

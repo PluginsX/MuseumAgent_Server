@@ -1,8 +1,8 @@
-import { Button, Card, Divider, Form, Input, InputNumber, message, Space, Switch, Typography } from 'antd';
+import { Button, Card, Divider, Form, Input, InputNumber, message, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { configApi } from '../api/client';
 
-export default function ConfigLLM() {
+export default function ConfigSRS() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -10,11 +10,11 @@ export default function ConfigLLM() {
   const [showApiKey, setShowApiKey] = useState(true); // 默认显示明文密钥
   
   useEffect(() => {
-    console.log('ConfigLLM component mounted, loading config...');
+    console.log('ConfigSRS component mounted, loading config...');
     const loadConfig = async () => {
       try {
-        console.log('Calling configApi.getLLM()...');
-        const r = await configApi.getLLM();
+        console.log('Calling configApi.getSRS()...');
+        const r = await configApi.getSRS();
         console.log('API response received:', r);
         const d = r.data as Record<string, unknown>;
         console.log('Config data:', d);
@@ -26,20 +26,14 @@ export default function ConfigLLM() {
         }
         
         // 设置默认值
-        const parameters = d.parameters as Record<string, number> || {};
+        const searchParams = d.search_params as Record<string, number> || {};
         
         form.setFieldsValue({
           base_url: d.base_url,
           api_key: d.api_key,
-          model: d.model,
-          temperature: parameters.temperature !== undefined ? parameters.temperature : 0.2,
-          max_tokens: parameters.max_tokens !== undefined ? parameters.max_tokens : 1024,
-          top_p: parameters.top_p !== undefined ? parameters.top_p : 0.9,
-          stream: parameters.stream !== undefined ? parameters.stream : false,
-          seed: parameters.seed !== undefined ? parameters.seed : null,
-          presence_penalty: parameters.presence_penalty !== undefined ? parameters.presence_penalty : 0,
-          frequency_penalty: parameters.frequency_penalty !== undefined ? parameters.frequency_penalty : 0,
-          n: parameters.n !== undefined ? parameters.n : 1,
+          timeout: d.timeout !== undefined ? d.timeout : 300,
+          top_k: searchParams.top_k !== undefined ? searchParams.top_k : 3,
+          threshold: searchParams.threshold !== undefined ? searchParams.threshold : 0.7,
         });
         
         // 验证表单值是否设置成功
@@ -52,7 +46,7 @@ export default function ConfigLLM() {
         }, 100);
         
       } catch (error) {
-        console.error('Failed to load LLM config:', error);
+        console.error('Failed to load SRS config:', error);
       }
     };
     
@@ -62,19 +56,13 @@ export default function ConfigLLM() {
   const onFinish = async (values: Record<string, unknown>) => {
     setLoading(true);
     try {
-      await configApi.updateLLM({
+      await configApi.updateSRS({
         base_url: values.base_url,
         api_key: values.api_key,
-        model: values.model,
-        parameters: {
-          temperature: values.temperature,
-          max_tokens: values.max_tokens,
-          top_p: values.top_p,
-          stream: values.stream,
-          seed: values.seed,
-          presence_penalty: values.presence_penalty,
-          frequency_penalty: values.frequency_penalty,
-          n: values.n,
+        timeout: values.timeout,
+        search_params: {
+          top_k: values.top_k,
+          threshold: values.threshold,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -88,21 +76,24 @@ export default function ConfigLLM() {
   
   const testConnection = async () => {
     const values = form.getFieldsValue();
-    if (!values.base_url || !values.api_key || !values.model) {
-      message.warning('请先填写 Base URL、API Key 和 Model');
+    if (!values.base_url) {
+      message.warning('请先填写 Base URL');
       return;
     }
     setTesting(true);
     setTestResult(''); // 清空之前的测试结果
     try {
-      const { data } = await configApi.validateLLM({
+      const { data } = await configApi.validateSRS({
         base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        api_key: values.api_key || '',
       });
       const result = (data as { valid?: boolean; message?: string });
       setTestResult(result.message || '连接成功');
-      message.success(result.message || '连接成功');
+      if (result.valid) {
+        message.success(result.message || '连接成功');
+      } else {
+        message.error(result.message || '连接失败');
+      }
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } };
       const errorMsg = err.response?.data?.message || '连接失败';
@@ -115,16 +106,16 @@ export default function ConfigLLM() {
   
   return (
     <div>
-    <Card title="LLM 配置">
+    <Card title="SRS配置">
     <Form form={form} layout="vertical" onFinish={onFinish}>
     <Form.Item name="base_url" label="Base URL" rules={[{ required: true }]}>
-    <Input placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
+    <Input placeholder="http://localhost:12315/api/v1" />
     </Form.Item>
-    <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
+    <Form.Item name="api_key" label="API Key">
     <div style={{ display: 'flex', gap: '8px' }}>
     <Input 
     type={showApiKey ? "text" : "password"}
-    placeholder="请输入完整的API Key"
+    placeholder="请输入API Key"
     autoComplete="off"
     spellCheck="false"
     style={{ flexGrow: 1 }}
@@ -147,39 +138,15 @@ export default function ConfigLLM() {
     </Button>
     </div>
     </Form.Item>
-    <Form.Item name="model" label="Model" rules={[{ required: true }]}>
-    <Input placeholder="qwen-turbo" />
+    <Form.Item name="timeout" label="超时时间（秒）">
+    <InputNumber min={10} max={600} step={10} style={{ width: '100%' }} />
     </Form.Item>
-    <Form.Item name="temperature" label="Temperature">
-    <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
+    <Divider orientation="left">搜索参数</Divider>
+    <Form.Item name="top_k" label="最大资料数量">
+    <InputNumber min={1} max={10} step={1} style={{ width: '100%' }} />
     </Form.Item>
-    <Form.Item name="max_tokens" label="Max Tokens">
-    <InputNumber min={1} max={4096} style={{ width: '100%' }} />
-    </Form.Item>
-    <Form.Item name="top_p" label="Top P">
-    <InputNumber min={0} max={1} step={0.1} style={{ width: '100%' }} />
-    </Form.Item>
-    
-    <Divider orientation="left">高级参数</Divider>
-    
-    <Form.Item name="stream" label="流式响应" valuePropName="checked">
-    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-    </Form.Item>
-    
-    <Form.Item name="seed" label="随机种子">
-    <InputNumber min={0} max={999999} placeholder="用于可复现性" style={{ width: '100%' }} />
-    </Form.Item>
-    
-    <Form.Item name="presence_penalty" label="存在惩罚">
-    <InputNumber min={-2} max={2} step={0.1} placeholder="-2.0到2.0" style={{ width: '100%' }} />
-    </Form.Item>
-    
-    <Form.Item name="frequency_penalty" label="频率惩罚">
-    <InputNumber min={-2} max={2} step={0.1} placeholder="-2.0到2.0" style={{ width: '100%' }} />
-    </Form.Item>
-    
-    <Form.Item name="n" label="生成选项数">
-    <InputNumber min={1} max={5} defaultValue={1} placeholder="1-5" style={{ width: '100%' }} />
+    <Form.Item name="threshold" label="相似度阈值">
+    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
     </Form.Item>
     <Form.Item>
     <Space>
