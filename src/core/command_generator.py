@@ -124,3 +124,49 @@ class CommandGenerator:
         # 直接返回LLM的完整原始响应
         print(f"[Coordinator] 处理完成，直接转发LLM原始响应")
         return response
+    
+    async def stream_generate(
+        self,
+        user_input: str,
+        session_id: str = None,
+        scene_type: str = "public"
+    ):
+        """
+        流式生成文本（异步生成器）
+        
+        Args:
+            user_input: 用户输入
+            session_id: 会话ID
+            scene_type: 场景类型
+        
+        Yields:
+            文本片段
+        """
+        print(f"[Coordinator] 开始流式生成")
+        
+        # 参数验证
+        if not session_id:
+            raise ValueError("缺少会话ID：所有请求必须在有效会话上下文中执行")
+        
+        # 1. 协调RAG检索
+        print(f"[Coordinator] 步骤1: 执行RAG检索")
+        rag_context = self._perform_rag_retrieval(user_input)
+        rag_context["timestamp"] = datetime.now().isoformat()
+        
+        # 2. 构建RAG增强的提示词
+        print(f"[Coordinator] 步骤2: 构建提示词")
+        rag_instruction = self._build_rag_instruction(rag_context)
+        
+        # 3. 调用LLM流式生成
+        print(f"[Coordinator] 步骤3: 调用LLM流式生成")
+        system_message = "你是智能助手。以友好、专业的态度回答用户问题。"
+        user_message = f"场景：{scene_type}\n{rag_instruction}\n用户输入：{user_input}"
+        
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
+        
+        # 调用流式生成
+        async for chunk in self.llm_client.stream_chat_completions(messages):
+            yield chunk

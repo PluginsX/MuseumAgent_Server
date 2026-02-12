@@ -1,0 +1,129 @@
+graph TB
+    subgraph "客户端层"
+        Client[Web客户端]
+        AdminPanel[管理控制面板]
+    end
+    
+    subgraph "API网关层"
+        APIGateway[API网关]
+    end
+    
+    subgraph "核心服务层"
+        TextService[文本服务<br/>Text Processing Service]
+        AudioService[音频服务<br/>Audio Processing Service]
+        VoiceCallService[语音通话服务<br/>Voice Call Service]
+        SessionService[会话服务<br/>Session Management Service]
+    end
+    
+    subgraph "外部服务层"
+        LLMService[LLM服务<br/>LLM Service]
+        SRSService[SRS服务<br/>SRS Service]
+        AliyunSTT[阿里云STT服务<br/>STT Provider]
+        AliyunTTS[阿里云TTS服务<br/>TTS Provider]
+    end
+    
+    subgraph "配置管理层"
+        ConfigMgr[配置中心<br/>Configuration Manager]
+        GlobalConfig[全局配置<br/>Global Config]
+        ServiceConfig[服务配置<br/>Service Config]
+        RuntimeConfig[运行时配置<br/>Runtime Config]
+    end
+    
+    subgraph "缓存层"
+        L1Cache[L1缓存<br/>内存缓存]
+        L2Cache[L2缓存<br/>Redis缓存]
+        L3Cache[L3缓存<br/>外部缓存]
+    end
+    
+    %% 客户端到API网关的数据流 (C2S - 红色)
+    Client -.-> APIGateway
+    AdminPanel -.-> APIGateway
+    
+    %% API网关到核心服务的数据流 (C2S - 红色)
+    APIGateway --> TextService
+    APIGateway --> AudioService
+    APIGateway --> VoiceCallService
+    APIGateway --> SessionService
+    
+    %% 核心服务到外部服务的数据流 (C2S - 红色)
+    TextService --> LLMService
+    TextService --> SRSService
+    AudioService --> AliyunSTT
+    AudioService --> AliyunTTS
+    VoiceCallService --> AliyunSTT
+    VoiceCallService --> AliyunTTS
+    VoiceCallService --> LLMService
+    
+    %% 配置管理的数据流 (C2S - 红色)
+    ConfigMgr --> GlobalConfig
+    ConfigMgr --> ServiceConfig
+    ConfigMgr --> RuntimeConfig
+    GlobalConfig --> TextService
+    GlobalConfig --> AudioService
+    GlobalConfig --> VoiceCallService
+    GlobalConfig --> SessionService
+    ServiceConfig --> TextService
+    ServiceConfig --> AudioService
+    ServiceConfig --> VoiceCallService
+    ServiceConfig --> SessionService
+    
+    %% 缓存层的数据流 (C2S - 红色)
+    TextService --> L1Cache
+    TextService --> L2Cache
+    AudioService --> L1Cache
+    AudioService --> L2Cache
+    VoiceCallService --> L1Cache
+    VoiceCallService --> L2Cache
+    
+    %% API网关到客户端的响应流 (S2C - 蓝色)
+    APIGateway -.-> Client
+    APIGateway -.-> AdminPanel
+    
+    %% 外部服务到核心服务的响应流 (S2C - 蓝色)
+    LLMService -.-> TextService
+    LLMService -.-> VoiceCallService
+    SRSService -.-> TextService
+    AliyunSTT -.-> AudioService
+    AliyunSTT -.-> VoiceCallService
+    AliyunTTS -.-> AudioService
+    AliyunTTS -.-> VoiceCallService
+    
+    %% 缓存层的响应流 (S2C - 蓝色)
+    L1Cache -.-> TextService
+    L1Cache -.-> AudioService
+    L1Cache -.-> VoiceCallService
+    L2Cache -.-> TextService
+    L2Cache -.-> AudioService
+    L2Cache -.-> VoiceCallService
+    L3Cache -.-> L1Cache
+    L3Cache -.-> L2Cache
+    
+    %% 会话管理的数据流 (C2S - 红色)
+    SessionService --> TextService
+    SessionService --> AudioService
+    SessionService --> VoiceCallService
+    
+    %% 会话管理的响应流 (S2C - 蓝色)
+    TextService -.-> SessionService
+    AudioService -.-> SessionService
+    VoiceCallService -.-> SessionService
+    
+    %% 样式定义
+    style Client fill:#4a90e2
+    style AdminPanel fill:#4a90e2
+    style APIGateway fill:#f39c12
+    style TextService fill:#27ae60
+    style AudioService fill:#27ae60
+    style VoiceCallService fill:#27ae60
+    style SessionService fill:#27ae60
+    style LLMService fill:#e74c3c
+    style SRSService fill:#e74c3c
+    style AliyunSTT fill:#e74c3c
+    style AliyunTTS fill:#e74c3c
+    style ConfigMgr fill:#95a5a6
+    style GlobalConfig fill:#95a5a6
+    style ServiceConfig fill:#95a5a6
+    style RuntimeConfig fill:#95a5a6
+    style L1Cache fill:#34495e
+    style L2Cache fill:#34495e
+    style L3Cache fill:#34495e

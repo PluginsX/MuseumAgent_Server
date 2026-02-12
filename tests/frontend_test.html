@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试断开按钮</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .response {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>测试断开客户端会话接口</h1>
+    
+    <div class="test-section">
+        <h3>1. 获取客户端列表</h3>
+        <button onclick="getClients()">获取客户端</button>
+        <div id="clientsResponse" class="response"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 断开客户端连接</h3>
+        <input type="text" id="sessionId" placeholder="输入会话ID">
+        <button onclick="disconnectClient()">断开连接</button>
+        <div id="disconnectResponse" class="response"></div>
+    </div>
+    
+    <script>
+        const BASE_URL = 'http://localhost:8000';
+        
+        async function getClients() {
+            const responseDiv = document.getElementById('clientsResponse');
+            responseDiv.innerHTML = '<p>加载中...</p>';
+            
+            try {
+                const response = await axios.get(`${BASE_URL}/api/admin/clients/connected`);
+                responseDiv.innerHTML = `
+                    <h4>状态码: ${response.status}</h4>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+                
+                // 自动填充第一个会话ID
+                if (response.data && response.data.length > 0) {
+                    document.getElementById('sessionId').value = response.data[0].session_id;
+                }
+                
+            } catch (error) {
+                responseDiv.innerHTML = `
+                    <h4>错误</h4>
+                    <pre>${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        async function disconnectClient() {
+            const sessionId = document.getElementById('sessionId').value;
+            const responseDiv = document.getElementById('disconnectResponse');
+            
+            if (!sessionId) {
+                responseDiv.innerHTML = '<p>请输入会话ID</p>';
+                return;
+            }
+            
+            responseDiv.innerHTML = '<p>断开中...</p>';
+            
+            try {
+                const response = await axios.delete(`${BASE_URL}/api/admin/clients/session/${sessionId}`);
+                responseDiv.innerHTML = `
+                    <h4>状态码: ${response.status}</h4>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    <p style="color: green;">✅ 断开成功！</p>
+                `;
+                
+                // 重新获取客户端列表
+                getClients();
+                
+            } catch (error) {
+                responseDiv.innerHTML = `
+                    <h4>错误</h4>
+                    <pre>${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
+                `;
+            }
+        }
+        
+        // 页面加载时自动获取客户端列表
+        window.onload = getClients;
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+graph TD
+    subgraph 阿里云AI服务层
+        Embedding[Aliyun Embedding]
+        TTS[Aliyun TTS]
+        STT[Aliyun STT]
+        LLM[Aliyun LLM]
+    end
+    
+    subgraph 核心服务层
+        SRS[SRS\nSemantic Retrieval System]
+        Server[MuseumAgent_Server]
+    end
+    
+    subgraph 用户交互层
+        Input[Input\ntext/audio/image/video]
+        Client[MuseumAgent_Client\nWeb/Windows]
+        Output[Output\ntext/audio]
+    end
+    
+    Embedding --> SRS
+    TTS --> Server
+    STT --> Server
+    LLM --> Server
+    SRS --> Server
+    Input --> Client
+    Client --> Server
+    Server --> Client
+    Client --> Output

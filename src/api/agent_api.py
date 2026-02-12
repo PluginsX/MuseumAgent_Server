@@ -93,6 +93,7 @@ from src.api.session_api import router as session_router
 from src.api.client_api import router as client_router
 from src.api.session_config_api import router as session_config_router
 from src.api.function_api import router as function_router  # OpenAI标准函数API
+from src.api.websocket_api import router as websocket_router  # WebSocket API
 
 app.include_router(auth_router)
 app.include_router(config_router)
@@ -102,6 +103,7 @@ app.include_router(session_router)
 app.include_router(client_router)
 app.include_router(session_config_router)
 app.include_router(function_router)  # 添加OpenAI标准函数API路由
+app.include_router(websocket_router)  # 添加WebSocket API路由
 
 
 @app.on_event("startup")

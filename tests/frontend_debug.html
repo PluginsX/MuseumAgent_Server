@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端调试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .console {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>前端调试工具</h1>
+    
+    <button onclick="testAxios()">测试Axios</button>
+    <button onclick="testDisconnect()">测试断开接口</button>
+    <button onclick="checkLocalStorage()">检查LocalStorage</button>
+    
+    <div id="console" class="console"></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const consoleDiv = document.getElementById('console');
+        
+        function log(message) {
+            consoleDiv.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            console.log(message);
+        }
+        
+        function testAxios() {
+            log('=== 测试Axios ===');
+            try {
+                log('Axios 已加载: ' + typeof axios);
+                
+                const instance = axios.create({
+                    baseURL: 'http://localhost:8000',
+                    timeout: 30000,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                log('Axios 实例创建成功');
+                
+                instance.get('/api/admin/clients/connected')
+                    .then(response => {
+                        log('获取客户端成功: ' + response.data.length + ' 个');
+                    })
+                    .catch(error => {
+                        log('获取客户端失败: ' + error.message);
+                    });
+                    
+            } catch (error) {
+                log('错误: ' + error.message);
+            }
+        }
+        
+        function testDisconnect() {
+            log('=== 测试断开接口 ===');
+            try {
+                const sessionId = 'test-session';
+                log('测试断开接口...');
+                
+                axios.delete('http://localhost:8000/api/admin/clients/session/' + sessionId)
+                    .then(response => {
+                        log('断开成功: ' + JSON.stringify(response.data));
+                    })
+                    .catch(error => {
+                        log('断开失败: ' + error.message);
+                        log('状态码: ' + (error.response?.status || 'N/A'));
+                        log('响应: ' + JSON.stringify(error.response?.data || {}));
+                    });
+                    
+            } catch (error) {
+                log('错误: ' + error.message);
+            }
+        }
+        
+        function checkLocalStorage() {
+            log('=== 检查LocalStorage ===');
+            try {
+                const token = localStorage.getItem('token');
+                log('Token: ' + (token ? '存在 (' + token.length + ' 字符)' : '不存在'));
+                
+                const keys = Object.keys(localStorage);
+                log('LocalStorage 键: ' + keys.join(', '));
+                
+            } catch (error) {
+                log('错误: ' + error.message);
+            }
+        }
+        
+        // 页面加载时自动检查
+        window.onload = function() {
+            log('页面加载完成');
+            checkLocalStorage();
+        };
+    </script>
+</body>
+</html>

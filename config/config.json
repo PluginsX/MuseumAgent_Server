@@ -68,13 +68,13 @@
     "jwt_expire_seconds": 3600
   },
   "session_management": {
-    "session_timeout_minutes": 15,
+    "session_timeout_minutes": 120,
     "inactivity_timeout_minutes": 5,
     "heartbeat_timeout_minutes": 2,
     "cleanup_interval_seconds": 30,
     "deep_validation_interval_seconds": 300,
-    "enable_auto_cleanup": false,
-    "enable_heartbeat_monitoring": false,
+    "enable_auto_cleanup": true,
+    "enable_heartbeat_monitoring": true,
     "log_level": "INFO"
   },
   "semantic_retrieval": {
@@ -83,7 +83,17 @@
     "timeout": 300,
     "search_params": {
       "top_k": 3,
-      "threshold": 0.5
+      "threshold": 0.35
     }
+  },
+  "tts": {
+    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "api_key": "sk-a7558f9302974d1891906107f6033939",
+    "model": "cosyvoice-v3-plus"
+  },
+  "stt": {
+    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "api_key": "sk-a7558f9302974d1891906107f6033939",
+    "model": "paraformer-realtime-v2"
   }
 }

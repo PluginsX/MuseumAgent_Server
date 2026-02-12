@@ -215,3 +215,36 @@ async def get_client_statistics():
     except Exception as e:
         print(log_step('CLIENT', 'ERROR', '获取客户端统计信息失败', {'error': str(e)}))
         raise HTTPException(status_code=500, detail=f"获取客户端统计信息失败: {str(e)}")
+
+
+@router.delete("/session/{session_id}")
+async def disconnect_client_session(session_id: str):
+    """
+    管理员强制断开客户端会话
+    """
+    try:
+        print(log_step('CLIENT', 'INFO', '管理员强制断开客户端会话', {'session_id': session_id}))
+        
+        # 验证会话是否存在
+        session = strict_session_manager.validate_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        
+        # 注销会话
+        success = strict_session_manager.unregister_session(session_id)
+        
+        if success:
+            print(log_step('CLIENT', 'SUCCESS', '客户端会话已强制断开', {'session_id': session_id}))
+            return {
+                "message": "客户端连接已断开",
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="断开会话失败")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(log_step('CLIENT', 'ERROR', '强制断开会话失败', {'error': str(e)}))
+        raise HTTPException(status_code=500, detail=f"断开会话失败: {str(e)}")

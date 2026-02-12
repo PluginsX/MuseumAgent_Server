@@ -320,6 +320,75 @@ class DynamicLLMClient:
                       {'response_length': len(result)}))
         return result
 
+    async def stream_chat_completions(self, messages: List[Dict[str, Any]]):
+        """
+        流式调用 OpenAI 兼容的 Chat Completions API
+        
+        Args:
+            messages: 消息列表
+        
+        Yields:
+            文本片段
+        """
+        if not self.base_url or not self.api_key:
+            raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
+        
+        print(log_step('LLM', 'SEND', '发送流式请求到LLM', 
+                      {'model': self.model, 'messages_count': len(messages)}))
+        
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.parameters.get("temperature", 0.7),
+            "max_tokens": self.parameters.get("max_tokens", 1024),
+            "top_p": self.parameters.get("top_p", 0.9),
+            "stream": True  # 启用流式输出
+        }
+        
+        # 记录发送的请求
+        print(log_communication('LLM', 'SEND', 'External LLM API (Stream)', 
+                               {'model': self.model, 'stream': True},
+                               {'endpoint': url}))
+        
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
+                                      {'status_code': resp.status, 'error': error_text}))
+                        raise RuntimeError(f"LLM API 调用失败 [code={resp.status}]: {error_text}")
+                    
+                    async for line in resp.content:
+                        if line:
+                            line_str = line.decode('utf-8').strip()
+                            if line_str.startswith('data: '):
+                                data_str = line_str[6:]
+                                if data_str == '[DONE]':
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    choices = data.get('choices', [])
+                                    if choices:
+                                        delta = choices[0].get('delta', {})
+                                        content = delta.get('content', '')
+                                        if content:
+                                            print(log_communication('LLM', 'RECEIVE', '流式数据块', 
+                                                                   {'content': content[:50]}))
+                                            yield content
+                                except json.JSONDecodeError:
+                                    pass
+        except Exception as e:
+            print(log_step('LLM', 'ERROR', '流式请求异常', {'error': str(e)}))
+            raise RuntimeError(f"LLM 流式请求异常: {str(e)}") from e
+
 
 # 使用示例和测试函数
 def demonstrate_dynamic_client():

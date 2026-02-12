@@ -256,3 +256,52 @@ async def get_session_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+
+
+@router.get("/validate/{session_id}")
+async def validate_session_endpoint(session_id: str):
+    """
+    验证会话是否有效
+    """
+    try:
+        print(log_step('SESSION', 'VALIDATE', '验证会话', {'session_id': session_id}))
+        
+        session = strict_session_manager.get_session(session_id)
+        if session and not session.is_expired():
+            print(log_step('SESSION', 'SUCCESS', '会话有效', {'session_id': session_id}))
+            return {
+                "valid": True,
+                "session_id": session_id,
+                "expires_at": session.expires_at.isoformat()
+            }
+        else:
+            print(log_step('SESSION', 'ERROR', '会话无效或已过期', {'session_id': session_id}))
+            raise HTTPException(status_code=404, detail="会话不存在或已过期")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"验证会话失败: {str(e)}")
+
+
+@router.delete("/{session_id}")
+async def disconnect_session_endpoint(session_id: str):
+    """
+    断开会话连接
+    """
+    try:
+        print(log_step('SESSION', 'DISCONNECT', '断开会话', {'session_id': session_id}))
+        
+        if strict_session_manager.unregister_session(session_id):
+            print(log_step('SESSION', 'SUCCESS', '会话已断开', {'session_id': session_id}))
+            return {
+                "message": "会话已断开",
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            print(log_step('SESSION', 'ERROR', '断开会话失败：会话不存在', {'session_id': session_id}))
+            raise HTTPException(status_code=404, detail="会话不存在")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"断开会话失败: {str(e)}")

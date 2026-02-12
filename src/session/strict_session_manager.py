@@ -305,6 +305,12 @@ class StrictSessionManager:
             
             return session
     
+    def get_session(self, session_id: str) -> Optional[EnhancedClientSession]:
+        """获取会话（不更新活动时间）"""
+        with self._lock:
+            session = self.sessions.get(session_id)
+            return session
+    
     def heartbeat(self, session_id: str) -> bool:
         """心跳更新"""
         with self._lock:

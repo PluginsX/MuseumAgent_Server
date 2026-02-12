@@ -285,6 +285,9 @@ dxdiag_output.txt
 *.backup
 *.old
 
+# draw.io 临时文件
+.*.drawio.bkp
+
 # 系统临时文件
 *.tmp
 *.temp

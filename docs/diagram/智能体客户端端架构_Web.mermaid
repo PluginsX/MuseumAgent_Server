@@ -1,0 +1,30 @@
+graph LR
+    subgraph Web客户端
+        UI[用户界面]
+        AuthModule[认证模块]
+        ApiClient[API客户端]
+        WebSocketClient[WebSocket客户端]
+        DataManager[数据管理模块]
+    end
+
+    subgraph 服务端
+        ServerAuth[服务端认证]
+        ServerAPI[服务端API]
+        ServerWS[服务端WebSocket]
+    end
+
+    %% 客户端内部流转
+    UI --> AuthModule
+    AuthModule --> ApiClient
+    ApiClient --> WebSocketClient
+    WebSocketClient --> DataManager
+
+    %% 客户端与服务端对接，模块配对，减少交叉
+    AuthModule -- 认证请求 --> ServerAuth
+    ApiClient -- API调用 --> ServerAPI
+    WebSocketClient -- WS连接 --> ServerWS
+
+    %% 服务端返回，直接回连对应模块
+    ServerAuth -- 认证响应 --> AuthModule
+    ServerAPI -- API响应 --> ApiClient
+    ServerWS -- WS推送 --> WebSocketClient

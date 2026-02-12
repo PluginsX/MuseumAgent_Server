@@ -1,0 +1,47 @@
+graph TD
+    subgraph API层
+        WebSocket[WebSocket API]
+        HTTP[HTTP REST API]
+        Auth[认证授权 API]
+    end
+    
+    subgraph 核心业务逻辑层
+        Dialog[对话管理器]
+        MultiModal[多模态处理器]
+        LLM[LLM 管理器]
+        StreamHandler[流式处理器]
+    end
+    
+    subgraph 会话管理层
+        SessionMgr[会话管理器]
+        Heartbeat[心跳机制]
+        Cleanup[会话清理]
+        WSManager[WebSocket连接管理器]
+    end
+    
+    subgraph 外部服务层
+        Aliyun[阿里云服务客户端]
+        SRS[SRS 客户端]
+        DB[数据库客户端]
+    end
+    
+    WebSocket --> StreamHandler
+    HTTP --> Dialog
+    Auth --> SessionMgr
+    
+    Dialog --> MultiModal
+    Dialog --> LLM
+    Dialog --> SessionMgr
+    
+    StreamHandler --> LLM
+    StreamHandler --> SessionMgr
+    StreamHandler --> WSManager
+    
+    MultiModal --> Aliyun
+    LLM --> Aliyun
+    LLM --> SRS
+    
+    SessionMgr --> DB
+    SessionMgr --> Heartbeat
+    SessionMgr --> Cleanup
+    WSManager --> Heartbeat

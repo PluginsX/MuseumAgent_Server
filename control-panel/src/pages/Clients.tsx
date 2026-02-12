@@ -16,8 +16,8 @@ interface ClientInfo {
   created_at: string;
   expires_at: string;
   is_active: boolean;
-  operation_set: string[];
-  operation_count: number;
+  function_names: string[];
+  function_count: number;
   last_heartbeat: string;
   time_since_heartbeat: number;
 }
@@ -178,10 +178,10 @@ export default function Clients() {
     },
     {
       title: '指令集数量',
-      dataIndex: 'operation_count',
-      key: 'operation_count',
+      dataIndex: 'function_count',
+      key: 'function_count',
       render: (count: number) => <Badge count={count} showZero color="#1890ff" />,
-      sorter: (a: ClientInfo, b: ClientInfo) => a.operation_count - b.operation_count,
+      sorter: (a: ClientInfo, b: ClientInfo) => a.function_count - b.function_count,
     },
     {
       title: '状态',
@@ -318,24 +318,26 @@ export default function Clients() {
         title="客户端详细信息"
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailModalVisible(false)}>
-            关闭
-          </Button>,
-          selectedClient && (
-            <Button 
-              key="disconnect" 
-              danger 
-              icon={<DisconnectOutlined />}
-              onClick={() => {
-                disconnectClient(selectedClient.session_id);
-                setDetailModalVisible(false);
-              }}
-            >
-              断开连接
+        footer={
+          <Space>
+            <Button key="close" onClick={() => setDetailModalVisible(false)}>
+              关闭
             </Button>
-          )
-        ]}
+            {selectedClient && (
+              <Button 
+                key="disconnect" 
+                danger 
+                icon={<DisconnectOutlined />}
+                onClick={() => {
+                  disconnectClient(selectedClient.session_id);
+                  // 不要立即关闭模态框，等待用户确认后再关闭
+                }}
+              >
+                断开连接
+              </Button>
+            )}
+          </Space>
+        }
         width={800}
       >
         {selectedClient && (
@@ -373,7 +375,7 @@ export default function Clients() {
             </Descriptions.Item>
             <Descriptions.Item label="指令集" span={2}>
               <Space wrap>
-                {selectedClient.operation_set.map((op, index) => (
+                {selectedClient.function_names.map((op, index) => (
                   <Tag key={index} color="processing">{op}</Tag>
                 ))}
               </Space>
