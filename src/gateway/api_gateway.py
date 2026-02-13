@@ -100,6 +100,12 @@ class APIGateway:
         async def health_check():
             return {"status": "healthy", "gateway": "api_gateway", "timestamp": "now"}
         
+        # Favicon图标（避免404错误）
+        @self.app.get("/favicon.ico")
+        async def favicon():
+            from fastapi.responses import Response
+            return Response(content="", media_type="image/x-icon")
+        
         # 文本处理路由
         @self.app.post("/api/text/process")
         async def process_text(request: Dict[str, Any], token: str = Depends(get_current_user)):

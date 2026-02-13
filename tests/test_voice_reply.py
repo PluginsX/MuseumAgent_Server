@@ -146,36 +146,20 @@ async def test_voice_reply():
     async with websockets.connect(ws_url) as websocket:
         print(f"WebSocket连接成功: {ws_url}")
         
-        # 发送音频流开始消息，启用语音回复
+        # 发送预录制音频数据，启用语音回复
         stream_id = f"test_stream_{int(time.time())}"
-        audio_start_message = {
-            "type": "audio_stream_start",
+        import base64
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        audio_message = {
+            "type": "audio_data",
             "stream_id": stream_id,
-            "enable_tts": True  # 启用语音回复
+            "enable_tts": True,  # 启用语音回复
+            "audio_data": audio_base64
         }
         
-        print("发送音频流开始消息...")
-        await websocket.send(json.dumps(audio_start_message))
-        
-        # 发送音频数据（分块发送）
-        print("发送音频数据...")
-        chunk_size = 8192
-        total_chunks = (len(audio_data) + chunk_size - 1) // chunk_size
-        for i, j in enumerate(range(0, len(audio_data), chunk_size)):
-            chunk = audio_data[j:j+chunk_size]
-            await websocket.send(chunk)
-            print(f"发送音频数据块 {i+1}/{total_chunks}，大小: {len(chunk)} 字节")
-            # 模拟实时音频流，添加小延迟
-            await asyncio.sleep(0.01)
-        
-        # 发送音频流结束消息
-        audio_end_message = {
-            "type": "audio_stream_end",
-            "stream_id": stream_id
-        }
-        
-        print("发送音频流结束消息...")
-        await websocket.send(json.dumps(audio_end_message))
+        print("发送预录制音频数据...")
+        await websocket.send(json.dumps(audio_message))
         
         # 接收响应
         print("等待服务器响应...")

@@ -19,31 +19,22 @@ async def test_voice_message():
         async with websockets.connect(uri) as websocket:
             print("✅ 成功连接到服务器")
             
-            # 发送音频流开始消息
+            # 发送预录制音频数据消息
             stream_id = str(uuid.uuid4())
-            start_msg = {
-                "type": "audio_stream_start",
+            import base64
+            # 使用模拟音频数据进行测试
+            dummy_audio_data = b'dummy_audio_data_for_test'
+            audio_base64 = base64.b64encode(dummy_audio_data).decode('utf-8')
+            
+            audio_msg = {
+                "type": "audio_data",
                 "stream_id": stream_id,
-                "enable_tts": True
+                "enable_tts": True,
+                "audio_data": audio_base64
             }
             
-            await websocket.send(json.dumps(start_msg))
-            print(f"✅ 发送音频流开始消息: {stream_id}")
-            
-            # 模拟发送一些音频数据（这里使用空数据作为测试）
-            # 在实际场景中，这里会是真实的音频数据块
-            dummy_audio_data = b'dummy_audio_chunk'
-            await websocket.send(dummy_audio_data)
-            print("✅ 发送模拟音频数据")
-            
-            # 发送音频流结束消息
-            end_msg = {
-                "type": "audio_stream_end",
-                "stream_id": stream_id
-            }
-            
-            await websocket.send(json.dumps(end_msg))
-            print("✅ 发送音频流结束消息")
+            await websocket.send(json.dumps(audio_msg))
+            print(f"✅ 发送预录制音频数据消息: {stream_id}")
             
             # 监听响应
             print("\n⏳ 等待服务器响应...")

@@ -40,36 +40,24 @@ async def test_audio_stream():
             connection_msg = await websocket.recv()
             print(f"连接确认: {connection_msg}")
             
-            # 模拟音频流开始
+            # 发送预录制音频数据
             stream_id = str(uuid.uuid4())
-            print(f"开始音频流: {stream_id}")
+            print(f"发送预录制音频数据: {stream_id}")
             
-            audio_start_msg = {
-                "type": "audio_stream_start",
+            # 模拟音频数据
+            import base64
+            dummy_audio_data = b"dummy_pre_recorded_audio_data_for_testing"
+            audio_base64 = base64.b64encode(dummy_audio_data).decode('utf-8')
+            
+            audio_msg = {
+                "type": "audio_data",
                 "stream_id": stream_id,
-                "enable_tts": True  # 启用语音播报
+                "enable_tts": True,  # 启用语音播报
+                "audio_data": audio_base64
             }
             
-            await websocket.send(json.dumps(audio_start_msg))
-            print("发送音频流开始消息")
-            
-            # 模拟发送一些音频数据（这里用假数据代替真实音频）
-            fake_audio_data = b"fake_audio_chunk_1"
-            await websocket.send(fake_audio_data)
-            print("发送音频数据块1")
-            
-            fake_audio_data = b"fake_audio_chunk_2"
-            await websocket.send(fake_audio_data)
-            print("发送音频数据块2")
-            
-            # 模拟音频流结束
-            audio_end_msg = {
-                "type": "audio_stream_end",
-                "stream_id": stream_id
-            }
-            
-            await websocket.send(json.dumps(audio_end_msg))
-            print("发送音频流结束消息")
+            await websocket.send(json.dumps(audio_msg))
+            print("发送预录制音频数据消息")
             
             # 等待服务器响应
             print("等待服务器响应...")

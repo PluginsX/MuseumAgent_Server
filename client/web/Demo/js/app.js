@@ -7,6 +7,7 @@ class MuseumAgentDemo {
     constructor() {
         this.client = null;
         this.streamWs = null;
+        this.preRecordedAudioWs = null;
         this.ttsWs = null;
         this.streamBuffer = '';
         this.mediaRecorder = null;
@@ -50,6 +51,7 @@ class MuseumAgentDemo {
         document.getElementById('sendMessageBtn').addEventListener('click', () => this.handleSendMessage());
         document.getElementById('startRecordBtn').addEventListener('click', () => this.handleStartRecord());
         document.getElementById('stopRecordBtn').addEventListener('click', () => this.handleStopRecord());
+        document.getElementById('sendFileBtn').addEventListener('click', () => this.handleSendFile());
         
         document.getElementById('endCallBtn').addEventListener('click', () => this.handleEndCall());
         
@@ -578,7 +580,7 @@ class MuseumAgentDemo {
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             this.audioChunks = [];
             this.recordStartTime = Date.now();
             
@@ -590,7 +592,7 @@ class MuseumAgentDemo {
             });
             
             this.mediaRecorder.addEventListener('stop', () => {
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                 this.handleAudioRecorded(audioBlob);
             });
             
@@ -612,6 +614,160 @@ class MuseumAgentDemo {
             document.getElementById('stopRecordBtn').disabled = true;
             document.getElementById('recordTime').textContent = '00:00';
         }
+    }
+
+    async convertWebmToMp3(webmBlob) {
+        this.log('info', '开始转换webm到mp3');
+        
+        try {
+            const arrayBuffer = await webmBlob.arrayBuffer();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            const channels = audioBuffer.numberOfChannels;
+            const originalSampleRate = audioBuffer.sampleRate;
+            const targetSampleRate = 16000;
+            const samples = audioBuffer.length;
+            
+            this.log('info', `原始采样率: ${originalSampleRate}Hz, 目标采样率: ${targetSampleRate}Hz`);
+            
+            let resampledBuffer = audioBuffer;
+            
+            if (originalSampleRate !== targetSampleRate) {
+                this.log('info', `重采样: ${originalSampleRate}Hz -> ${targetSampleRate}Hz`);
+                
+                const offlineContext = new OfflineAudioContext(
+                    channels,
+                    samples * targetSampleRate / originalSampleRate,
+                    targetSampleRate
+                );
+                
+                const source = offlineContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(offlineContext.destination);
+                source.start();
+                
+                resampledBuffer = await offlineContext.startRendering();
+            }
+            
+            const mp3encoder = new lamejs.Mp3Encoder(channels, targetSampleRate, 128);
+            const mp3Data = [];
+            
+            const resampledSamples = resampledBuffer.length;
+            const left = new Int16Array(resampledSamples);
+            const right = new Int16Array(resampledSamples);
+            
+            for (let i = 0; i < resampledSamples; i++) {
+                const leftSample = Math.max(-1, Math.min(1, resampledBuffer.getChannelData(0)[i]));
+                left[i] = leftSample < 0 ? leftSample * 0x8000 : leftSample * 0x7FFF;
+                
+                if (channels === 2) {
+                    const rightSample = Math.max(-1, Math.min(1, resampledBuffer.getChannelData(1)[i]));
+                    right[i] = rightSample < 0 ? rightSample * 0x8000 : rightSample * 0x7FFF;
+                }
+            }
+            
+            const blockSize = 1152;
+            for (let i = 0; i < resampledSamples; i += blockSize) {
+                const leftChunk = left.subarray(i, i + blockSize);
+                const rightChunk = right.subarray(i, i + blockSize);
+                const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+                if (mp3buf.length > 0) {
+                    mp3Data.push(mp3buf);
+                }
+            }
+            
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) {
+                mp3Data.push(mp3buf);
+            }
+            
+            const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            this.log('info', `转换完成: ${webmBlob.size} bytes -> ${mp3Blob.size} bytes`);
+            
+            return mp3Blob;
+        } catch (error) {
+            this.log('error', `转换失败: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async handleSendFile() {
+        this.log('info', '处理发送文件');
+        
+        const fileInput = document.getElementById('audioFileInput');
+        fileInput.click();
+        
+        fileInput.onchange = async (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                this.log('warn', '未选择文件');
+                return;
+            }
+            
+            this.log('info', `选择文件: ${file.name}, 大小: ${file.size} bytes`);
+            
+            try {
+                const enableTTS = document.getElementById('enableTTS').checked;
+                
+                // 获取音频时长
+                const audioUrl = URL.createObjectURL(file);
+                const audio = new Audio(audioUrl);
+                
+                const duration = await new Promise((resolve) => {
+                    audio.onloadedmetadata = () => {
+                        const audioDuration = audio.duration;
+                        URL.revokeObjectURL(audioUrl);
+                        resolve(audioDuration);
+                    };
+                });
+                
+                // 添加发送的语音消息到聊天窗
+                this.addMessage('sent', null, file, duration);
+                
+                if (!this.preRecordedAudioWs) {
+                    this.preRecordedAudioWs = await this.client.connectPreRecordedAudio();
+                }
+                
+                let audioToSend = file;
+                if (file.type !== 'audio/mp3') {
+                    this.log('info', '转换音频文件到mp3格式');
+                    audioToSend = await this.convertWebmToMp3(file);
+                }
+                
+                // 监听音频流事件
+                this.client.on('audio_stream', (data) => {
+                    if (data.audio_data) {
+                        this.log('info', `收到音频回复: ${data.audio_data.length} 字节`);
+                        // 将Base64音频数据转换为Blob
+                        const audioData = this.base64ToBlob(data.audio_data, 'audio/mp3');
+                        this.addMessage('received', null, audioData);
+                    }
+                });
+                
+                await this.client.sendAudioStream(
+                    this.preRecordedAudioWs,
+                    audioToSend,
+                    (chunk) => {
+                        const lastMessage = document.querySelector('.message.received:last-child .message-content');
+                        if (lastMessage) {
+                            lastMessage.textContent += chunk;
+                        } else {
+                            this.addMessage('received', chunk);
+                        }
+                    },
+                    (data) => {
+                        this.log('success', '文件发送完成');
+                    },
+                    { enableTTS }
+                );
+                
+                fileInput.value = '';
+            } catch (error) {
+                this.log('error', `发送文件失败: ${error.message}`);
+                this.addMessage('received', `错误: ${error.message}`);
+            }
+        };
     }
     
     startRecordTimer() {
@@ -635,13 +791,27 @@ class MuseumAgentDemo {
         const enableTTS = document.getElementById('enableTTS').checked;
         
         try {
-            if (!this.streamWs) {
-                this.streamWs = await this.client.connectAgentStream();
+            // 转换webm到mp3格式
+            const mp3Blob = await this.convertWebmToMp3(audioBlob);
+            
+            // 使用预录制音频端点（解耦架构）
+            if (!this.preRecordedAudioWs) {
+                this.preRecordedAudioWs = await this.client.connectPreRecordedAudio();
             }
             
+            // 监听音频流事件
+            this.client.on('audio_stream', (data) => {
+                if (data.audio_data) {
+                    this.log('info', `收到音频回复: ${data.audio_data.length} 字节`);
+                    // 将Base64音频数据转换为Blob
+                    const audioData = this.base64ToBlob(data.audio_data, 'audio/mp3');
+                    this.addMessage('received', null, audioData);
+                }
+            });
+            
             await this.client.sendAudioStream(
-                this.streamWs,
-                audioBlob,
+                this.preRecordedAudioWs,
+                mp3Blob,
                 (chunk) => {
                     // 实时更新消息内容
                     const lastMessage = document.querySelector('.message.received:last-child .message-content');
@@ -767,6 +937,16 @@ class MuseumAgentDemo {
             voiceMessageDiv.classList.remove('playing');
             voiceMessageDiv.audioElement = null;
         });
+    }
+    
+    base64ToBlob(base64, mimeType) {
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mimeType });
     }
     
     log(level, message) {

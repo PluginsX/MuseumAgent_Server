@@ -94,7 +94,7 @@ class UnifiedSTTService:
             import io
             
             # 检测音频文件类型和参数
-            # 先尝试以MP3方式保存，让DashScope SDK自行处理
+            # 根据客户端录音的实际情况，音频格式为MP3
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
                 temp_filename = temp_file.name
                 temp_file.write(audio_data)
@@ -104,13 +104,13 @@ class UnifiedSTTService:
                 self.logger.stt.info('STT recognition request sent', 
                                       {'audio_size': len(audio_data), 'model': self.stt_model})
                 
-                # 根据协议，我们假定客户端发送的音频是MP3格式
+                # 根据协议，客户端发送的音频是MP3格式
                 # 使用DashScope SDK进行语音识别
                 # 根据API文档和实际音频参数调整采样率
                 recognition = Recognition(
                     model=self.stt_model,
-                    format='mp3',  # 协议规定的音频格式
-                    sample_rate=22050,  # 调整为实际音频的采样率（TTS生成的音频采样率为22050）
+                    format='mp3',  # 客户端录音的音频格式
+                    sample_rate=16000,  # 统一采用16000Hz采样率
                     callback=SimpleRecognitionCallback()
                 )
                 
@@ -146,7 +146,7 @@ class UnifiedSTTService:
                     self.logger.stt.info('STT recognition response received', 
                                           {'recognized_text': full_text[:100]})
                     
-                    self.logger.info(f"STT识别完成: {full_text[:50]}...")
+                    self.logger.stt.info(f"STT识别完成: {full_text}")
                     return full_text
                 else:
                     self.logger.sys.error(f"STT识别失败: {response.code}, {response.message}")
