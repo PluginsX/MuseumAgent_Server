@@ -8,8 +8,7 @@ import aiohttp
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 
 
@@ -18,7 +17,7 @@ class SRSService:
     
     def __init__(self):
         """初始化SRS服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config = get_global_config()
         self.srs_config = self.config.get("semantic_retrieval", {})
         
@@ -56,8 +55,8 @@ class SRSService:
             }
             
             # 记录请求
-            print(log_communication('SRS_SERVICE', 'SEND', 'SRS搜索请求', 
-                                   {'query': search_request['query'][:50]}))
+            self.logger.rag.info('SRS search request sent', 
+                                   {'query': search_request['query'][:50]})
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -69,8 +68,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS搜索响应', 
-                                               {'result_count': len(result.get('artifacts', []))}))
+                        self.logger.rag.info('SRS search response received', 
+                                               {'result_count': len(result.get('artifacts', []))})
                         
                         return {
                             "code": 200,
@@ -81,8 +80,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'SRS搜索失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'SRS search failed', 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -91,7 +90,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"SRS搜索异常: {str(e)}")
+            self.logger.sys.error(f"SRS搜索异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"SRS搜索异常: {str(e)}",
@@ -128,8 +127,8 @@ class SRSService:
             }
             
             # 记录请求
-            print(log_communication('SRS_SERVICE', 'SEND', 'SRS获取资料列表请求', 
-                                   {'params': filtered_params}))
+            self.logger.rag.info('SRS get artifacts list request sent', 
+                                   {'params': filtered_params})
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -141,8 +140,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS资料列表响应', 
-                                               {'artifacts_count': len(result.get('artifacts', []))}))
+                        self.logger.rag.info('SRS artifacts list response received', 
+                                               {'artifacts_count': len(result.get('artifacts', []))})
                         
                         return {
                             "code": 200,
@@ -153,8 +152,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'获取资料列表失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'Get artifacts list failed', 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -163,7 +162,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"获取SRS资料列表异常: {str(e)}")
+            self.logger.sys.error(f"获取SRS资料列表异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取SRS资料列表异常: {str(e)}",
@@ -189,8 +188,8 @@ class SRSService:
             }
             
             # 记录请求
-            print(log_communication('SRS_SERVICE', 'SEND', 'SRS获取资料详情请求', 
-                                   {'artifact_id': artifact_id}))
+            self.logger.rag.info('SRS get artifact detail request sent', 
+                                   {'artifact_id': artifact_id})
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -201,8 +200,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS资料详情响应', 
-                                               {'artifact_id': result.get('id')}))
+                        self.logger.rag.info('SRS artifact detail response received', 
+                                               {'artifact_id': result.get('id')})
                         
                         return {
                             "code": 200,
@@ -213,8 +212,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'获取资料详情失败', 
-                                      {'status': response.status, 'error': error_text, 'artifact_id': artifact_id}))
+                        self.logger.rag.error(f'Get artifact detail failed', 
+                                      {'status': response.status, 'error': error_text, 'artifact_id': artifact_id})
                         
                         return {
                             "code": 500,
@@ -223,7 +222,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"获取SRS资料详情异常: {str(e)}")
+            self.logger.sys.error(f"获取SRS资料详情异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取SRS资料详情异常: {str(e)}",
@@ -248,8 +247,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS健康检查响应', 
-                                               {'status': result.get('status')}))
+                        self.logger.rag.info('SRS health check response received', 
+                                               {'status': result.get('status')})
                         
                         return {
                             "code": 200,
@@ -260,8 +259,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'健康检查失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'Health check failed', 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -270,7 +269,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"SRS健康检查异常: {str(e)}")
+            self.logger.sys.error(f"SRS健康检查异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"SRS健康检查异常: {str(e)}",
@@ -301,8 +300,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS系统指标响应', 
-                                               {'artifact_count': result.get('artifact_count')}))
+                        self.logger.rag.info('SRS system metrics response received', 
+                                               {'artifact_count': result.get('artifact_count')})
                         
                         return {
                             "code": 200,
@@ -313,8 +312,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'获取系统指标失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'Get system metrics failed', 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -323,7 +322,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"获取SRS系统指标异常: {str(e)}")
+            self.logger.sys.error(f"获取SRS系统指标异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取SRS系统指标异常: {str(e)}",
@@ -354,8 +353,8 @@ class SRSService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('SRS_SERVICE', 'RECEIVE', 'SRS系统信息响应', 
-                                               {'app_name': result.get('app_name')}))
+                        self.logger.rag.info('SRS system info response received', 
+                                               {'app_name': result.get('app_name')})
                         
                         return {
                             "code": 200,
@@ -366,8 +365,8 @@ class SRSService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('SRS_SERVICE', 'ERROR', f'获取系统信息失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'Get system info failed', 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -376,7 +375,7 @@ class SRSService:
                         }
         
         except Exception as e:
-            self.logger.error(f"获取SRS系统信息异常: {str(e)}")
+            self.logger.sys.error(f"获取SRS系统信息异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取SRS系统信息异常: {str(e)}",
@@ -419,7 +418,7 @@ class SRSService:
                 }
         
         except Exception as e:
-            self.logger.error(f"SRS连接测试异常: {str(e)}")
+            self.logger.sys.error(f"SRS连接测试异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"SRS连接测试异常: {str(e)}",

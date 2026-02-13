@@ -6,14 +6,17 @@
 
 import json
 from typing import Dict, Any
-from ...common.log_formatter import log_step, log_communication
+from ...common.enhanced_logger import get_enhanced_logger
 
 
 class ResponseParser:
     """LLM响应解析器（简化版）"""
     
-    @staticmethod
-    def parse_llm_response(llm_response: str) -> Dict[str, Any]:
+    def __init__(self):
+        """初始化解析器"""
+        self.logger = get_enhanced_logger()
+    
+    def parse_llm_response(self, llm_response: str) -> Dict[str, Any]:
         """
         简化解析LLM响应
         
@@ -23,22 +26,22 @@ class ResponseParser:
         Returns:
             解析后的字典或包装后的标准结构
         """
-        print(log_step('PARSER', 'START', '开始解析LLM响应', 
-                      {'response_length': len(llm_response)}))
+        self.logger.func.info('Starting to parse LLM response', 
+                      {'response_length': len(llm_response)})
         
         # 尝试解析JSON
         try:
-            result = ResponseParser._simple_json_extract(llm_response)
+            result = self._simple_json_extract(llm_response)
             if result:
-                print(log_step('PARSER', 'SUCCESS', 'JSON解析成功', 
-                              {'fields': list(result.keys())}))
+                self.logger.func.info('JSON parsing successful', 
+                              {'fields': list(result.keys())})
                 return result
         except Exception as e:
-            print(log_step('PARSER', 'ERROR', 'JSON解析失败', {'error': str(e)}))
+            self.logger.func.error('JSON parsing failed', {'error': str(e)})
         
         # 解析失败，直接包装为标准结构
-        print(log_step('PARSER', 'WARNING', '解析失败，包装为标准结构'))
-        return cls._wrap_as_standard_response(llm_response)
+        self.logger.func.warn('Parsing failed, wrapping as standard structure')
+        return self._wrap_as_standard_response(llm_response)
     
     @staticmethod
     def _simple_json_extract(text: str) -> Dict[str, Any]:
@@ -74,8 +77,7 @@ class ResponseParser:
         
         return None
     
-    @staticmethod
-    def _wrap_as_standard_response(raw_response: str) -> Dict[str, Any]:
+    def _wrap_as_standard_response(self, raw_response: str) -> Dict[str, Any]:
         """将原始响应包装为标准结构"""
         return {
             "artifact_name": None,

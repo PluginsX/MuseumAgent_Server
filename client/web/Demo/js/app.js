@@ -332,10 +332,24 @@ class MuseumAgentDemo {
         });
         
         this.client.on('session_registered', (data) => {
-            this.log('success', `会话注册成功: ${data.session_id}`);
-            document.getElementById('sessionId').textContent = data.session_id.substring(0, 8) + '...';
-            document.getElementById('sessionStatus').textContent = '已连接';
-            document.getElementById('sessionStatus').className = 'status-badge status-online';
+            let sessionId = null;
+            try {
+                if (data && typeof data === 'object') {
+                    sessionId = data.data?.session_id || data.session_id;
+                }
+            } catch (e) {
+                console.error('[Session] 提取session_id失败:', e);
+            }
+            
+            if (sessionId && typeof sessionId === 'string') {
+                this.log('success', `会话注册成功: ${sessionId}`);
+                document.getElementById('sessionId').textContent = sessionId.substring(0, 8) + '...';
+                document.getElementById('sessionStatus').textContent = '已连接';
+                document.getElementById('sessionStatus').className = 'status-badge status-online';
+            } else {
+                this.log('error', '会话注册成功但未返回session_id');
+                console.error('[Session] 会话注册成功但未返回session_id:', data);
+            }
         });
         
         this.client.on('session_disconnected', (data) => {
@@ -376,6 +390,24 @@ class MuseumAgentDemo {
         this.client.on('audio_chunk', (data) => {
             this.log('info', `收到音频数据块: ${data.size} 字节`);
         });
+        
+        this.client.on('audio_complete', (data) => {
+            this.log('info', `收到完整音频数据: ${data.audioData.size} 字节`);
+            // 添加语音回复到聊天窗
+            const voiceMessageDiv = this.addMessage('received', null, data.audioData);
+            
+            // 检查是否自动播放语音消息
+            const autoPlayVoice = document.getElementById('autoPlayVoice').checked;
+            if (autoPlayVoice && voiceMessageDiv) {
+                // 延迟一小段时间后自动播放，确保消息已添加到DOM
+                setTimeout(() => {
+                    const voiceMessage = voiceMessageDiv.querySelector('.voice-message');
+                    if (voiceMessage) {
+                        this.toggleVoiceMessage(voiceMessage);
+                    }
+                }, 100);
+            }
+        });
     }
     
     updateUIState(isLoggedIn) {
@@ -395,6 +427,7 @@ class MuseumAgentDemo {
             });
             document.getElementById('sendMessageBtn').disabled = false;
             document.getElementById('voiceInputBtn').disabled = false;
+            document.getElementById('callInputBtn').disabled = false;
         } else {
             loginBtn.disabled = false;
             logoutBtn.disabled = true;
@@ -593,8 +626,11 @@ class MuseumAgentDemo {
     async handleAudioRecorded(audioBlob) {
         this.log('info', `录音完成: ${audioBlob.size} 字节`);
         
+        // 计算录音时长
+        const recordDuration = (Date.now() - this.recordStartTime) / 1000;
+        
         // 添加发送的语音消息到聊天窗
-        this.addMessage('sent', null, audioBlob);
+        this.addMessage('sent', null, audioBlob, recordDuration);
         
         const enableTTS = document.getElementById('enableTTS').checked;
         
@@ -626,7 +662,7 @@ class MuseumAgentDemo {
         }
     }
     
-    addMessage(type, content, audioData = null) {
+    addMessage(type, content, audioData = null, duration = null) {
         const messageHistory = document.getElementById('messageHistory');
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}`;
@@ -638,23 +674,47 @@ class MuseumAgentDemo {
             // 语音消息
             const audioUrl = URL.createObjectURL(audioData);
             const audioId = `audio-${Date.now()}`;
+            let durationText = '加载中...';
+            
+            // 如果直接提供了时长，使用它
+            if (duration !== null && !isNaN(duration)) {
+                const minutes = Math.floor(duration / 60).toString().padStart(2, '0');
+                const seconds = Math.floor(duration % 60).toString().padStart(2, '0');
+                durationText = `${minutes}:${seconds}`;
+            } else {
+                // 否则尝试从音频元素获取时长
+                const audio = new Audio(audioUrl);
+                audio.onloadedmetadata = () => {
+                    const audioDuration = audio.duration;
+                    if (!isNaN(audioDuration) && isFinite(audioDuration)) {
+                        const minutes = Math.floor(audioDuration / 60).toString().padStart(2, '0');
+                        const seconds = Math.floor(audioDuration % 60).toString().padStart(2, '0');
+                        const newDurationText = `${minutes}:${seconds}`;
+                        
+                        const voiceMessageDiv = messageDiv.querySelector('.voice-message');
+                        if (voiceMessageDiv) {
+                            voiceMessageDiv.innerHTML = `
+                                <span class="voice-duration">${newDurationText}</span>
+                            `;
+                        }
+                    }
+                };
+            }
             
             messageDiv.innerHTML = `
                 ${type === 'received' ? '<div class="message-avatar"></div>' : ''}
                 <div class="message-content">
-                    <div class="voice-message">
-                        <span class="voice-icon">🎤</span>
-                        <span class="voice-duration">语音消息</span>
-                        <button class="voice-play-btn" data-audio-id="${audioId}" data-audio-url="${audioUrl}">播放</button>
+                    <div class="voice-message" data-audio-url="${audioUrl}" data-audio-id="${audioId}">
+                        <span class="voice-duration">${durationText}</span>
                     </div>
                 </div>
                 <div class="message-time">${timeString}</div>
                 ${type === 'sent' ? '<div class="message-avatar"></div>' : ''}
             `;
             
-            // 添加播放按钮事件
-            const playBtn = messageDiv.querySelector('.voice-play-btn');
-            playBtn.addEventListener('click', () => this.playVoiceMessage(playBtn, audioUrl));
+            // 点击整个气泡播放/停止语音
+            const voiceMessageDiv = messageDiv.querySelector('.voice-message');
+            voiceMessageDiv.addEventListener('click', () => this.toggleVoiceMessage(voiceMessageDiv));
         } else {
             // 文本消息
             messageDiv.innerHTML = `
@@ -667,32 +727,46 @@ class MuseumAgentDemo {
         
         messageHistory.appendChild(messageDiv);
         messageHistory.scrollTop = messageHistory.scrollHeight;
+        
+        // 返回消息div元素，以便其他功能使用
+        return messageDiv;
     }
     
-    playVoiceMessage(button, audioUrl) {
-        const audio = new Audio(audioUrl);
+    toggleVoiceMessage(voiceMessageDiv) {
+        const audioUrl = voiceMessageDiv.dataset.audioUrl;
         
-        button.textContent = '停止';
-        button.classList.add('playing');
+        // 如果正在播放，停止播放
+        if (voiceMessageDiv.dataset.isPlaying === 'true') {
+            const audio = voiceMessageDiv.audioElement;
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                voiceMessageDiv.dataset.isPlaying = 'false';
+                voiceMessageDiv.classList.remove('playing');
+                voiceMessageDiv.audioElement = null;
+            }
+            return;
+        }
+        
+        // 创建新的音频元素并播放
+        const audio = new Audio(audioUrl);
+        voiceMessageDiv.audioElement = audio;
+        voiceMessageDiv.dataset.isPlaying = 'true';
+        voiceMessageDiv.classList.add('playing');
         
         audio.play();
         
         audio.addEventListener('ended', () => {
-            button.textContent = '播放';
-            button.classList.remove('playing');
+            voiceMessageDiv.dataset.isPlaying = 'false';
+            voiceMessageDiv.classList.remove('playing');
+            voiceMessageDiv.audioElement = null;
         });
         
-        button.onclick = () => {
-            if (audio.paused) {
-                audio.play();
-                button.textContent = '停止';
-                button.classList.add('playing');
-            } else {
-                audio.pause();
-                button.textContent = '播放';
-                button.classList.remove('playing');
-            }
-        };
+        audio.addEventListener('error', () => {
+            voiceMessageDiv.dataset.isPlaying = 'false';
+            voiceMessageDiv.classList.remove('playing');
+            voiceMessageDiv.audioElement = null;
+        });
     }
     
     log(level, message) {

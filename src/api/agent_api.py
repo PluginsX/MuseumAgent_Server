@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.common.config_utils import get_config_by_key
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
+
+logger = get_enhanced_logger()
+
 from src.common.response_utils import (
     data_none_response,
     fail_response,
@@ -94,6 +96,7 @@ from src.api.client_api import router as client_router
 from src.api.session_config_api import router as session_config_router
 from src.api.function_api import router as function_router  # OpenAI标准函数API
 from src.api.websocket_api import router as websocket_router  # WebSocket API
+from src.api.audio_api import router as audio_router  # 音频处理API
 
 app.include_router(auth_router)
 app.include_router(config_router)
@@ -104,6 +107,7 @@ app.include_router(client_router)
 app.include_router(session_config_router)
 app.include_router(function_router)  # 添加OpenAI标准函数API路由
 app.include_router(websocket_router)  # 添加WebSocket API路由
+app.include_router(audio_router)  # 添加音频处理API路由
 
 
 @app.on_event("startup")
@@ -114,6 +118,34 @@ def startup_event():
         seed_admin()
     except Exception:
         pass
+    
+    # 注册内部服务
+    _register_services()
+
+
+def _register_services():
+    """注册内部服务"""
+    from src.services.registry import service_registry
+    
+    # 注册文本处理服务
+    from src.services.text_processing_service import TextProcessingService
+    service_registry.register_service("text_processing", TextProcessingService())
+    
+    # 注册音频处理服务
+    from src.services.audio_processing_service import AudioProcessingService
+    service_registry.register_service("audio_processing", AudioProcessingService())
+    
+    # 注册语音通话服务
+    from src.services.voice_call_service import VoiceCallService
+    service_registry.register_service("voice_call", VoiceCallService())
+    
+    # 注册会话管理服务 - 使用适配器以确保与API端点使用相同实例
+    from src.services.session_service_adapter import SessionServiceAdapter
+    service_registry.register_service("session", SessionServiceAdapter())
+    
+    from src.common.log_utils import get_logger
+    logger = get_logger()
+    logger.info("所有服务已注册到agent_api")
 
 # 全局CommandGenerator实例（延迟初始化）
 _command_generator: CommandGenerator | None = None
@@ -154,13 +186,12 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
     try:
         # 记录客户端消息接收
         ui_preview = request.user_input[:50] + ("..." if len(request.user_input) > 50 else "")
-        print(log_communication('CLIENT', 'RECEIVE', 'User Message', 
-                               request.dict(), 
-                               {'session_id': session_id, 'preview': ui_preview}))
+        logger.api.info("User message received", 
+                       {'session_id': session_id, 'preview': ui_preview})
         
         # 记录处理开始
-        print(log_step('API', 'START', '开始处理用户请求', 
-                      {'client_type': request.client_type, 'scene_type': request.scene_type}))
+        logger.api.info("Starting to process user request", 
+                      {'client_type': request.client_type, 'scene_type': request.scene_type})
         
         # 调用指令生成器（使用严格会话管理）
         from src.session.strict_session_manager import strict_session_manager
@@ -170,11 +201,11 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
         if session_id:
             session = strict_session_manager.validate_session(session_id)
             if not session:
-                print(log_step('SESSION', 'DENY', '会话验证失败，拒绝请求', 
-                              {'session_id': session_id}))
+                logger.sess.error("Session validation failed, rejecting request", 
+                              {'session_id': session_id})
                 return fail_response(msg="会话不存在或已过期，请重新注册")
-            print(log_step('SESSION', 'ALLOW', '会话验证通过', 
-                          {'session_id': session_id[:8]}))
+            logger.sess.info("Session validation passed", 
+                          {'session_id': session_id[:8]})
         
         command_dict = generator.generate_standard_command(
             user_input=request.user_input,
@@ -187,12 +218,12 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
         print(json.dumps(command_dict, indent=2, ensure_ascii=False))
         
         # 记录处理完成
-        print(log_step('API', 'SUCCESS', '请求处理完成', 
+        logger.api.info("Request processing completed", 
                       {'operation': command_dict.get('operation'), 
-                       'artifact_name': command_dict.get('artifact_name')}))
+                       'artifact_name': command_dict.get('artifact_name')})
         
         # 记录响应发送
-        print(log_communication('CLIENT', 'SEND', 'Agent Response', command_dict))
+        logger.api.info("Agent response sent", command_dict)
         
         # 输出LLM原始响应（直通转发前）
         print(f"[DEBUG] LLM原始响应准备直通转发:")
@@ -219,7 +250,7 @@ async def parse_agent(request: AgentParseRequest, session_id: str = Header(None)
         if "未查询到相关文物" in err_msg or "数据不存在" in err_msg:
             logger.info(f"知识库无匹配: {err_msg}")
             return data_none_response(msg=err_msg)
-        logger.error(f"业务异常: {err_msg}, 请求: {request.model_dump()}")
+        logger.sys.error(f"业务异常: {err_msg}, 请求: {request.model_dump()}")
         return fail_response(msg=err_msg)
         
     except Exception as e:

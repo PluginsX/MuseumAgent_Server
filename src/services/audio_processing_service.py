@@ -8,8 +8,7 @@ import json
 from typing import Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger, Module
 from src.services.stt_service import STTService
 from src.services.tts_service import UnifiedTTSService as TTSService
 
@@ -19,7 +18,7 @@ class AudioProcessingService:
     
     def __init__(self):
         """初始化音频处理服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.stt_service = STTService()
         self.tts_service = TTSService()
     
@@ -45,12 +44,12 @@ class AudioProcessingService:
                 audio_data = base64.b64decode(audio_data)
             
             # 记录客户端消息接收
-            print(log_communication('AUDIO_SERVICE', 'RECEIVE', '音频数据', 
-                                   {'audio_size': len(audio_data)}))
+            self.logger.audio.info("Received audio data", 
+                                   {'audio_size': len(audio_data)})
             
             # 记录处理开始
-            print(log_step('AUDIO_SERVICE', 'START', '开始音频转文本', 
-                          {'audio_size': len(audio_data)}))
+            self.logger.stt.info("Starting audio-to-text conversion", 
+                          {'audio_size': len(audio_data)})
             
             # 执行STT识别
             text_result = await self.stt_service.recognize_audio(audio_data)
@@ -66,12 +65,12 @@ class AudioProcessingService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('AUDIO_SERVICE', 'SUCCESS', '音频转文本完成', 
-                          {'text_length': len(text_result)}))
+            self.logger.stt.info("Audio-to-text conversion completed", 
+                          {'text_length': len(text_result)})
             return result
             
         except Exception as e:
-            self.logger.error(f"音频转文本失败: {str(e)}")
+            self.logger.audio.error('Audio to text failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"音频转文本失败: {str(e)}",
@@ -96,12 +95,12 @@ class AudioProcessingService:
             text_content = request.get("text", "")
             
             # 记录客户端消息接收
-            print(log_communication('AUDIO_SERVICE', 'RECEIVE', '文本内容', 
-                                   {'text_preview': text_content[:50]}))
+            self.logger.audio.info("Received text content", 
+                                   {'text_preview': text_content[:50]})
             
             # 记录处理开始
-            print(log_step('AUDIO_SERVICE', 'START', '开始文本转音频', 
-                          {'text_length': len(text_content)}))
+            self.logger.tts.info("Starting text-to-audio conversion", 
+                          {'text_length': len(text_content)})
             
             # 执行TTS合成
             audio_result = await self.tts_service.synthesize_text(text_content)
@@ -118,12 +117,12 @@ class AudioProcessingService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('AUDIO_SERVICE', 'SUCCESS', '文本转音频完成', 
-                          {'audio_size': len(audio_result) if audio_result else 0}))
+            self.logger.tts.info("Text-to-audio conversion completed", 
+                          {'audio_size': len(audio_result) if audio_result else 0})
             return result
             
         except Exception as e:
-            self.logger.error(f"文本转音频失败: {str(e)}")
+            self.logger.audio.error('Text to audio failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"文本转音频失败: {str(e)}",
@@ -184,12 +183,12 @@ class AudioProcessingService:
                 result["data"]["synthesized_audio"] = synthesized_audio.hex() if synthesized_audio else None
                 result["data"]["synthesized_audio_size"] = len(synthesized_audio) if synthesized_audio else 0
             
-            print(log_step('AUDIO_SERVICE', 'SUCCESS', '完整音频处理完成', 
-                          {'process_type': process_type}))
+            self.logger.audio.info('Complete audio processing finished', 
+                          {'process_type': process_type})
             return result
             
         except Exception as e:
-            self.logger.error(f"完整音频处理失败: {str(e)}")
+            self.logger.audio.error('Complete audio processing failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"完整音频处理失败: {str(e)}",
@@ -229,7 +228,7 @@ class AudioProcessingService:
                 "done": True
             }
         except Exception as e:
-            self.logger.error(f"流式音频处理失败: {str(e)}")
+            self.logger.audio.error('Streaming audio processing failed', {'error': str(e)})
             yield {
                 "type": "error",
                 "message": f"流式音频处理失败: {str(e)}"

@@ -8,8 +8,7 @@ import aiohttp
 from typing import Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 
 
@@ -18,7 +17,7 @@ class LLMService:
     
     def __init__(self):
         """初始化LLM服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config = get_global_config()
         self.llm_config = self.config.get("llm", {})
         
@@ -65,8 +64,8 @@ class LLMService:
             }
             
             # 记录请求
-            print(log_communication('LLM_SERVICE', 'SEND', 'LLM聊天补全请求', 
-                                   {'model': payload['model'], 'messages_count': len(payload['messages'])}))
+            self.logger.llm.info('LLM chat completion request sent', 
+                                   {'model': payload['model'], 'messages_count': len(payload['messages'])})
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -78,8 +77,8 @@ class LLMService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('LLM_SERVICE', 'RECEIVE', 'LLM聊天补全响应', 
-                                               {'choices_count': len(result.get('choices', []))}))
+                        self.logger.llm.info('LLM chat completion response received', 
+                                               {'choices_count': len(result.get('choices', []))})
                         
                         return {
                             "code": 200,
@@ -95,8 +94,8 @@ class LLMService:
                         except:
                             error_detail = error_text
                         
-                        print(log_step('LLM_SERVICE', 'ERROR', f'LLM聊天补全失败', 
-                                      {'status': response.status, 'error': error_detail}))
+                        self.logger.llm.error(f'LLM chat completion failed', 
+                                      {'status': response.status, 'error': error_detail})
                         
                         return {
                             "code": 500,
@@ -105,7 +104,7 @@ class LLMService:
                         }
         
         except Exception as e:
-            self.logger.error(f"LLM聊天补全异常: {str(e)}")
+            self.logger.sys.error(f"LLM聊天补全异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"LLM聊天补全异常: {str(e)}",
@@ -183,7 +182,7 @@ class LLMService:
                             "message": f"流式聊天补全失败: {error_text}"
                         }
         except Exception as e:
-            self.logger.error(f"LLM流式聊天补全异常: {str(e)}")
+            self.logger.sys.error(f"LLM流式聊天补全异常: {str(e)}")
             yield {
                 "type": "error",
                 "message": f"LLM流式聊天补全异常: {str(e)}"
@@ -235,8 +234,8 @@ class LLMService:
             }
             
             # 记录请求
-            print(log_communication('LLM_SERVICE', 'SEND', 'LLM函数调用请求', 
-                                   {'model': payload['model'], 'functions_count': len(payload['functions'])}))
+            self.logger.llm.info('LLM function call request sent', 
+                                   {'model': payload['model'], 'functions_count': len(payload['functions'])})
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -255,8 +254,8 @@ class LLMService:
                             function_call = message.get("function_call")
                             
                             if function_call:
-                                print(log_communication('LLM_SERVICE', 'RECEIVE', 'LLM函数调用响应', 
-                                                       {'function_name': function_call.get('name')}))
+                                self.logger.llm.info("LLM function call response received", 
+                                                       {'function_name': function_call.get('name')})
                                 
                                 return {
                                     "code": 200,
@@ -268,8 +267,8 @@ class LLMService:
                                     "timestamp": datetime.now().isoformat()
                                 }
                             else:
-                                print(log_communication('LLM_SERVICE', 'RECEIVE', 'LLM响应（无函数调用）', 
-                                                       {'content_length': len(message.get('content', ''))}))
+                                self.logger.llm.info("LLM response (no function call) received", 
+                                                       {'content_length': len(message.get('content', ''))})
                                 
                                 return {
                                     "code": 200,
@@ -294,8 +293,8 @@ class LLMService:
                         except:
                             error_detail = error_text
                         
-                        print(log_step('LLM_SERVICE', 'ERROR', f'LLM函数调用失败', 
-                                      {'status': response.status, 'error': error_detail}))
+                        self.logger.llm.error(f"LLM function call failed", 
+                                      {'status': response.status, 'error': error_detail})
                         
                         return {
                             "code": 500,
@@ -304,7 +303,7 @@ class LLMService:
                         }
         
         except Exception as e:
-            self.logger.error(f"LLM函数调用异常: {str(e)}")
+            self.logger.sys.error(f"LLM函数调用异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"LLM函数调用异常: {str(e)}",
@@ -342,8 +341,8 @@ class LLMService:
             }
             
             # 记录请求
-            print(log_communication('LLM_SERVICE', 'SEND', 'LLM嵌入向量请求', 
-                                   {'input_count': len(input_text)}))
+            self.logger.llm.info('LLM embedding request sent', 
+                                   {'input_count': len(input_text)})
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -355,8 +354,8 @@ class LLMService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('LLM_SERVICE', 'RECEIVE', 'LLM嵌入向量响应', 
-                                               {'data_count': len(result.get('data', []))}))
+                        self.logger.llm.info("LLM embedding response received", 
+                                               {'data_count': len(result.get('data', []))})
                         
                         return {
                             "code": 200,
@@ -372,8 +371,8 @@ class LLMService:
                         except:
                             error_detail = error_text
                         
-                        print(log_step('LLM_SERVICE', 'ERROR', f'LLM嵌入向量失败', 
-                                      {'status': response.status, 'error': error_detail}))
+                        self.logger.llm.error(f"LLM embedding failed", 
+                                      {'status': response.status, 'error': error_detail})
                         
                         return {
                             "code": 500,
@@ -382,7 +381,7 @@ class LLMService:
                         }
         
         except Exception as e:
-            self.logger.error(f"LLM嵌入向量异常: {str(e)}")
+            self.logger.sys.error(f"LLM嵌入向量异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"LLM嵌入向量异常: {str(e)}",
@@ -414,8 +413,7 @@ class LLMService:
                     if response.status == 200:
                         result = await response.json()
                         
-                        print(log_communication('LLM_SERVICE', 'RECEIVE', 'LLM模型列表响应', 
-                                               {'model_count': len(result.get('data', []))}))
+                        self.logger.llm.info("LLM model list response received",{'model_count': len(result.get('data', []))})
                         
                         return {
                             "code": 200,
@@ -426,8 +424,8 @@ class LLMService:
                     else:
                         error_text = await response.text()
                         
-                        print(log_step('LLM_SERVICE', 'ERROR', f'获取模型列表失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.llm.error(f"Failed to get model list", 
+                                      {'status': response.status, 'error': error_text})
                         
                         return {
                             "code": 500,
@@ -436,7 +434,7 @@ class LLMService:
                         }
         
         except Exception as e:
-            self.logger.error(f"获取LLM模型列表异常: {str(e)}")
+            self.logger.sys.error(f"获取LLM模型列表异常: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取LLM模型列表异常: {str(e)}",

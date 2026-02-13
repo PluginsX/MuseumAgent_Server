@@ -10,9 +10,12 @@ import json
 import os
 
 from ..session.strict_session_manager import strict_session_manager
-from ..common.log_formatter import log_step, log_communication
+from ..common.enhanced_logger import get_enhanced_logger
 
 router = APIRouter(prefix="/api/admin/session-config", tags=["会话配置管理"])
+
+# 初始化日志记录器
+logger = get_enhanced_logger()
 
 @router.get("/current")
 async def get_current_config():
@@ -20,7 +23,7 @@ async def get_current_config():
     获取当前会话管理配置
     """
     try:
-        print(log_step('CONFIG', 'READ', '获取当前会话配置'))
+        logger.sys.info('Getting current session configuration')
         
         config_info = {
             "current_config": strict_session_manager.config,
@@ -37,11 +40,11 @@ async def get_current_config():
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_step('CONFIG', 'SUCCESS', '获取配置成功'))
+        logger.sys.info('Configuration retrieval successful')
         return config_info
         
     except Exception as e:
-        print(log_step('CONFIG', 'ERROR', '获取配置失败', {'error': str(e)}))
+        logger.sys.error('Failed to get configuration', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
 
 @router.put("/update")
@@ -51,7 +54,7 @@ async def update_session_config(config_updates: Dict[str, Any]):
     注意：部分配置需要重启服务才能生效
     """
     try:
-        print(log_step('CONFIG', 'UPDATE', '更新会话配置', config_updates))
+        logger.sys.info('Updating session configuration', config_updates)
         
         # 验证配置参数
         valid_keys = {
@@ -131,11 +134,11 @@ async def update_session_config(config_updates: Dict[str, Any]):
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(full_config, f, indent=2, ensure_ascii=False)
             
-            print(log_step('CONFIG', 'PERSIST', '配置已持久化到文件', 
-                          {'file_path': config_file_path, 'updated_keys': list(validated_config.keys())}))
+            logger.sys.info('Configuration persisted to file', 
+                          {'file_path': config_file_path, 'updated_keys': list(validated_config.keys())})
             
         except Exception as e:
-            print(log_step('CONFIG', 'ERROR', '配置持久化失败', {'error': str(e)}))
+            logger.sys.error('Failed to persist configuration', {'error': str(e)})
             # 即使持久化失败，也不影响内存中的配置更新
         
         # 更新运行时参数（无需重启的配置）
@@ -162,18 +165,17 @@ async def update_session_config(config_updates: Dict[str, Any]):
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_communication('CONFIG', 'UPDATE', 'Session Config Update', response_data))
-        print(log_step('CONFIG', 'SUCCESS', '配置更新完成', {
+        logger.sys.info('Session configuration update completed', {
             'changes_count': len(changes_made),
             'restart_required': restart_required
-        }))
+        })
         
         return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        print(log_step('CONFIG', 'ERROR', '配置更新失败', {'error': str(e)}))
+        logger.sys.error('Failed to update configuration', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"配置更新失败: {str(e)}")
 
 @router.post("/reset-defaults")
@@ -182,7 +184,7 @@ async def reset_to_defaults():
     重置为默认配置
     """
     try:
-        print(log_step('CONFIG', 'RESET', '重置会话配置为默认值'))
+        logger.sys.info('Resetting session configuration to default values')
         
         default_config = {
             'session_timeout_minutes': 15,
@@ -227,11 +229,11 @@ async def reset_to_defaults():
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(full_config, f, indent=2, ensure_ascii=False)
             
-            print(log_step('CONFIG', 'PERSIST', '默认配置已持久化到文件', 
-                          {'file_path': config_file_path}))
+            logger.sys.info('Default configuration persisted to file', 
+                          {'file_path': config_file_path})
             
         except Exception as e:
-            print(log_step('CONFIG', 'ERROR', '默认配置持久化失败', {'error': str(e)}))
+            logger.sys.error('Failed to persist default configuration', {'error': str(e)})
         
         response_data = {
             "message": "配置已重置为默认值",
@@ -240,13 +242,12 @@ async def reset_to_defaults():
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_communication('CONFIG', 'RESET', 'Session Config Reset', response_data))
-        print(log_step('CONFIG', 'SUCCESS', '配置重置完成'))
+        logger.sys.info('Session configuration reset completed')
         
         return response_data
         
     except Exception as e:
-        print(log_step('CONFIG', 'ERROR', '配置重置失败', {'error': str(e)}))
+        logger.sys.error('Failed to reset configuration', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"配置重置失败: {str(e)}")
 
 @router.get("/validate")
@@ -255,7 +256,7 @@ async def validate_config_format(config: Dict[str, Any]):
     验证配置格式是否正确
     """
     try:
-        print(log_step('CONFIG', 'VALIDATE', '验证配置格式'))
+        logger.sys.info('Validating configuration format')
         
         # 使用相同的验证逻辑
         valid_keys = {
@@ -327,12 +328,12 @@ async def validate_config_format(config: Dict[str, Any]):
         }
         
         if is_valid:
-            print(log_step('CONFIG', 'SUCCESS', '配置验证通过'))
+            logger.sys.info('Configuration validation passed')
         else:
-            print(log_step('CONFIG', 'WARNING', '配置验证失败', {'errors': errors}))
+            logger.sys.warn('Configuration validation failed', {'errors': errors})
         
         return response_data
         
     except Exception as e:
-        print(log_step('CONFIG', 'ERROR', '配置验证异常', {'error': str(e)}))
+        logger.sys.error('Configuration validation exception', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"配置验证失败: {str(e)}")

@@ -8,7 +8,7 @@ from typing import Dict, Any, List
 # FunctionDefinition已重命名为OpenAIFunctionDefinition
 from ...models.function_calling_models import OpenAIFunctionDefinition
 from ...common.config_utils import get_global_config
-from ...common.log_formatter import log_step
+from ...common.enhanced_logger import get_enhanced_logger
 
 
 class PromptBuilder:
@@ -16,6 +16,9 @@ class PromptBuilder:
     
     def __init__(self):
         """初始化提示词构建器"""
+        # 获取日志记录器
+        self.logger = get_enhanced_logger()
+        
         try:
             config = get_global_config()
             self.rag_templates = config.get('llm', {}).get('rag_templates', {})
@@ -48,8 +51,8 @@ class PromptBuilder:
         
         if not relevant_artifacts:
             # 没有检索到相关内容，使用禁用模板
-            print(log_step('PROMPT', 'INFO', '未检索到相关内容，使用禁用模板', 
-                          {'artifact_count': 0}))
+            self.logger.func.info('No relevant content retrieved, using disabled template', 
+                          {'artifact_count': 0})
             return self.rag_templates.get('disabled', '')
         
         # 构建检索上下文
@@ -71,8 +74,8 @@ class PromptBuilder:
             retrieved_context=retrieved_context
         )
         
-        print(log_step('PROMPT', 'SUCCESS', f'构建RAG指令完成', 
-                      {'length': len(rag_instruction), 'artifact_count': len(relevant_artifacts)}))
+        self.logger.func.info(f'RAG instruction built successfully', 
+                      {'length': len(rag_instruction), 'artifact_count': len(relevant_artifacts)})
         return rag_instruction
     
     def build_final_prompt(self, user_input: str, scene_type: str, 
@@ -110,8 +113,8 @@ class PromptBuilder:
                 
                 return full_prompt
         except Exception as e:
-            print(log_step('PROMPT', 'ERROR', '配置驱动提示词构建失败，使用后备方案', 
-                          {'error': str(e)}))
+            self.logger.func.error('Configuration-driven prompt building failed, using fallback', 
+                          {'error': str(e), 'user_input_preview': user_input[:50]})
             # 后备方案：使用简化但有效的提示词
             backup_prompt = (
                 f"你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n"
@@ -122,8 +125,8 @@ class PromptBuilder:
                 f"\n"
                 f"请用自然语言与用户进行友好交流，回答用户的问题。"
             )
-            print(log_step('PROMPT', 'WARNING', '使用后备提示词', 
-                          {'length': len(backup_prompt), 'reason': str(e)}))
+            self.logger.func.warn('Using fallback prompt', 
+                          {'length': len(backup_prompt), 'reason': str(e), 'scene_type': scene_type, 'user_input_preview': user_input[:50]})
             return backup_prompt
 
     def build_function_calling_prompt(self, user_input: str, scene_type: str, 
@@ -161,8 +164,8 @@ class PromptBuilder:
             
             return system_prompt
         except Exception as e:
-            print(log_step('PROMPT', 'ERROR', '函数调用提示词构建失败', 
-                          {'error': str(e)}))
+            self.logger.func.error('Function calling prompt building failed', 
+                                  {'error': str(e), 'user_input_preview': user_input[:50]})
             # 使用后备方案
             fallback_template = self.system_prompts.get('fallback',
                 '你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n\n场景：{scene_type}\n用户输入：{user_input}\n\n请调用适当的函数并提供正确的参数，同时用自然语言回应用户。')

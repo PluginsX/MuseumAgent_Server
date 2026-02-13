@@ -13,8 +13,8 @@ if not exist "venv\Scripts\python.exe" (
     exit /b 1
 )
 
-REM Start server using fixed server script with proper configuration loading
-"%~dp0venv\Scripts\python.exe" "%~dp0fixed_server.py"
+REM Start server using main.py as the unified entry point
+"%~dp0venv\Scripts\python.exe" "%~dp0main.py"
 
 REM Keep window open after server stops
 echo.

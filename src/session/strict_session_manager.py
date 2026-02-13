@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import json
 
 from ..common.config_utils import get_global_config
-from ..common.log_formatter import log_step, log_communication
+from ..common.enhanced_logger import get_enhanced_logger
 
 @dataclass
 class EnhancedClientSession:
@@ -68,6 +68,9 @@ class StrictSessionManager:
     """严格会话管理器 - 强制注册+主动清理"""
     
     def __init__(self):
+        # 获取日志记录器
+        self.logger = get_enhanced_logger()
+        
         # 从配置文件读取参数
         self._load_config()
         
@@ -88,7 +91,7 @@ class StrictSessionManager:
         if self.enable_auto_cleanup:
             self._start_enhanced_cleanup_daemon()
         
-        print(log_step('SESSION', 'CONFIG', '会话管理器配置加载完成', self.config))
+        self.logger.sess.info('Session manager configuration loaded', self.config)
     def _load_config(self):
         """加载会话管理配置"""
         # 默认配置
@@ -111,25 +114,25 @@ class StrictSessionManager:
             self.config = {**default_config, **session_config}
             
         except Exception as e:
-            print(log_step('SESSION', 'ERROR', '加载会话配置失败，使用默认配置', {'error': str(e)}))
+            self.logger.sess.error('Failed to load session configuration, using defaults', {'error': str(e)})
             self.config = default_config
     def _start_enhanced_cleanup_daemon(self):
         """启动增强清理守护线程"""
         if not self.enable_auto_cleanup:
-            print(log_step('SESSION', 'INFO', '自动清理已禁用'))
+            self.logger.sess.info('Auto cleanup disabled')
             return
             
         self._running = True
         self._cleanup_thread = threading.Thread(target=self._strict_cleanup_loop, daemon=True)
         self._cleanup_thread.start()
-        print(log_step('SESSION', 'START', '启动严格会话管理守护进程', 
+        self.logger.sess.info('Enhanced cleanup daemon started', 
                       {'session_timeout': f'{self.session_timeout.total_seconds()/60}分钟',
                        'inactivity_timeout': f'{self.inactivity_timeout.total_seconds()/60}分钟',
-                       'cleanup_interval': f'{self.cleanup_interval}秒'}))
+                       'cleanup_interval': f'{self.cleanup_interval}秒'})
     
     def _strict_cleanup_loop(self):
         """严格的清理循环"""
-        print(log_step('SESSION', 'INFO', '严格会话清理循环已启动'))
+        self.logger.sess.info('Strict session cleanup loop started')
         
         last_deep_validation = time.time()
         
@@ -145,7 +148,7 @@ class StrictSessionManager:
                     last_deep_validation = current_time
                     
             except Exception as e:
-                print(log_step('SESSION', 'ERROR', '会话清理循环异常', {'error': str(e)}))
+                self.logger.sess.error('Session cleanup loop exception', {'error': str(e)})
                 time.sleep(10)
     
     def _perform_strict_cleanup(self):
@@ -154,8 +157,8 @@ class StrictSessionManager:
             now = datetime.now()
             cleanup_actions = []
             
-            print(log_step('SESSION', 'CHECK', '开始严格会话状态检查', 
-                          {'total_sessions': len(self.sessions)}))
+            self.logger.sess.info('Starting strict session state check', 
+                          {'total_sessions': len(self.sessions)})
             
             for session_id, session in list(self.sessions.items()):
                 session_info = {
@@ -167,50 +170,52 @@ class StrictSessionManager:
                     'time_since_activity': (now - session.last_activity).total_seconds()/60
                 }
                 
-                print(log_step('SESSION', 'DETAIL', f'检查会话 {session_id[:8]}...', session_info))
+                self.logger.sess.debug(f'Checking session {session_id[:8]}...', session_info)
                 
                 # 优先级清理：
                 # 1. 已过期的会话
                 if session.is_expired():
                     cleanup_actions.append(('expired', session_id, session))
-                    print(log_step('SESSION', 'CLEANUP', f'清理过期会话 {session_id[:8]}...', 
-                                  {'expired_at': session.expires_at.isoformat()}))
+                    self.logger.sess.info('Cleaning up expired session', 
+                                  {'session_id': session_id[:8], 'expired_at': session.expires_at.isoformat()})
                     continue
                 
                 # 2. 断开连接的会话（心跳超时）
                 if session.is_disconnected(self.heartbeat_timeout):
                     cleanup_actions.append(('disconnected', session_id, session))
-                    print(log_step('SESSION', 'CLEANUP', f'清理断开会话 {session_id[:8]}...', 
-                                  {'disconnected_time': (now - session.last_heartbeat).total_seconds()/60,
-                                   'timeout_setting': self.heartbeat_timeout.total_seconds()/60}))
+                    self.logger.sess.info('Cleaning up disconnected session', 
+                                  {'session_id': session_id[:8],
+                                   'disconnected_time': (now - session.last_heartbeat).total_seconds()/60,
+                                   'timeout_setting': self.heartbeat_timeout.total_seconds()/60})
                     continue
                 
                 # 3. 长期不活跃的会话
                 if session.is_inactive(self.inactivity_timeout.total_seconds()/60):
                     cleanup_actions.append(('inactive', session_id, session))
-                    print(log_step('SESSION', 'CLEANUP', f'清理不活跃会话 {session_id[:8]}...', 
-                                  {'inactive_time': (now - session.last_activity).total_seconds()/60,
-                                   'timeout_setting': self.inactivity_timeout.total_seconds()/60}))
+                    self.logger.sess.info('Cleaning up inactive session', 
+                                  {'session_id': session_id[:8],
+                                   'inactive_time': (now - session.last_activity).total_seconds()/60,
+                                   'timeout_setting': self.inactivity_timeout.total_seconds()/60})
                     continue
             
             # 执行清理
             for action_type, session_id, session in cleanup_actions:
                 del self.sessions[session_id]
-                print(log_step('SESSION', 'SUCCESS', f'会话已清理 {session_id[:8]}', 
-                              {'cleanup_reason': action_type,
-                               'remaining_sessions': len(self.sessions)}))
+                self.logger.sess.info('Session cleaned up', 
+                              {'session_id': session_id[:8], 'cleanup_reason': action_type,
+                               'remaining_sessions': len(self.sessions)})
             
             if cleanup_actions:
-                print(log_step('SESSION', 'SUMMARY', '本轮清理完成', 
+                self.logger.sess.info('Cleanup round completed', 
                               {'cleaned_count': len(cleanup_actions),
-                               'remaining_total': len(self.sessions)}))
+                               'remaining_total': len(self.sessions)})
             else:
-                print(log_step('SESSION', 'INFO', '本轮检查未发现需要清理的会话'))
+                self.logger.sess.info('No sessions needed cleaning in this round')
     
     def _perform_deep_validation(self):
         """深度验证会话有效性"""
         with self._lock:
-            print(log_step('SESSION', 'VALIDATE', '执行深度会话验证'))
+            self.logger.sess.info('Performing deep session validation')
             
             valid_sessions = {}
             invalid_count = 0
@@ -222,28 +227,29 @@ class StrictSessionManager:
                     valid_sessions[session_id] = session
                 else:
                     invalid_count += 1
-                    print(log_step('SESSION', 'INVALID', f'发现无效会话 {session_id[:8]}', 
-                                  {'registered': session.is_registered,
+                    self.logger.sess.warn('Found invalid session', 
+                                  {'session_id': session_id[:8],
+                                   'registered': session.is_registered,
                                    'expired': session.is_expired(),
-                                   'function_count': len(session.client_metadata.get('functions', []))}))
+                                   'function_count': len(session.client_metadata.get('functions', []))})
             
             if invalid_count > 0:
                 self.sessions = valid_sessions
-                print(log_step('SESSION', 'REPAIR', '深度验证修复完成', 
+                self.logger.sess.info('Deep validation repair completed', 
                               {'removed_invalid': invalid_count,
-                               'remaining_valid': len(valid_sessions)}))
+                               'remaining_valid': len(valid_sessions)})
     
     def register_session(self, session_id: str, client_metadata: Dict[str, Any]) -> EnhancedClientSession:
         """严格会话注册（基于函数调用）"""
         with self._lock:
             # 检查是否已存在相同会话
             if session_id in self.sessions:
-                print(log_step('SESSION', 'WARNING', '重复会话注册尝试', 
-                              {'session_id': session_id[:8]}))
+                self.logger.sess.warn('Duplicate session registration attempt', 
+                              {'session_id': session_id[:8]})
                 # 移除旧会话
                 old_session = self.sessions.pop(session_id)
-                print(log_step('SESSION', 'CLEANUP', '清理重复会话', 
-                              {'old_session': old_session.session_id[:8]}))
+                self.logger.sess.info('Cleaning up duplicate session', 
+                              {'old_session': old_session.session_id[:8]})
             
             # 创建新会话
             now = datetime.now()
@@ -259,14 +265,11 @@ class StrictSessionManager:
             
             self.sessions[session_id] = session
             
-            print(log_step('SESSION', 'REGISTER', '新会话注册成功', 
+            self.logger.sess.info('New session registered successfully', 
                           {'session_id': session_id[:8],
                            'client_type': client_metadata.get('client_type', 'unknown'),
                            'function_count': len(client_metadata.get('functions', [])),
-                           'expires_in': self.session_timeout.total_seconds()/60}))
-            
-            print(log_communication('SESSION', 'CREATE', 'Session Registration',
-                                  session.to_dict()))
+                           'expires_in': self.session_timeout.total_seconds()/60})
             
             return session
     
@@ -276,8 +279,8 @@ class StrictSessionManager:
             session = self.sessions.get(session_id)
             
             if not session:
-                print(log_step('SESSION', 'MISSING', '会话不存在', 
-                              {'session_id': session_id[:8]}))
+                self.logger.sess.warn('Session does not exist', 
+                              {'session_id': session_id[:8]})
                 return None
             
             # 检查会话状态
@@ -289,19 +292,19 @@ class StrictSessionManager:
                 'active': not session.is_inactive(self.inactivity_timeout.total_seconds()/60)
             }
             
-            print(log_step('SESSION', 'VALIDATE', f'会话验证 {session_id[:8]}', validation_checks))
+            self.logger.sess.debug(f'Session validation {session_id[:8]}', validation_checks)
             
             # 如果会话无效，立即清理
             if not all(validation_checks.values()):
-                print(log_step('SESSION', 'REJECT', '无效会话被拒绝', 
-                              {'session_id': session_id[:8], 'checks': validation_checks}))
+                self.logger.sess.warn('Invalid session rejected', 
+                              {'session_id': session_id[:8], 'checks': validation_checks})
                 del self.sessions[session_id]
                 return None
             
             # 更新活动时间
             session.update_activity()
-            print(log_step('SESSION', 'ACCEPT', '会话验证通过', 
-                          {'session_id': session_id[:8]}))
+            self.logger.sess.info('Session validation passed', 
+                          {'session_id': session_id[:8]})
             
             return session
     
@@ -318,12 +321,12 @@ class StrictSessionManager:
             if session and session.is_registered and not session.is_expired():
                 session.update_heartbeat()
                 session.update_activity()
-                print(log_step('SESSION', 'HEARTBEAT', '心跳更新成功', 
-                              {'session_id': session_id[:8]}))
+                self.logger.sess.info('Heartbeat updated successfully', 
+                              {'session_id': session_id[:8]})
                 return True
             
-            print(log_step('SESSION', 'HEARTBEAT_FAIL', '心跳更新失败', 
-                          {'session_id': session_id[:8], 'reason': '会话不存在或已过期'}))
+            self.logger.sess.warn('Heartbeat update failed', 
+                          {'session_id': session_id[:8], 'reason': '会话不存在或已过期'})
             return False
     
     def register_session_with_functions(self, session_id: str, client_metadata: Dict[str, Any], 
@@ -350,14 +353,14 @@ class StrictSessionManager:
                     valid_functions.append(func_def)
                     function_names.append(func_def.get("name", "unknown"))
                 else:
-                    print(log_step('SESSION', 'WARNING', f'跳过不符合OpenAI标准的函数: {func_def.get("name", "unknown")}'))
+                    self.logger.sess.warn(f'Skipping non-OpenAI compliant function: {func_def.get("name", "unknown")}')
         
         # 存储验证后的函数定义（可能是空列表）
         client_metadata["functions"] = valid_functions
         client_metadata["function_names"] = function_names
         
-        print(log_step('SESSION', 'REGISTER', f'注册会话（函数数量: {len(valid_functions)}）', 
-                      {'session_id': session_id[:8], 'functions': function_names if function_names else '普通对话模式'}))
+        self.logger.sess.info(f'Session registered (function count: {len(valid_functions)})', 
+                      {'session_id': session_id[:8], 'functions': function_names if function_names else '普通对话模式'})
         
         return self.register_session(session_id, client_metadata)
 
@@ -373,11 +376,9 @@ class StrictSessionManager:
         with self._lock:
             if session_id in self.sessions:
                 session = self.sessions.pop(session_id)
-                print(log_step('SESSION', 'UNREGISTER', '会话主动注销', 
+                self.logger.sess.info('Session actively unregistered', 
                               {'session_id': session_id[:8],
-                               'was_active': session.is_active()}))
-                print(log_communication('SESSION', 'DESTROY', 'Session Unregistration',
-                                      {'session_id': session_id, 'reason': 'client_request'}))
+                               'was_active': session.is_active()})
                 return True
             return False
     
@@ -408,12 +409,12 @@ class StrictSessionManager:
                 'cleanup_pending': expired + disconnected + inactive
             }
             
-            print(log_step('SESSION', 'STATS', '会话统计信息', stats))
+            self.logger.sess.info('Session statistics', stats)
             return stats
     
     def shutdown(self):
         """关闭会话管理器"""
-        print(log_step('SESSION', 'SHUTDOWN', '开始关闭会话管理器'))
+        self.logger.sess.info('Shutting down session manager')
         self._running = False
         
         if self._cleanup_thread:
@@ -423,8 +424,8 @@ class StrictSessionManager:
             cleanup_count = len(self.sessions)
             self.sessions.clear()
         
-        print(log_step('SESSION', 'SHUTDOWN_COMPLETE', '会话管理器已关闭', 
-                      {'cleaned_sessions': cleanup_count}))
+        self.logger.sess.info('Session manager closed', 
+                      {'cleaned_sessions': cleanup_count})
 
 
 # 全局会话管理器实例

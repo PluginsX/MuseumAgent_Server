@@ -15,9 +15,12 @@ from ..models.function_calling_models import (
     is_valid_openai_function,
     normalize_to_openai_format
 )
-from ..common.log_formatter import log_step, log_communication
+from ..common.enhanced_logger import get_enhanced_logger
 
 router = APIRouter(prefix="/api/v1/functions", tags=["函数管理"])
+
+# 初始化日志记录器
+logger = get_enhanced_logger()
 
 @router.post("/register")
 async def register_functions(request: FunctionRegistrationRequest):
@@ -25,10 +28,10 @@ async def register_functions(request: FunctionRegistrationRequest):
     注册客户端自定义函数 - 严格遵循OpenAI Function Calling标准
     """
     try:
-        print(log_step('FUNCTION', 'INFO', '开始函数注册', {
+        logger.func.info('Starting function registration', {
             'client_id': request.client_id,
             'function_count': len(request.functions)
-        }))
+        })
         
         validation_results = []
         registered_functions = []
@@ -43,7 +46,7 @@ async def register_functions(request: FunctionRegistrationRequest):
                     "status": "rejected",
                     "reason": "函数定义不符合OpenAI Function Calling标准"
                 })
-                print(log_step('FUNCTION', 'WARNING', f'函数验证失败: {func_name}'))
+                logger.func.warn(f'Function validation failed: {func_name}')
                 continue
             
             # 规范化为标准格式
@@ -55,7 +58,7 @@ async def register_functions(request: FunctionRegistrationRequest):
                     "status": "approved",
                     "reason": "符合OpenAI标准"
                 })
-                print(log_step('FUNCTION', 'SUCCESS', f'函数注册成功: {func_name}'))
+                logger.func.info(f'Function registered successfully: {func_name}')
                 
             except Exception as e:
                 validation_results.append({
@@ -63,7 +66,7 @@ async def register_functions(request: FunctionRegistrationRequest):
                     "status": "rejected", 
                     "reason": f"函数格式规范化失败: {str(e)}"
                 })
-                print(log_step('FUNCTION', 'ERROR', f'函数规范化失败: {func_name}', {'error': str(e)}))
+                logger.func.error(f'Function normalization failed: {func_name}', {'error': str(e)})
         
         response = {
             "status": "success",
@@ -73,16 +76,16 @@ async def register_functions(request: FunctionRegistrationRequest):
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_step('FUNCTION', 'SUCCESS', '函数注册完成', {
+        logger.func.info('Function registration completed', {
             'total': len(request.functions),
             'approved': len(registered_functions),
             'rejected': len(request.functions) - len(registered_functions)
-        }))
+        })
         
         return response
         
     except Exception as e:
-        print(log_step('FUNCTION', 'ERROR', '函数注册过程异常', {'error': str(e)}))
+        logger.func.error('Function registration process exception', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"函数注册失败: {str(e)}")
 
 @router.post("/validate")

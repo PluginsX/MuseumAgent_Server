@@ -9,8 +9,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 import aiohttp
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 
 
@@ -19,7 +18,7 @@ class TextProcessingService:
     
     def __init__(self):
         """初始化文本处理服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config = get_global_config()
         self.llm_config = self.config.get("llm", {})
         self.srs_config = self.config.get("semantic_retrieval", {})
@@ -54,13 +53,12 @@ class TextProcessingService:
             
             # 记录客户端消息接收
             ui_preview = user_input[:50] + ("..." if len(user_input) > 50 else "")
-            print(log_communication('TEXT_SERVICE', 'RECEIVE', 'User Message', 
-                                   request, 
-                                   {'preview': ui_preview}))
+            self.logger.func.info('User message received', 
+                                   {'session_id': request.session_id, 'user_input_preview': request.user_input[:50]})
             
             # 记录处理开始
-            print(log_step('TEXT_SERVICE', 'START', '开始处理用户请求', 
-                          {'scene_type': scene_type, 'enable_tts': enable_tts}))
+            self.logger.func.info('Starting to process user request', 
+                          {'session_id': request.session_id, 'request_type': request.type})
             
             # 1. 执行SRS检索
             print(f"[TextService] 步骤1: 执行SRS检索")
@@ -90,12 +88,12 @@ class TextProcessingService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('TEXT_SERVICE', 'SUCCESS', '文本处理完成', 
-                          {'response_size': len(str(llm_response))}))
+            self.logger.func.info('Text processing completed', 
+                          {'response_size': len(str(llm_response))})
             return result
             
         except Exception as e:
-            self.logger.error(f"文本处理失败: {str(e)}")
+            self.logger.sys.error(f"文本处理失败: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"文本处理失败: {str(e)}",
@@ -125,16 +123,16 @@ class TextProcessingService:
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        print(log_communication('SRS', 'RECEIVE', 'SRS检索结果', 
-                                               {'result_count': len(result.get('artifacts', []))}))
+                        self.logger.rag.info('SRS search results received', 
+                                               {'artifact_count': len(result.get('artifacts', []))})
                         return result
                     else:
                         error_text = await response.text()
-                        print(log_step('SRS', 'ERROR', f'SRS检索失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.rag.error(f'SRS search failed', 
+                                      {'status': response.status, 'error': error_text})
                         return {"artifacts": [], "error": f"SRS检索失败: {error_text}"}
         except Exception as e:
-            self.logger.error(f"SRS检索异常: {str(e)}")
+            self.logger.sys.error(f"SRS检索异常: {str(e)}")
             return {"artifacts": [], "error": f"SRS检索异常: {str(e)}"}
     
     async def _call_llm(self, user_input: str, scene_type: str, srs_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -174,8 +172,8 @@ class TextProcessingService:
                     if response.status == 200:
                         result = await response.json()
                         content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                        print(log_communication('LLM', 'RECEIVE', 'LLM响应', 
-                                               {'content_length': len(content)}))
+                        self.logger.llm.info('LLM response received', 
+                                               {'content_length': len(content)})
                         return {
                             "content": content,
                             "model": result.get("model"),
@@ -183,11 +181,11 @@ class TextProcessingService:
                         }
                     else:
                         error_text = await response.text()
-                        print(log_step('LLM', 'ERROR', f'LLM调用失败', 
-                                      {'status': response.status, 'error': error_text}))
+                        self.logger.llm.error(f'LLM call failed', 
+                                      {'status': response.status, 'error': error_text})
                         raise Exception(f"LLM调用失败: {error_text}")
         except Exception as e:
-            self.logger.error(f"LLM调用异常: {str(e)}")
+            self.logger.sys.error(f"LLM调用异常: {str(e)}")
             raise
     
     async def stream_process_text(self, request: Dict[str, Any], token: str = None) -> AsyncGenerator[Dict[str, Any], None]:
@@ -275,7 +273,7 @@ class TextProcessingService:
                             "message": f"流式处理失败: {error_text}"
                         }
         except Exception as e:
-            self.logger.error(f"流式文本处理失败: {str(e)}")
+            self.logger.sys.error(f"流式文本处理失败: {str(e)}")
             yield {
                 "type": "error",
                 "message": f"流式处理失败: {str(e)}"
@@ -309,7 +307,7 @@ class TextProcessingService:
                 }
             }
         except Exception as e:
-            self.logger.error(f"批量文本处理失败: {str(e)}")
+            self.logger.sys.error(f"批量文本处理失败: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"批量处理失败: {str(e)}",

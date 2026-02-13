@@ -14,8 +14,7 @@ import threading
 from collections import OrderedDict
 import aioredis
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step
+from src.common.enhanced_logger import get_enhanced_logger
 
 
 class LRUCache:
@@ -119,7 +118,7 @@ class PerformanceOptimizer:
     
     def __init__(self):
         """初始化性能优化器"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         
         # L1缓存（内存缓存）
         self.l1_cache = LRUCache(max_size=1000, ttl_seconds=300)
@@ -134,16 +133,16 @@ class PerformanceOptimizer:
         # 任务队列
         self.task_queues = {}
         
-        print(log_step('PERFORMANCE', 'INIT', '性能优化器初始化完成'))
+        self.logger.sys.info('Performance optimizer initialized')
     
     def _init_redis_cache(self):
         """初始化Redis缓存"""
         try:
             # 这里可以连接到Redis服务器
             # self.l2_cache = aioredis.from_url("redis://localhost:6379", decode_responses=True)
-            print(log_step('PERFORMANCE', 'INFO', 'Redis缓存未启用（需要配置Redis服务器）'))
+            self.logger.sys.info('Redis cache not enabled (Redis server configuration required)')
         except Exception as e:
-            print(log_step('PERFORMANCE', 'WARNING', f'Redis缓存初始化失败: {str(e)}'))
+            self.logger.sys.warn(f'Redis cache initialization failed: {str(e)}')
     
     def cache_result(self, ttl_seconds: int = 300, max_size: int = 1000):
         """
@@ -164,7 +163,7 @@ class PerformanceOptimizer:
                 # 尝试从缓存获取
                 cached_result = cache.get(cache_key)
                 if cached_result is not None:
-                    print(log_step('CACHE', 'HIT', f'缓存命中: {func.__name__}', {'key': cache_key}))
+                    self.logger.sys.info('Cache hit', {'function': func.__name__, 'key': cache_key})
                     return cached_result
                 
                 # 执行函数
@@ -172,7 +171,7 @@ class PerformanceOptimizer:
                 
                 # 存入缓存
                 cache.set(cache_key, result)
-                print(log_step('CACHE', 'MISS', f'缓存未命中，已存储: {func.__name__}', {'key': cache_key}))
+                self.logger.sys.info('Cache miss, stored', {'function': func.__name__, 'key': cache_key})
                 
                 return result
             
@@ -184,7 +183,7 @@ class PerformanceOptimizer:
                 # 尝试从缓存获取
                 cached_result = cache.get(cache_key)
                 if cached_result is not None:
-                    print(log_step('CACHE', 'HIT', f'缓存命中: {func.__name__}', {'key': cache_key}))
+                    self.logger.sys.info('Cache hit', {'function': func.__name__, 'key': cache_key})
                     return cached_result
                 
                 # 执行函数
@@ -192,7 +191,7 @@ class PerformanceOptimizer:
                 
                 # 存入缓存
                 cache.set(cache_key, result)
-                print(log_step('CACHE', 'MISS', f'缓存未命中，已存储: {func.__name__}', {'key': cache_key}))
+                self.logger.sys.info('Cache miss, stored', {'function': func.__name__, 'key': cache_key})
                 
                 return result
             
@@ -241,12 +240,12 @@ class PerformanceOptimizer:
                 last_exception = e
                 if attempt < max_retries:
                     sleep_time = delay * (backoff ** attempt)
-                    print(log_step('RETRY', 'ATTEMPT', f'第 {attempt + 1} 次重试', 
-                                  {'func': func.__name__, 'sleep': sleep_time, 'error': str(e)}))
+                    self.logger.sys.info('Retry attempt', 
+                                  {'attempt': attempt + 1, 'function': func.__name__, 'sleep': sleep_time, 'error': str(e)})
                     await asyncio.sleep(sleep_time)
                 else:
-                    print(log_step('RETRY', 'FAILED', f'重试失败，共 {max_retries + 1} 次尝试', 
-                                  {'func': func.__name__, 'error': str(e)}))
+                    self.logger.sys.error('Retry failed', 
+                                  {'attempts': max_retries + 1, 'function': func.__name__, 'error': str(e)})
         
         raise last_exception
     
@@ -353,11 +352,12 @@ class PerformanceOptimizer:
                 cpu_time = end_cpu - start_cpu
                 
                 op_name = name or func.__name__
-                print(log_step('PERFORMANCE', 'MEASURE', f'{op_name} 性能测量', {
+                self.logger.sys.info('Performance measurement', {
+                    'operation': op_name,
                     'duration_ms': round(duration * 1000, 2),
                     'cpu_time_ms': round(cpu_time * 1000, 2),
                     'success': success
-                }))
+                })
                 
                 if not success:
                     raise result
@@ -383,11 +383,12 @@ class PerformanceOptimizer:
                 cpu_time = end_cpu - start_cpu
                 
                 op_name = name or func.__name__
-                print(log_step('PERFORMANCE', 'MEASURE', f'{op_name} 性能测量', {
+                self.logger.sys.info('Performance measurement', {
+                    'operation': op_name,
                     'duration_ms': round(duration * 1000, 2),
                     'cpu_time_ms': round(cpu_time * 1000, 2),
                     'success': success
-                }))
+                })
                 
                 if not success:
                     raise result
@@ -409,7 +410,7 @@ class PerformanceOptimizer:
             func: 带缓存装饰器的函数
             args_list: 参数列表
         """
-        print(log_step('CACHE', 'WARMUP', f'开始预热缓存: {func.__name__}', {'count': len(args_list)}))
+        self.logger.sys.info('Starting cache warmup', {'function': func.__name__, 'count': len(args_list)})
         
         for args in args_list:
             if isinstance(args, tuple):
@@ -417,7 +418,7 @@ class PerformanceOptimizer:
             else:
                 await func(args)
         
-        print(log_step('CACHE', 'WARMUP', f'缓存预热完成: {func.__name__}'))
+        self.logger.sys.info('Cache warmup completed', {'function': func.__name__})
 
 
 # 全局性能优化器实例

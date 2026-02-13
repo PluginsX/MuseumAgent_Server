@@ -11,8 +11,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 from collections import defaultdict
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 from src.services.stt_service import STTService
 from src.services.tts_service import UnifiedTTSService as TTSService
@@ -24,7 +23,7 @@ class VoiceCallService:
     
     def __init__(self):
         """初始化语音通话服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config = get_global_config()
         self.stt_service = STTService()
         self.tts_service = TTSService()
@@ -53,12 +52,12 @@ class VoiceCallService:
             session_id = request.get("session_id", "")
             
             # 记录客户端消息接收
-            print(log_communication('VOICE_CALL_SERVICE', 'RECEIVE', '启动通话请求', 
-                                   {'call_id': call_id, 'session_id': session_id}))
+            self.logger.voice.info('Voice call start request received', 
+                                   {'call_id': call_id, 'session_id': session_id})
             
             # 记录处理开始
-            print(log_step('VOICE_CALL_SERVICE', 'START', '开始语音通话', 
-                          {'call_id': call_id}))
+            self.logger.voice.info('Starting voice call', 
+                          {'call_id': call_id})
             
             # 初始化通话上下文
             call_context = {
@@ -86,12 +85,12 @@ class VoiceCallService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('VOICE_CALL_SERVICE', 'SUCCESS', '语音通话启动完成', 
-                          {'call_id': call_id}))
+            self.logger.voice.info('Voice call started successfully', 
+                          {'call_id': call_id})
             return result
             
         except Exception as e:
-            self.logger.error(f"语音通话启动失败: {str(e)}")
+            self.logger.sys.error(f"语音通话启动失败: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"语音通话启动失败: {str(e)}",
@@ -140,12 +139,12 @@ class VoiceCallService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('VOICE_CALL_SERVICE', 'SUCCESS', '语音通话结束', 
-                          {'call_id': call_id}))
+            self.logger.voice.info('Voice call ended', 
+                          {'call_id': call_id, 'session_id': session_id})
             return result
             
         except Exception as e:
-            self.logger.error(f"语音通话结束失败: {str(e)}")
+            self.logger.sys.error(f"语音通话结束失败: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"语音通话结束失败: {str(e)}",
@@ -174,8 +173,8 @@ class VoiceCallService:
         
         try:
             # 记录接收到的音频块
-            print(log_communication('VOICE_CALL_SERVICE', 'RECEIVE', '音频块', 
-                                   {'call_id': call_id, 'chunk_size': len(audio_chunk)}))
+            self.logger.voice.info('Audio chunk received', 
+                                   {'call_id': call_id, 'chunk_size': len(audio_chunk)})
             
             # 将音频块添加到队列进行处理
             await call_context["processing_queue"].put({
@@ -226,7 +225,7 @@ class VoiceCallService:
                 }
                 
         except Exception as e:
-            self.logger.error(f"语音流处理失败: {str(e)}")
+            self.logger.sys.error(f"语音流处理失败: {str(e)}")
             yield {
                 "type": "error",
                 "message": f"语音流处理失败: {str(e)}"
@@ -278,7 +277,7 @@ class VoiceCallService:
                 return {"content": "抱歉，我没有理解您的意思。"}
                 
         except Exception as e:
-            self.logger.error(f"LLM响应生成失败: {str(e)}")
+            self.logger.sys.error(f"LLM响应生成失败: {str(e)}")
             return {"content": "抱歉，我现在无法处理您的请求。"}
     
     async def get_call_status(self, call_id: str, token: str = None) -> Dict[str, Any]:
@@ -319,7 +318,7 @@ class VoiceCallService:
             }
             
         except Exception as e:
-            self.logger.error(f"获取通话状态失败: {str(e)}")
+            self.logger.sys.error(f"获取通话状态失败: {str(e)}")
             return {
                 "code": 500,
                 "msg": f"获取通话状态失败: {str(e)}",
@@ -360,8 +359,8 @@ class VoiceCallService:
                     data = await websocket.receive_json()
                     message_type = data.get("type")
                     
-                    print(log_communication('VOICE_CALL_SERVICE', 'RECEIVE', '实时消息', 
-                                           data, {'call_id': call_id}))
+                    self.logger.voice.info('Real-time message received', 
+                                           {'call_id': call_id, 'message_type': data.get('type')})
                     
                     # 处理不同类型的消息
                     if message_type == "voice_data":
@@ -400,18 +399,18 @@ class VoiceCallService:
                         }))
                 
                 except websockets.exceptions.ConnectionClosed:
-                    print(log_step('VOICE_CALL_SERVICE', 'DISCONNECT', 'WebSocket连接断开', 
-                                  {'call_id': call_id}))
+                    self.logger.voice.info('WebSocket connection disconnected', 
+                                  {'call_id': call_id})
                     break
                 except Exception as e:
-                    self.logger.error(f"处理WebSocket消息异常: {str(e)}")
+                    self.logger.sys.error(f"处理WebSocket消息异常: {str(e)}")
                     await websocket.send(json.dumps({
                         "type": "error",
                         "message": f"处理消息异常: {str(e)}"
                     }))
         
         except Exception as e:
-            self.logger.error(f"实时通信处理失败: {str(e)}")
+            self.logger.sys.error(f"实时通信处理失败: {str(e)}")
             try:
                 await websocket.send(json.dumps({
                     "type": "error",

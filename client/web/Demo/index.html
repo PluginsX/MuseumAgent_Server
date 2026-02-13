@@ -19,7 +19,7 @@
                 <div class="config-content">
                     <div class="form-group">
                         <label for="serverUrl">服务器地址:</label>
-                        <input type="text" id="serverUrl" placeholder="输入服务器地址" value="http://localhost:8000">
+                        <input type="text" id="serverUrl" placeholder="输入服务器地址" value="http://localhost:8001">
                     </div>
                     <div class="form-group">
                         <label for="username">用户名:</label>
@@ -59,25 +59,44 @@
                     <div class="form-group">
                         <label for="functions">客户端支持的函数定义 (JSON格式):</label>
                         <textarea id="functions" class="functions-input" placeholder='[
-  {
-    "name": "get_weather",
-    "description": "获取天气信息",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "location": {
-          "type": "string",
-          "description": "城市名称"
-        }
-      },
-      "required": ["location"]
-    }
-  }
-]'></textarea>
+                        {
+                            "name": "get_weather",
+                            "description": "获取天气信息",
+                            "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                "type": "string",
+                                "description": "城市名称"
+                                }
+                            },
+                            "required": ["location"]
+                            }
+                        }
+                        ]'>[
+                        {
+                            "name": "get_weather",
+                            "description": "获取天气信息",
+                            "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                "type": "string",
+                                "description": "城市名称"
+                                }
+                            },
+                            "required": ["location"]
+                            }
+                        }
+                        ]</textarea>
                     </div>
                     <div class="form-group">
                         <label for="enableTTS">启用语音播报:</label>
                         <input type="checkbox" id="enableTTS">
+                    </div>
+                    <div class="form-group">
+                        <label for="autoPlayVoice">自动播放语音消息:</label>
+                        <input type="checkbox" id="autoPlayVoice" checked>
                     </div>
                     <div class="form-group">
                         <label>会话状态:</label>

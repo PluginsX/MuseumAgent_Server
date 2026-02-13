@@ -233,7 +233,7 @@
       "sdk_type": "dashscope-official-sdk",  /* 严格使用阿里云官方DashScope SDK */
       "model": "cosyvoice-v3-plus",
       "api_key": "sk-xxx",
-      "voice": "longanyang",
+      "voice": "longanhuan",
       "format": "mp3",
       "sample_rate": 22050,
       "timeout": 30

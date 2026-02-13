@@ -1,7 +1,7 @@
 {
   "server": {
     "host": "0.0.0.0",
-    "port": 8000,
+    "port": 8001,
     "reload": false,
     "cors_allow_origins": [
       "*"
@@ -89,7 +89,9 @@
   "tts": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "cosyvoice-v3-plus"
+    "model": "cosyvoice-v3-plus",
+    "voice": "longanhuan",
+    "format": "MP3_22050HZ_MONO_256KBPS"
   },
   "stt": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",

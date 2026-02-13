@@ -12,9 +12,10 @@ import json
 
 from ..session.strict_session_manager import strict_session_manager
 # 已移除旧的指令集模型导入 - 现在完全基于OpenAI函数调用标准
-from ..common.log_formatter import log_step, log_communication
+from ..common.enhanced_logger import get_enhanced_logger
 
 router = APIRouter(prefix="/api/session", tags=["会话管理"])
+logger = get_enhanced_logger()
 
 
 class ClientRegistrationRequest(BaseModel):
@@ -64,32 +65,31 @@ async def register_client_session(registration: ClientRegistrationRequest):
     """
     try:
         # 记录客户端注册请求
-        print(log_communication('CLIENT', 'RECEIVE', 'Client Registration', 
-                               registration.dict(), 
-                               {'client_type': registration.client_metadata.get('client_type')}))
+        logger.sess.info("Client registration request received", 
+                        {'client_type': registration.client_metadata.get('client_type')})
         
         # 验证基本字段
         if not registration.client_metadata:
-            print(log_step('CLIENT', 'ERROR', '无效的客户端注册数据格式'))
+            logger.sess.error("Invalid client registration data format")
             raise HTTPException(status_code=400, detail="无效的客户端注册数据格式")
         
         # 验证客户端类型（简化处理）
         client_type_str = registration.client_metadata.get("client_type", "custom")
         if not client_type_str:
             registration.client_metadata["client_type"] = "custom"
-            print(log_step('CLIENT', 'INFO', '设置默认客户端类型为custom'))
+            logger.sess.info("Set default client type to custom")
         
         # 生成唯一会话ID
         session_id = str(uuid.uuid4())
-        print(log_step('SESSION', 'REGISTER', '生成新会话ID', 
-                      {'session_id': session_id}))
+        logger.sess.info("New session ID generated", 
+                      {'session_id': session_id})
         
         # 函数定义是可选的 - 支持普通对话模式
         if registration.functions and len(registration.functions) > 0:
-            print(log_step('SESSION', 'INFO', '客户端提供函数定义，启用函数调用模式', 
-                          {'function_count': len(registration.functions)}))
+            logger.sess.info("Client provided function definitions, enabling function calling mode", 
+                          {'function_count': len(registration.functions)})
         else:
-            print(log_step('SESSION', 'INFO', '客户端未提供函数定义，启用普通对话模式'))
+            logger.sess.info("Client did not provide function definitions, enabling general chat mode")
             # 设置空函数列表而不是拒绝注册
             registration.functions = []
         
@@ -100,9 +100,9 @@ async def register_client_session(registration: ClientRegistrationRequest):
             functions=registration.functions
         )
         
-        print(log_step('SESSION', 'SUCCESS', '会话注册成功', 
+        logger.sess.info("Session registration successful", 
                       {'functions': len(registration.functions),
-                       'expires_at': session.expires_at.isoformat()}))
+                       'expires_at': session.expires_at.isoformat()})
         
         # 记录注册成功的响应
         response_data = {
@@ -110,7 +110,7 @@ async def register_client_session(registration: ClientRegistrationRequest):
             "expires_at": session.expires_at.isoformat(),
             "supported_features": ["dynamic_operations", "session_management", "heartbeat", "function_calling"]
         }
-        print(log_communication('CLIENT', 'SEND', 'Registration Success', response_data))
+        logger.sess.info("Registration success response sent", response_data)
         
         # 返回注册成功响应
         return ClientRegistrationResponse(
@@ -131,8 +131,8 @@ async def session_heartbeat(session_id: str = Header()):
     客户端定期调用以维持会话活跃
     """
     try:
-        print(log_step('SESSION', 'HEARTBEAT', '收到心跳请求', 
-                      {'session_id': session_id}))
+        logger.sess.info("Heartbeat request received", 
+                      {'session_id': session_id})
         
         is_valid = strict_session_manager.heartbeat(session_id)
         if is_valid:
@@ -140,15 +140,15 @@ async def session_heartbeat(session_id: str = Header()):
                 "status": "alive",
                 "session_valid": True
             }
-            print(log_communication('CLIENT', 'SEND', 'Heartbeat Response', response_data))
+            logger.sess.info("Heartbeat response sent", response_data)
             return HeartbeatResponse(
                 status="alive",
                 timestamp=datetime.now().isoformat(),
                 session_valid=True
             )
         else:
-            print(log_step('SESSION', 'ERROR', '心跳失败：会话不存在或已过期', 
-                          {'session_id': session_id}))
+            logger.sess.error("Heartbeat failed: session does not exist or has expired", 
+                          {'session_id': session_id})
             raise HTTPException(status_code=404, detail="会话不存在或已过期")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"心跳处理失败: {str(e)}")
@@ -161,23 +161,23 @@ async def unregister_session(session_id: str = Header()):
     客户端主动断开连接时调用
     """
     try:
-        print(log_step('SESSION', 'UNREGISTER', '收到注销请求', 
-                      {'session_id': session_id}))
+        logger.sess.info("Unregister request received", 
+                      {'session_id': session_id})
         
         if strict_session_manager.unregister_session(session_id):
             response_data = {
                 "status": "unregistered",
                 "message": "会话已成功注销"
             }
-            print(log_communication('CLIENT', 'SEND', 'Unregister Response', response_data))
+            logger.sess.info("Unregister response sent", response_data)
             return {
                 "status": "unregistered", 
                 "timestamp": datetime.now().isoformat(),
                 "message": "会话已成功注销"
             }
         else:
-            print(log_step('SESSION', 'ERROR', '注销失败：会话不存在', 
-                          {'session_id': session_id}))
+            logger.sess.error("Unregister failed: session does not exist", 
+                          {'session_id': session_id})
             raise HTTPException(status_code=404, detail="会话不存在")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"会话注销失败: {str(e)}")
@@ -264,18 +264,18 @@ async def validate_session_endpoint(session_id: str):
     验证会话是否有效
     """
     try:
-        print(log_step('SESSION', 'VALIDATE', '验证会话', {'session_id': session_id}))
+        logger.sess.info('Validating session', {'session_id': session_id})
         
         session = strict_session_manager.get_session(session_id)
         if session and not session.is_expired():
-            print(log_step('SESSION', 'SUCCESS', '会话有效', {'session_id': session_id}))
+            logger.sess.info('Session is valid', {'session_id': session_id})
             return {
                 "valid": True,
                 "session_id": session_id,
                 "expires_at": session.expires_at.isoformat()
             }
         else:
-            print(log_step('SESSION', 'ERROR', '会话无效或已过期', {'session_id': session_id}))
+            logger.sess.error('Session is invalid or has expired', {'session_id': session_id})
             raise HTTPException(status_code=404, detail="会话不存在或已过期")
     except HTTPException:
         raise
@@ -289,17 +289,17 @@ async def disconnect_session_endpoint(session_id: str):
     断开会话连接
     """
     try:
-        print(log_step('SESSION', 'DISCONNECT', '断开会话', {'session_id': session_id}))
+        logger.sess.info('Disconnecting session', {'session_id': session_id})
         
         if strict_session_manager.unregister_session(session_id):
-            print(log_step('SESSION', 'SUCCESS', '会话已断开', {'session_id': session_id}))
+            logger.sess.info('Session disconnected', {'session_id': session_id})
             return {
                 "message": "会话已断开",
                 "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
             }
         else:
-            print(log_step('SESSION', 'ERROR', '断开会话失败：会话不存在', {'session_id': session_id}))
+            logger.sess.error('Failed to disconnect session: session does not exist', {'session_id': session_id})
             raise HTTPException(status_code=404, detail="会话不存在")
     except HTTPException:
         raise

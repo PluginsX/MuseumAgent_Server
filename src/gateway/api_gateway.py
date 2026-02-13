@@ -9,10 +9,11 @@ import logging
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.common.config_utils import get_config_by_key, get_global_config
-from src.common.log_utils import get_logger
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.auth_utils import decode_access_token
 from src.api.auth_api import get_current_user
 from src.services.registry import service_registry
@@ -24,7 +25,7 @@ class APIGateway:
     
     def __init__(self, auto_init: bool = True):
         """初始化API网关"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.app = FastAPI(
             title="MuseumAgent API Gateway",
             description="博物馆智能体服务API网关",
@@ -90,7 +91,7 @@ class APIGateway:
         from src.services.session_service import SessionService
         service_registry.register_service("session", SessionService())
         
-        self.logger.info("所有服务已注册到网关")
+        self.logger.sys.info("All services registered to gateway")
     
     def _setup_routes(self):
         """设置路由"""
@@ -108,7 +109,7 @@ class APIGateway:
                 result = await service.process_text(request, token)
                 return result
             except Exception as e:
-                self.logger.error(f"文本处理失败: {str(e)}")
+                self.logger.api.error('Text processing failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"文本处理失败: {str(e)}")
         
         # 音频处理路由
@@ -120,7 +121,7 @@ class APIGateway:
                 result = await service.stt_convert(request, token)
                 return result
             except Exception as e:
-                self.logger.error(f"音频转文本失败: {str(e)}")
+                self.logger.api.error('Audio to text failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"音频转文本失败: {str(e)}")
         
         @self.app.post("/api/audio/tts")
@@ -131,7 +132,7 @@ class APIGateway:
                 result = await service.tts_convert(request, token)
                 return result
             except Exception as e:
-                self.logger.error(f"文本转音频失败: {str(e)}")
+                self.logger.api.error('Text to audio failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"文本转音频失败: {str(e)}")
         
         # 语音通话路由
@@ -143,7 +144,7 @@ class APIGateway:
                 result = await service.start_call(request, token)
                 return result
             except Exception as e:
-                self.logger.error(f"启动语音通话失败: {str(e)}")
+                self.logger.api.error('Start voice call failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"启动语音通话失败: {str(e)}")
         
         @self.app.post("/api/voice/end")
@@ -154,7 +155,7 @@ class APIGateway:
                 result = await service.end_call(call_id, token)
                 return result
             except Exception as e:
-                self.logger.error(f"结束语音通话失败: {str(e)}")
+                self.logger.api.error('End voice call failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"结束语音通话失败: {str(e)}")
         
         # 会话管理路由
@@ -166,7 +167,7 @@ class APIGateway:
                 result = await service.login(credentials)
                 return result
             except Exception as e:
-                self.logger.error(f"登录失败: {str(e)}")
+                self.logger.api.error('Login failed', {'error': str(e)})
                 raise HTTPException(status_code=401, detail=f"登录失败: {str(e)}")
 
         # 兼容性登录路由 - 为旧版前端提供兼容的返回格式
@@ -197,7 +198,7 @@ class APIGateway:
                         "error_code": result.get("code", 500)
                     }
             except Exception as e:
-                self.logger.error(f"登录失败: {str(e)}")
+                self.logger.api.error('Login failed', {'error': str(e)})
                 return {
                     "success": False,
                     "error": str(e),
@@ -212,8 +213,128 @@ class APIGateway:
                 result = await service.get_user_info(token)
                 return result
             except Exception as e:
-                self.logger.error(f"获取用户信息失败: {str(e)}")
+                self.logger.api.error('Get user info failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"获取用户信息失败: {str(e)}")
+        
+        # 会话管理路由
+        @self.app.post("/api/session/register")
+        async def register_session(request: Dict[str, Any], credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))):
+            """注册会话"""
+            try:
+                self.logger.sess.debug('Session registration request', {'request': request})
+                
+                if not credentials:
+                    raise HTTPException(status_code=401, detail="未提供认证信息")
+                
+                # 直接使用原始token
+                token = credentials.credentials
+                
+                service = service_registry.get_service("session")
+                self.logger.api.debug('Session service retrieved', {'service': service is not None})
+                
+                # 提取用户信息
+                user_info = await service.get_user_info(token)
+                self.logger.api.debug('User information retrieved', {'user_info': user_info})
+                
+                if user_info.get("code") != 200:
+                    raise HTTPException(status_code=401, detail="无效的令牌")
+                
+                username = user_info["data"]["username"]
+                
+                # 生成新的会话ID并注册会话
+                import secrets
+                session_id = f"sess_{secrets.token_hex(16)}"
+                
+                # 在会话服务中记录活跃会话
+                from datetime import datetime, timedelta
+                session_data = {
+                    "session_id": session_id,
+                    "username": username,
+                    "login_time": datetime.now(),
+                    "expires_at": datetime.now() + timedelta(seconds=service.jwt_expire_seconds),
+                    "active": True
+                }
+                service.active_sessions[session_id] = session_data
+                self.logger.api.debug('Session stored', {'session_id': session_id, 'total_sessions': len(service.active_sessions)})
+                
+                # 返回会话信息
+                result = {
+                    "code": 200,
+                    "msg": "会话注册成功",
+                    "data": {
+                        "session_id": session_id,
+                        "username": username,
+                        "registered_at": "now"
+                    },
+                    "timestamp": "now"
+                }
+                
+                self.logger.api.debug('Session registration response', {'result': result})
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                self.logger.api.error('Session register failed', {'error': str(e)})
+                raise HTTPException(status_code=500, detail=f"会话注册失败: {str(e)}")
+        
+        @self.app.post("/api/session/validate")
+        async def validate_session(request: Dict[str, Any], session_id: str = Header(None, alias="session_id"), credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))):
+            """验证会话"""
+            try:
+                # 优先从header获取session_id，如果没有则从请求体中获取
+                effective_session_id = session_id or request.get("session_id")
+                if not effective_session_id:
+                    raise HTTPException(status_code=400, detail="缺少会话ID")
+                
+                service = service_registry.get_service("session")
+                is_valid = await service.validate_session(effective_session_id)
+                
+                if not is_valid:
+                    raise HTTPException(status_code=401, detail="会话无效或已过期")
+                
+                result = {
+                    "code": 200,
+                    "msg": "会话验证成功",
+                    "data": {
+                        "session_id": effective_session_id,
+                        "valid": True
+                    },
+                    "timestamp": "now"
+                }
+                
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                self.logger.api.error('Session validate failed', {'error': str(e)})
+                raise HTTPException(status_code=500, detail=f"会话验证失败: {str(e)}")
+        
+        @self.app.post("/api/session/disconnect")
+        async def disconnect_session(request: Dict[str, Any], session_id: str = Header(None, alias="session_id"), credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))):
+            """断开会话"""
+            try:
+                # 优先从header获取session_id，如果没有则从请求体中获取
+                effective_session_id = session_id or request.get("session_id")
+                if not effective_session_id:
+                    raise HTTPException(status_code=400, detail="缺少会话ID")
+                
+                # 在实际应用中，可能会在这里清理会话数据
+                # 目前只是返回成功响应
+                result = {
+                    "code": 200,
+                    "msg": "会话断开成功",
+                    "data": {
+                        "session_id": effective_session_id
+                    },
+                    "timestamp": "now"
+                }
+                
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                self.logger.api.error('Disconnect session failed', {'error': str(e)})
+                raise HTTPException(status_code=500, detail=f"断开会话失败: {str(e)}")
         
         # 智能体解析路由
         from src.models.request_models import AgentParseRequest
@@ -225,16 +346,21 @@ class APIGateway:
             try:
                 logger = get_logger()
                 
+                # 验证会话是否已注册
+                if session_id:
+                    service = service_registry.get_service("session")
+                    is_valid = await service.validate_session(session_id)
+                    if not is_valid:
+                        raise HTTPException(status_code=401, detail="会话无效或未注册")
+                
                 # 记录客户端消息接收
                 ui_preview = request.user_input[:50] + ("..." if len(request.user_input) > 50 else "")
-                from src.common.log_formatter import log_communication, log_step
-                print(log_communication('CLIENT', 'RECEIVE', 'User Message', 
-                                       request.dict(), 
-                                       {'session_id': session_id, 'preview': ui_preview}))
+                self.logger.api.info("User message received", 
+                                   {'session_id': session_id, 'preview': ui_preview})
                 
                 # 记录处理开始
-                print(log_step('API', 'START', '开始处理用户请求', 
-                              {'client_type': request.client_type, 'scene_type': request.scene_type}))
+                self.logger.api.info('Starting to process user request', 
+                              {'client_type': request.client_type, 'scene_type': request.scene_type})
                 
                 # 调用指令生成器
                 generator = CommandGenerator()
@@ -246,16 +372,18 @@ class APIGateway:
                 )
                 
                 # 记录处理完成
-                print(log_step('API', 'SUCCESS', '请求处理完成', 
+                self.logger.api.info('Request processing completed', 
                               {'operation': command_dict.get('operation'), 
-                               'artifact_name': command_dict.get('artifact_name')}))
+                               'artifact_name': command_dict.get('artifact_name')})
                 
                 # 记录响应发送
-                print(log_communication('CLIENT', 'SEND', 'Agent Response', command_dict))
+                self.logger.api.info('Sending agent response to client', command_dict)
                 
                 return command_dict
+            except HTTPException:
+                raise
             except Exception as e:
-                self.logger.error(f"智能体解析失败: {str(e)}")
+                self.logger.api.error('Agent parse failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"智能体解析失败: {str(e)}")
         
         # 包含WebSocket API路由
@@ -264,31 +392,4 @@ class APIGateway:
     def get_app(self):
         """获取FastAPI应用实例"""
         return self.app
-
-
-# 服务注册表
-class ServiceRegistry:
-    """服务注册表"""
-    
-    def __init__(self):
-        self.services: Dict[str, Any] = {}
-    
-    def register_service(self, name: str, service: Any):
-        """注册服务"""
-        self.services[name] = service
-    
-    def get_service(self, name: str) -> Optional[Any]:
-        """获取服务"""
-        return self.services.get(name)
-    
-    def unregister_service(self, name: str):
-        """注销服务"""
-        if name in self.services:
-            del self.services[name]
-
-
-# 全局服务注册表实例
-service_registry = ServiceRegistry()
-
-# API网关将在main.py中初始化，此处不创建实例
 # app将通过get_app()方法在main.py中获取

@@ -12,13 +12,22 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.gateway.api_gateway import APIGateway
-from src.common.log_utils import get_logger
-from src.common.config_manager import load_config, get_global_config
+from src.common.enhanced_logger import get_enhanced_logger
+from src.common.config_utils import load_config, get_global_config
 from src.common.fault_tolerance import get_health_status
 
 
 def main():
     """主函数"""
+    import argparse
+    
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="博物馆智能体服务器")
+    parser.add_argument("--port", type=int, help="服务器端口")
+    parser.add_argument("--host", type=str, help="服务器主机")
+    parser.add_argument("--debug", action="store_true", help="启用调试模式")
+    args = parser.parse_args()
+    
     print("=" * 60)
     print("博物馆智能体服务器 - 优化架构版")
     print("启动时间:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -33,9 +42,17 @@ def main():
     config = get_global_config()
     server_config = config.get("server", {})
     
+    # 使用命令行参数覆盖配置
+    if args.port:
+        server_config["port"] = args.port
+    if args.host:
+        server_config["host"] = args.host
+    if args.debug:
+        server_config["debug"] = args.debug
+    
     # 初始化日志
-    logger = get_logger()
-    logger.info("博物馆智能体服务器启动")
+    logger = get_enhanced_logger()
+    logger.sys.info("博物馆智能体服务器启动")
     
     # 初始化API网关
     print("2. 初始化API网关...")
@@ -118,10 +135,10 @@ def main():
         
     except KeyboardInterrupt:
         print("\n\n收到停止信号，正在关闭服务器...")
-        logger.info("服务器正常关闭")
+        logger.sys.info("服务器正常关闭")
     except Exception as e:
         print(f"\n服务器启动失败: {e}")
-        logger.error(f"服务器启动异常: {e}")
+        logger.sys.error(f"服务器启动异常: {e}")
         sys.exit(1)
 
 

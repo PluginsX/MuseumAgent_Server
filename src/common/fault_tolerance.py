@@ -14,8 +14,7 @@ from functools import wraps
 import threading
 from contextlib import contextmanager
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step
+from src.common.enhanced_logger import get_enhanced_logger
 
 
 class ErrorType(Enum):
@@ -50,7 +49,7 @@ class ErrorHandler:
     
     def __init__(self):
         """初始化错误处理器"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.error_counts = {}  # 错误计数
         self.error_logs = []    # 错误日志
         self.max_log_entries = 1000  # 最大日志条目数
@@ -90,10 +89,10 @@ class ErrorHandler:
                 self.error_logs = self.error_logs[-self.max_log_entries:]
             
             # 记录到日志
-            print(log_step('ERROR_HANDLER', 'LOG', f'{error_type.value}: {message}', {
+            self.logger.err.info(f'{error_type.value}: {message}', {
                 'context': context,
                 'timestamp': error_info.timestamp.isoformat()
-            }))
+            })
     
     def get_error_stats(self) -> Dict[str, Any]:
         """
@@ -196,7 +195,7 @@ class CircuitBreaker:
         self.success_count = 0
         self.lock = threading.RLock()
         
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
     
     def call(self, func: Callable, *args, **kwargs) -> Any:
         """
@@ -295,7 +294,7 @@ class FallbackManager:
     def __init__(self):
         """初始化降级管理器"""
         self.fallback_functions = {}
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
     
     def register_fallback(self, service_name: str, fallback_func: Callable):
         """
@@ -354,7 +353,7 @@ class FallbackManager:
                     self.logger.info(f"降级函数执行成功: {service_name}")
                     return result
                 except Exception as fallback_error:
-                    self.logger.error(f"降级函数也失败: {str(fallback_error)}")
+                    self.logger.sys.error('Fallback function also failed', {'error': str(fallback_error)})
                     raise e  # 重新抛出原始错误
             else:
                 self.logger.warning(f"未找到降级函数: {service_name}")
@@ -366,7 +365,7 @@ class FaultToleranceManager:
     
     def __init__(self):
         """初始化容错管理器"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.error_handler = ErrorHandler()
         self.circuit_breakers = {}
         self.fallback_manager = FallbackManager()
@@ -483,7 +482,7 @@ class FaultToleranceManager:
                             self.logger.info(f"第 {attempt + 1} 次重试，延迟 {delay:.2f}s: {str(e)}")
                             await asyncio.sleep(delay)
                         else:
-                            self.logger.error(f"重试失败，共 {max_retries + 1} 次尝试: {str(e)}")
+                            self.logger.sys.error('Retry failed', {'error': str(e), 'attempts': max_retries + 1})
                 
                 raise last_exception
             
@@ -506,7 +505,7 @@ class FaultToleranceManager:
                             self.logger.info(f"第 {attempt + 1} 次重试，延迟 {delay:.2f}s: {str(e)}")
                             time.sleep(delay)
                         else:
-                            self.logger.error(f"重试失败，共 {max_retries + 1} 次尝试: {str(e)}")
+                            self.logger.sys.error('Retry failed', {'error': str(e), 'attempts': max_retries + 1})
                 
                 raise last_exception
             

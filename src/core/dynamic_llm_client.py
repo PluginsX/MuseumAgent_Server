@@ -12,7 +12,7 @@ from datetime import datetime
 from ..common.config_utils import get_global_config
 # 移除对已删除模块的导入
 # from ..session.session_manager import session_manager
-from ..common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 
 
 class DynamicLLMClient:
@@ -35,6 +35,9 @@ class DynamicLLMClient:
         # 缓存基础指令集（用于无会话情况下的fallback）
         self.base_operations = ["general_chat"]
         self.session_aware = True
+        
+        # 初始化日志记录器
+        self.logger = get_enhanced_logger()
     
     def generate_dynamic_prompt(self, session_id: str, user_input: str, 
                               scene_type: str = "public") -> str:
@@ -125,8 +128,8 @@ class DynamicLLMClient:
         if not self.base_url or not self.api_key:
             raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
         
-        print(log_step('LLM', 'SEND', '发送函数调用请求到LLM', 
-                      {'model': self.model, 'has_functions': 'functions' in payload}))
+        self.logger.llm.info('Sending function call request to LLM', 
+                          {'model': self.model, 'has_functions': 'functions' in payload})
         
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -135,8 +138,8 @@ class DynamicLLMClient:
         }
         
         # 记录发送的完整请求
-        print(log_communication('LLM', 'SEND', 'External LLM API', 
-                               payload, {'endpoint': url}))
+        self.logger.llm.info('Sending request to External LLM API', 
+                          {'payload': payload, 'endpoint': url})
         
         try:
             resp = requests.post(
@@ -146,7 +149,7 @@ class DynamicLLMClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
-            print(log_step('LLM', 'ERROR', 'LLM请求异常', {'error': str(e)}))
+            self.logger.llm.error('LLM request exception', {'error': str(e)})
             raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
         
         if resp.status_code != 200:
@@ -156,19 +159,18 @@ class DynamicLLMClient:
                 err_body = err_json.get("error", {}).get("message", err_body)
             except Exception:
                 pass
-            print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
-                          {'status_code': resp.status_code, 'error': err_body}))
+            self.logger.llm.error('LLM API call failed', 
+                          {'status_code': resp.status_code, 'error': err_body})
             raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
         
         response_data = resp.json()
         
         # 记录接收到的完整响应
-        print(log_communication('LLM', 'RECEIVE', 'External LLM API', 
-                               {'full_response': response_data},
-                               {'response_size': len(str(response_data))}))
+        self.logger.llm.info('Received response from External LLM API', 
+                          {'response_size': len(str(response_data))})
         
-        print(log_step('LLM', 'RECEIVE', '成功接收LLM响应', 
-                      {'has_choices': len(response_data.get('choices', [])) > 0}))
+        self.logger.llm.info('Successfully received LLM response', 
+                          {'has_choices': len(response_data.get('choices', [])) > 0})
         return response_data
 
     def parse_function_call_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -231,8 +233,8 @@ class DynamicLLMClient:
         if not self.base_url or not self.api_key:
             raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
         
-        print(log_step('LLM', 'SEND', '发送提示词到LLM', 
-                      {'prompt_length': len(prompt), 'model': self.model}))
+        self.logger.llm.info('Sending prompt to LLM', 
+                          {'prompt_length': len(prompt), 'model': self.model})
         
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -257,9 +259,9 @@ class DynamicLLMClient:
         # 添加JSON格式强制参数（如果模型支持）
         try:
             payload["response_format"] = {"type": "json_object"}
-            print(log_step('LLM', 'INFO', '启用JSON格式强制约束'))
+            self.logger.llm.info('Enabled JSON format constraint')
         except:
-            print(log_step('LLM', 'WARNING', '当前模型不支持JSON格式强制，使用提示词约束'))
+            self.logger.llm.warn('Current model does not support JSON format constraint, using prompt constraint')
         
         # 添加可选参数
         if self.parameters.get("stream") is not None:
@@ -274,8 +276,8 @@ class DynamicLLMClient:
             payload["n"] = self.parameters["n"]
         
         # 记录发送的完整请求
-        print(log_communication('LLM', 'SEND', 'External LLM API', 
-                               payload, {'endpoint': url}))
+        self.logger.llm.info('Sending request to External LLM API', 
+                          {'endpoint': url})
         
         try:
             resp = requests.post(
@@ -285,7 +287,7 @@ class DynamicLLMClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
-            print(log_step('LLM', 'ERROR', 'LLM请求异常', {'error': str(e)}))
+            self.logger.llm.error('LLM request exception', {'error': str(e)})
             raise RuntimeError(f"LLM 请求异常: {str(e)}") from e
         
         if resp.status_code != 200:
@@ -295,8 +297,8 @@ class DynamicLLMClient:
                 err_body = err_json.get("error", {}).get("message", err_body)
             except Exception:
                 pass
-            print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
-                          {'status_code': resp.status_code, 'error': err_body}))
+            self.logger.llm.error('LLM API call failed', 
+                          {'status_code': resp.status_code, 'error': err_body})
             raise RuntimeError(f"LLM API 调用失败 [code={resp.status_code}]: {err_body}")
         
         data = resp.json()
@@ -312,12 +314,11 @@ class DynamicLLMClient:
         result = str(text).strip()
         
         # 记录接收到的完整响应
-        print(log_communication('LLM', 'RECEIVE', 'External LLM API', 
-                               {'full_response': result, 'usage': data.get('usage', {})},
-                               {'response_length': len(result)}))
+        self.logger.llm.info('Received response from External LLM API', 
+                          {'response_length': len(result)})
         
-        print(log_step('LLM', 'RECEIVE', '成功接收LLM响应', 
-                      {'response_length': len(result)}))
+        self.logger.llm.info('Successfully received LLM response', 
+                          {'response_length': len(result)})
         return result
 
     async def stream_chat_completions(self, messages: List[Dict[str, Any]]):
@@ -333,8 +334,8 @@ class DynamicLLMClient:
         if not self.base_url or not self.api_key:
             raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
         
-        print(log_step('LLM', 'SEND', '发送流式请求到LLM', 
-                      {'model': self.model, 'messages_count': len(messages)}))
+        self.logger.llm.info('Sending streaming request to LLM', 
+                          {'model': self.model, 'messages_count': len(messages)})
         
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -352,9 +353,8 @@ class DynamicLLMClient:
         }
         
         # 记录发送的请求
-        print(log_communication('LLM', 'SEND', 'External LLM API (Stream)', 
-                               {'model': self.model, 'stream': True},
-                               {'endpoint': url}))
+        self.logger.llm.info('Sending request to External LLM API (Stream)', 
+                          {'model': self.model, 'stream': True, 'endpoint': url})
         
         try:
             import aiohttp
@@ -362,8 +362,8 @@ class DynamicLLMClient:
                 async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        print(log_step('LLM', 'ERROR', f'LLM API调用失败', 
-                                      {'status_code': resp.status, 'error': error_text}))
+                        self.logger.llm.error('LLM API call failed', 
+                                      {'status_code': resp.status, 'error': error_text})
                         raise RuntimeError(f"LLM API 调用失败 [code={resp.status}]: {error_text}")
                     
                     async for line in resp.content:
@@ -380,13 +380,13 @@ class DynamicLLMClient:
                                         delta = choices[0].get('delta', {})
                                         content = delta.get('content', '')
                                         if content:
-                                            print(log_communication('LLM', 'RECEIVE', '流式数据块', 
-                                                                   {'content': content[:50]}))
+                                            self.logger.llm.info('Received streaming data chunk', 
+                                                                   {'content': content[:50]})
                                             yield content
                                 except json.JSONDecodeError:
                                     pass
         except Exception as e:
-            print(log_step('LLM', 'ERROR', '流式请求异常', {'error': str(e)}))
+            self.logger.llm.error('Streaming request exception', {'error': str(e)})
             raise RuntimeError(f"LLM 流式请求异常: {str(e)}") from e
 
 

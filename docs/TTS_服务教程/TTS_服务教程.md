@@ -114,7 +114,7 @@ dashscope.base_websocket_api_url='wss://dashscope.aliyuncs.com/api-ws/v1/inferen
 # 模型
 model = "cosyvoice-v3-flash"
 # 音色
-voice = "longanyang"
+voice = "longanhuan"
 
 # 实例化SpeechSynthesizer，并在构造方法中传入模型（model）、音色（voice）等请求参数
 synthesizer = SpeechSynthesizer(model=model, voice=voice)
@@ -170,7 +170,7 @@ dashscope.base_websocket_api_url='wss://dashscope.aliyuncs.com/api-ws/v1/inferen
 # 模型
 model = "cosyvoice-v3-flash"
 # 音色
-voice = "longanyang"
+voice = "longanhuan"
 
 
 # 定义回调接口
@@ -305,7 +305,7 @@ dashscope.base_websocket_api_url='wss://dashscope.aliyuncs.com/api-ws/v1/inferen
 # 模型
 model = "cosyvoice-v3-flash"
 # 音色
-voice = "longanyang"
+voice = "longanhuan"
 
 
 # 定义回调接口
@@ -393,14 +393,14 @@ print('[Metric] requestId为：{}，首包延迟为：{}毫秒'.format(
 | volume | int | 否   | 音量。 默认值：50。 取值范围：\\[0, 100\\]。50代表标准音量。音量大小与该值呈线性关系，0为静音，100为最大音量。 **重要** 该字段在不同版本的DashScope SDK中有所不同： - 1.20.10及以后版本的SDK：volume - 1.20.10以前版本的SDK：volumn |
 | speech\\_rate | float | 否   | 语速。 默认值：1.0。 取值范围：\\[0.5, 2.0\\]。1.0为标准语速，小于1.0则减慢，大于1.0则加快。 |
 | pitch\\_rate | float | 否   | 音高。该值作为音高调节的乘数，但其与听感上的音高变化并非严格的线性或对数关系，建议通过测试选择合适的值。 默认值：1.0。 取值范围：\\[0.5, 2.0\\]。1.0为音色自然音高。大于1.0则音高变高，小于1.0则音高变低。 |
-| bit\\_rate | int | 否   | 音频码率（单位kbps）。音频格式为opus时，支持通过`bit_rate`参数调整码率。 默认值：32。 取值范围：\\[6, 510\\]。 `cosyvoice-v1`模型不支持该参数。 **说明** `bit_rate`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanyang", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"bit_rate": 32}) ``` |
+| bit\\_rate | int | 否   | 音频码率（单位kbps）。音频格式为opus时，支持通过`bit_rate`参数调整码率。 默认值：32。 取值范围：\\[6, 510\\]。 `cosyvoice-v1`模型不支持该参数。 **说明** `bit_rate`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanhuan", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"bit_rate": 32}) ``` |
 | word\\_timestamp\\_enabled | bool | 否   | 是否开启字级别时间戳。 默认值：False。 - True：开启。 - False：关闭。 该功能仅适用于cosyvoice-v3-flash、cosyvoice-v3-plus和cosyvoice-v2模型的复刻音色，以及[音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list)中标记为支持的系统音色。 > 时间戳结果仅能通过回调接口获取 **说明** `word_timestamp_enabled`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longyingjing_v3", callback=callback, # 时间戳结果仅能通过回调接口获取 additional_params={'word_timestamp_enabled': True}) ``` **点击查看完整示例代码** ``` # coding=utf-8 import dashscope from dashscope.audio.tts_v2 import * import json from datetime import datetime def get_timestamp(): now = datetime.now() formatted_timestamp = now.strftime("[%Y-%m-%d %H:%M:%S.%f]") return formatted_timestamp # 若没有将API Key配置到环境变量中，需将your-api-key替换为自己的API Key # dashscope.api_key = "your-api-key" model = "cosyvoice-v3-flash" # 音色 voice = "longyingjing_v3" # 定义回调接口 class Callback(ResultCallback): _player = None _stream = None def on_open(self): self.file = open("output.mp3", "wb") print("连接建立：" + get_timestamp()) def on_complete(self): print("语音合成完成，所有合成结果已被接收：" + get_timestamp()) def on_error(self, message: str): print(f"语音合成出现异常：{message}") def on_close(self): print("连接关闭：" + get_timestamp()) self.file.close() def on_event(self, message): json_data = json.loads(message) if json_data['payload'] and json_data['payload']['output'] and json_data['payload']['output']['sentence']: sentence = json_data['payload']['output']['sentence'] print(f'sentence: {sentence}') # 获取句子的编号 # index = sentence['index'] words = sentence['words'] if words: for word in words: print(f'word: {word}') # 示例值：word: {'text': '今', 'begin_index': 0, 'end_index': 1, 'begin_time': 80, 'end_time': 200} def on_data(self, data: bytes) -> None: print(get_timestamp() + " 二进制音频长度为：" + str(len(data))) self.file.write(data) callback = Callback() # 实例化SpeechSynthesizer，并在构造方法中传入模型（model）、音色（voice）等请求参数 synthesizer = SpeechSynthesizer( model=model, voice=voice, callback=callback, additional_params={'word_timestamp_enabled': True} ) # 发送待合成文本，在回调接口的on_data方法中实时获取二进制音频 synthesizer.call("今天天气怎么样？") # 首次发送文本时需建立 WebSocket 连接，因此首包延迟会包含连接建立的耗时 print('[Metric] requestId为：{}，首包延迟为：{}毫秒'.format( synthesizer.get_last_request_id(), synthesizer.get_first_package_delay())) ``` |
 | seed | int | 否   | 生成时使用的随机数种子，使合成的效果产生变化。在模型版本、文本、音色及其他参数均相同的前提下，使用相同的seed可复现相同的合成结果。 默认值0。 取值范围：\\[0, 65535\\]。 cosyvoice-v1不支持该功能。 |
 | language\\_hints | list\\[str\\] | 否   | 指定语音合成的目标语言，提升合成效果。cosyvoice-v1不支持该功能。 当数字、缩写、符号等朗读方式或者小语种合成效果不符合预期时使用，例如： - 数字朗读方式不符合预期，“hello, this is 110”读成“hello, this is one one zero”而非“hello, this is 幺幺零” - 符号朗读不准确，“@”读成“艾特”而非“at” - 小语种合成效果差，合成不自然 取值范围： - zh：中文 - en：英文 - fr：法语 - de：德语 - ja：日语 - ko：韩语 - ru：俄语 **注意**：此参数为数组，但当前版本仅处理第一个元素，因此建议只传入一个值。 **重要** 此参数用于指定语音合成的目标语言，该设置与声音复刻时的样本音频的语种无关。如果您需要设置复刻任务的源语言，请参见[CosyVoice声音复刻API](https://help.aliyun.com/zh/model-studio/cosyvoice-clone-api)。 |
 | instruction | str | 否   | 设置指令，用于控制方言、情感或角色等合成效果。该功能仅适用于cosyvoice-v3-flash模型的复刻音色，以及[音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list)中标记为支持Instruct的系统音色。 **使用要求**： - 指令必须使用固定格式和内容（见下方说明） - 不设置时不生效（无默认值） **支持的功能**： - 指定方言 - 适用音色：仅复刻音色 - 格式：“`请用<方言>表达。`”（注意，结尾一定不要遗漏句号，使用时将“`<方言>`”替换为具体的`方言`，例如替换为`广东话`）。 - 示例：“`请用广东话表达。`” - 支持的方言：广东话、东北话、甘肃话、贵州话、河南话、湖北话、江西话、闽南话、宁夏话、山西话、陕西话、山东话、上海话、四川话、天津话、云南话。 - 指定情感 - 适用音色 - 复刻音色 - [音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list)中标记为支持Instruct的系统音色 - 格式： - 复刻音色： 点击查看复刻音色指令格式 - `请尽可能非常大声地说一句话。` - `请用尽可能慢地语速说一句话。` - `请用尽可能快地语速说一句话。` - `请非常轻声地说一句话。` - `你可以慢一点说吗` - `你可以非常快一点说吗` - `你可以非常慢一点说吗` - `你可以快一点说吗` - `请非常生气地说一句话。` - `请非常开心地说一句话。` - `请非常恐惧地说一句话。` - `请非常伤心地说一句话。` - `请非常惊讶地说一句话。` - `请尽可能表现出坚定的感觉。` - `请尽可能表现出愤怒的感觉。` - `请尝试一下亲和的语调。` - `请用冷酷的语调讲话。` - `请用威严的语调讲话。` - `我想体验一下自然的语气。` - `我想看看你如何表达威胁。` - `我想看看你怎么表现智慧。` - `我想看看你怎么表现诱惑。` - `我想听听用活泼的方式说话。` - `我想听听你用激昂的感觉说话。` - `我想听听用沉稳的方式说话的样子。` - `我想听听你用自信的感觉说话。` - `你能用兴奋的感觉和我交流吗？` - `你能否展示狂傲的情绪表达？` - `你能展现一下优雅的情绪吗？` - `你可以用幸福的方式回答问题吗？` - `你可以做一个温柔的情感演示吗？` - `能用冷静的语调和我谈谈吗？` - `能用深沉的方法回答我吗？` - `能用粗犷的情绪态度和我对话吗？` - `用阴森的声音告诉我这个答案。` - `用坚韧的声音告诉我这个答案。` - `用自然亲切的闲聊风格叙述。` - `用广播剧博客主的语气讲话。` - 系统音色：系统音色和复刻音色的情感指令格式不同，详情请参见[音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list) - 指定场景、角色或身份等 - 适用音色：[音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list)中标记为支持Instruct的系统音色 - 格式：请参见[音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list) |
-| enable\\_aigc\\_tag | bool | 否   | 是否在生成的音频中添加AIGC隐性标识。设置为True时，会将隐性标识嵌入到支持格式（wav/mp3/opus）的音频中。 默认值：False。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `enable_aigc_tag`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanyang", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True}) ``` |
-| aigc\\_propagator | str | 否   | 设置AIGC隐性标识中的 `ContentPropagator` 字段，用于标识内容的传播者。仅在 `enable_aigc_tag` 为 `True` 时生效。 默认值：阿里云UID。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `aigc_propagator`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanyang", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True, "aigc_propagator": "xxxx"}) ``` |
-| aigc\\_propagate\\_id | str | 否   | 设置AIGC隐性标识中的 `PropagateID` 字段，用于唯一标识一次具体的传播行为。仅在 `enable_aigc_tag` 为 `True` 时生效。 默认值：本次语音合成请求Request ID。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `aigc_propagate_id`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanyang", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True, "aigc_propagate_id": "xxxx"}) ``` |
+| enable\\_aigc\\_tag | bool | 否   | 是否在生成的音频中添加AIGC隐性标识。设置为True时，会将隐性标识嵌入到支持格式（wav/mp3/opus）的音频中。 默认值：False。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `enable_aigc_tag`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanhuan", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True}) ``` |
+| aigc\\_propagator | str | 否   | 设置AIGC隐性标识中的 `ContentPropagator` 字段，用于标识内容的传播者。仅在 `enable_aigc_tag` 为 `True` 时生效。 默认值：阿里云UID。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `aigc_propagator`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanhuan", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True, "aigc_propagator": "xxxx"}) ``` |
+| aigc\\_propagate\\_id | str | 否   | 设置AIGC隐性标识中的 `PropagateID` 字段，用于唯一标识一次具体的传播行为。仅在 `enable_aigc_tag` 为 `True` 时生效。 默认值：本次语音合成请求Request ID。 仅cosyvoice-v3-flash、cosyvoice-v3-plus、cosyvoice-v2支持该功能。 **说明** `aigc_propagate_id`需要通过`additional_params`参数进行设置： ``` synthesizer = SpeechSynthesizer(model="cosyvoice-v3-flash", voice="longanhuan", format=AudioFormat.OGG_OPUS_16KHZ_MONO_16KBPS, additional_params={"enable_aigc_tag": True, "aigc_propagate_id": "xxxx"}) ``` |
 | callback | ResultCallback | 否   | [回调接口（ResultCallback）](#85d698b9f9g8s). |
 
 ## **关键接口**

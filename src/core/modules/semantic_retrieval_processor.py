@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 from semantic_retrieval_client import SemanticRetrievalClient
 from semantic_retrieval_client.exceptions import APIError
 from ...common.config_utils import get_global_config
-from ...common.log_formatter import log_step
+from ...common.enhanced_logger import get_enhanced_logger
 
 
 class SemanticRetrievalProcessor:
@@ -18,6 +18,9 @@ class SemanticRetrievalProcessor:
     
     def __init__(self):
         """初始化语义检索处理器"""
+        # 获取日志记录器
+        self.logger = get_enhanced_logger()
+        
         try:
             config = get_global_config()
             # 从全局配置中获取语义检索系统的连接信息
@@ -83,7 +86,7 @@ class SemanticRetrievalProcessor:
             top_k = self.top_k_default
         
         try:
-            log_step("SEMANTIC_RETRIEVAL", "INFO", f"开始语义检索，查询: {query[:50]}...")
+            self.logger.rag.info(f"Starting semantic retrieval, query: {query[:50]}...")
             
             # 执行搜索 - 通过远程语义检索系统
             search_result = self.client.search(
@@ -113,11 +116,11 @@ class SemanticRetrievalProcessor:
                 'response_time': search_result.response_time
             }
             
-            log_step("SEMANTIC_RETRIEVAL", "SUCCESS", f"语义检索完成，找到 {len(relevant_artifacts)} 条相关资料")
+            self.logger.rag.info(f"Semantic retrieval completed, found {len(relevant_artifacts)} relevant artifacts")
             return result
             
         except APIError as e:
-            log_step("SEMANTIC_RETRIEVAL", "ERROR", f"语义检索API错误: {str(e)}")
+            self.logger.rag.error(f"Semantic retrieval API error: {str(e)}")
             return {
                 'success': False,
                 'error': f'API错误: {str(e)}',
@@ -125,7 +128,7 @@ class SemanticRetrievalProcessor:
                 'query': query
             }
         except Exception as e:
-            log_step("SEMANTIC_RETRIEVAL", "ERROR", f"语义检索发生未知错误: {str(e)}")
+            self.logger.rag.error(f"Semantic retrieval unknown error occurred: {str(e)}")
             return {
                 'success': False,
                 'error': f'检索错误: {str(e)}',

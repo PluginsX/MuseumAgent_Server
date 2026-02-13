@@ -37,3 +37,6 @@
    # SRS(SemanticRetrievalSystem) // HTTPS API
    - Base_url: `http://localhost:12315/api/v1`
    - Api key: ``
+
+12. 永远不需要考虑兼容旧版本代码！新版本代码必须完全基于新的架构和协议！
+13. 严控文件命名规范！升级文件必须替换原文件，已有文件禁止新增多版本文件！文件名禁止出现版本修饰词，如new、fixed、simple等WWWWWWWW

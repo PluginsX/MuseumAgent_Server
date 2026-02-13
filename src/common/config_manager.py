@@ -11,8 +11,7 @@ from pathlib import Path
 import threading
 import asyncio
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step
+from src.common.enhanced_logger import get_enhanced_logger
 
 
 class ConfigurationManager:
@@ -20,7 +19,7 @@ class ConfigurationManager:
     
     def __init__(self, config_path: str = "./config/config.json"):
         """初始化配置管理器"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config_path = Path(config_path)
         self.config_data = {}
         self.lock = threading.RLock()  # 线程安全锁
@@ -39,7 +38,7 @@ class ConfigurationManager:
         try:
             with self.lock:
                 if not self.config_path.exists():
-                    self.logger.error(f"配置文件不存在: {self.config_path}")
+                    self.logger.sys.error('Config file not found', {'path': self.config_path})
                     return False
                 
                 # 检查文件修改时间
@@ -56,16 +55,16 @@ class ConfigurationManager:
                 
                 self.last_modified = current_modified
                 
-                print(log_step('CONFIG', 'LOAD', '配置文件加载成功', 
-                              {'file': str(self.config_path), 'size': len(self.config_data)}))
+                self.logger.sys.info('Configuration file loaded successfully', 
+                              {'file': str(self.config_path), 'size': len(self.config_data)})
                 
                 return True
                 
         except json.JSONDecodeError as e:
-            self.logger.error(f"配置文件JSON格式错误: {e}")
+            self.logger.sys.error('Config file JSON format error', {'error': str(e)})
             return False
         except Exception as e:
-            self.logger.error(f"加载配置文件失败: {e}")
+            self.logger.sys.error('Load config file failed', {'error': str(e)})
             return False
     
     def get_config(self) -> Dict[str, Any]:
@@ -142,13 +141,13 @@ class ConfigurationManager:
                 with open(self.config_path, 'w', encoding='utf-8') as f:
                     json.dump(self.config_data, f, ensure_ascii=False, indent=2)
                 
-                print(log_step('CONFIG', 'SAVE', '配置文件保存成功', 
-                              {'file': str(self.config_path)}))
+                self.logger.sys.info('Configuration file saved successfully', 
+                              {'file': str(self.config_path)})
                 
                 return True
                 
         except Exception as e:
-            self.logger.error(f"保存配置文件失败: {e}")
+            self.logger.sys.error(f"保存配置文件失败: {e}")
             return False
     
     def validate_config(self) -> Dict[str, Any]:
@@ -276,7 +275,7 @@ class ConfigurationManager:
                 return True
             return False
         except Exception as e:
-            self.logger.error(f"检查配置文件变更失败: {e}")
+            self.logger.sys.error(f"检查配置文件变更失败: {e}")
             return False
 
 

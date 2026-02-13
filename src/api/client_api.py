@@ -9,13 +9,16 @@ from datetime import datetime
 import json
 
 from ..session.strict_session_manager import strict_session_manager
-from ..common.log_formatter import log_step, log_communication
+from ..common.enhanced_logger import get_enhanced_logger
 
 router = APIRouter(prefix="/api/admin/clients", tags=["客户端管理"])
 
 class ClientInfoResponse:
     """客户端信息响应模型"""
     pass
+
+# 初始化日志记录器
+logger = get_enhanced_logger()
 
 @router.get("/connected", response_model=List[Dict[str, Any]])
 async def get_connected_clients():
@@ -24,7 +27,7 @@ async def get_connected_clients():
     服务端已自动完成会话有效性检测和清理
     """
     try:
-        print(log_step('CLIENT', 'INFO', '获取连接客户端列表'))
+        logger.cli.info('Getting connected client list')
         
         # 服务端自动清理后返回活跃会话
         connected_sessions = strict_session_manager.get_all_sessions()
@@ -51,12 +54,12 @@ async def get_connected_clients():
             
             client_list.append(client_info)
         
-        print(log_step('CLIENT', 'SUCCESS', f'获取到 {len(client_list)} 个活跃客户端'))
+        logger.cli.info(f'Found {len(client_list)} active clients')
         
         return client_list
         
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '获取客户端列表失败', {'error': str(e)}))
+        logger.cli.error(f'Failed to get client list: {str(e)}')
         raise HTTPException(status_code=500, detail=f"获取客户端信息失败: {str(e)}")
 
 @router.get("/session/{session_id}")
@@ -65,7 +68,7 @@ async def get_client_details(session_id: str):
     获取特定会话的详细信息
     """
     try:
-        print(log_step('CLIENT', 'INFO', '获取客户端详情', {'session_id': session_id}))
+        logger.cli.info('Getting client details', {'session_id': session_id})
         
         session = strict_session_manager.validate_session(session_id)
         if not session:
@@ -87,13 +90,13 @@ async def get_client_details(session_id: str):
             "time_remaining": (session.expires_at - datetime.now()).total_seconds() if session.expires_at > datetime.now() else 0
         }
         
-        print(log_step('CLIENT', 'SUCCESS', '获取客户端详情成功'))
+        logger.cli.info('Successfully got client details')
         return client_details
         
     except HTTPException:
         raise
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '获取客户端详情失败', {'error': str(e)}))
+        logger.cli.error('Failed to get client details', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"获取客户端详情失败: {str(e)}")
 
 @router.get("/session/{session_id}/status")
@@ -102,7 +105,7 @@ async def check_client_status(session_id: str):
     检查客户端连接状态（主动探测）
     """
     try:
-        print(log_step('CLIENT', 'INFO', '主动检查客户端状态', {'session_id': session_id}))
+        logger.cli.info('Actively checking client status', {'session_id': session_id})
         
         session = strict_session_manager.validate_session(session_id)
         if not session:
@@ -134,15 +137,15 @@ async def check_client_status(session_id: str):
         
         if should_cleanup:
             status_info["reason"] = "会话无响应或已过期"
-            print(log_step('CLIENT', 'WARNING', '检测到僵尸会话', 
-                          {'session_id': session_id, 'reason': status_info['reason']}))
+            logger.cli.warn('Zombie session detected', 
+                          {'session_id': session_id, 'reason': status_info['reason']})
         else:
-            print(log_step('CLIENT', 'INFO', '客户端状态正常'))
+            logger.cli.info('Client status is normal')
             
         return status_info
         
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '检查客户端状态失败', {'error': str(e)}))
+        logger.cli.error('Failed to check client status', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"检查客户端状态失败: {str(e)}")
 
 
@@ -152,7 +155,7 @@ async def cleanup_zombie_sessions():
     主动清理僵尸会话
     """
     try:
-        print(log_step('CLIENT', 'INFO', '开始清理僵尸会话'))
+        logger.cli.info('Starting zombie session cleanup')
         
         # 触发即时清理
         strict_session_manager._perform_strict_cleanup()
@@ -169,12 +172,12 @@ async def cleanup_zombie_sessions():
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_step('CLIENT', 'SUCCESS', '僵尸会话清理完成', 
-                      {'cleaned_count': result['cleaned_up']}))
+        logger.cli.info('Zombie session cleanup completed', 
+                      {'cleaned_count': result['cleaned_up']})
         return result
         
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '清理僵尸会话失败', {'error': str(e)}))
+        logger.cli.error('Failed to cleanup zombie sessions', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"清理僵尸会话失败: {str(e)}")
 
 @router.get("/stats")
@@ -183,7 +186,7 @@ async def get_client_statistics():
     获取客户端统计信息
     """
     try:
-        print(log_step('CLIENT', 'INFO', '获取客户端统计信息'))
+        logger.cli.info('Getting client statistics')
         
         connected_sessions = strict_session_manager.get_all_sessions()
         
@@ -209,11 +212,11 @@ async def get_client_statistics():
             "timestamp": datetime.now().isoformat()
         }
         
-        print(log_step('CLIENT', 'SUCCESS', '获取客户端统计信息成功'))
+        logger.cli.info('Successfully got client statistics')
         return stats
         
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '获取客户端统计信息失败', {'error': str(e)}))
+        logger.cli.error('Failed to get client statistics', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"获取客户端统计信息失败: {str(e)}")
 
 
@@ -223,7 +226,7 @@ async def disconnect_client_session(session_id: str):
     管理员强制断开客户端会话
     """
     try:
-        print(log_step('CLIENT', 'INFO', '管理员强制断开客户端会话', {'session_id': session_id}))
+        logger.cli.info('Admin forcing client session disconnect', {'session_id': session_id})
         
         # 验证会话是否存在
         session = strict_session_manager.validate_session(session_id)
@@ -234,7 +237,7 @@ async def disconnect_client_session(session_id: str):
         success = strict_session_manager.unregister_session(session_id)
         
         if success:
-            print(log_step('CLIENT', 'SUCCESS', '客户端会话已强制断开', {'session_id': session_id}))
+            logger.cli.info('Client session forcibly disconnected', {'session_id': session_id})
             return {
                 "message": "客户端连接已断开",
                 "session_id": session_id,
@@ -246,5 +249,5 @@ async def disconnect_client_session(session_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(log_step('CLIENT', 'ERROR', '强制断开会话失败', {'error': str(e)}))
+        logger.cli.error('Failed to forcibly disconnect session', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"断开会话失败: {str(e)}")

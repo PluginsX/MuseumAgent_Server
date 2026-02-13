@@ -10,8 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from passlib.context import CryptContext
 
-from src.common.log_utils import get_logger
-from src.common.log_formatter import log_step, log_communication
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 
 
@@ -20,7 +19,7 @@ class SessionService:
     
     def __init__(self):
         """初始化会话管理服务"""
-        self.logger = get_logger()
+        self.logger = get_enhanced_logger()
         self.config = get_global_config()
         
         # JWT配置
@@ -69,15 +68,15 @@ class SessionService:
         Returns:
             登录结果
         """
-        self.logger.info(f"用户登录尝试: {credentials.get('username', 'unknown')}")
+        self.logger.sess.info('User login attempt', {'username': credentials.get('username', 'unknown')})
         
         try:
             username = credentials.get("username", "")
             password = credentials.get("password", "")
             
             # 记录客户端消息接收
-            print(log_communication('SESSION_SERVICE', 'RECEIVE', '登录请求', 
-                                   {'username': username}))
+            self.logger.sess.info('Received login request', 
+                                   {'username': username})
             
             # 验证用户凭据
             user = await self._authenticate_user(username, password)
@@ -90,40 +89,27 @@ class SessionService:
             
             # 生成JWT令牌
             access_token = await self._create_access_token(
-                data={"sub": username, "session_id": f"sess_{secrets.token_hex(16)}"}
+                data={"sub": username}
             )
             
-            # 创建会话
-            session_id = f"sess_{secrets.token_hex(16)}"
-            session_data = {
-                "session_id": session_id,
-                "username": username,
-                "login_time": datetime.now(),
-                "expires_at": datetime.now() + timedelta(seconds=self.jwt_expire_seconds),
-                "active": True
-            }
-            
-            self.active_sessions[session_id] = session_data
-            
-            # 构建响应
+            # 构建响应 - 不包含session_id，会话必须通过/api/session/register单独注册
             result = {
                 "code": 200,
-                "msg": "登录成功",
+                "msg": "登录成功，请调用/api/session/register注册会话",
                 "data": {
                     "access_token": access_token,
                     "token_type": "bearer",
-                    "session_id": session_id,
                     "expires_in": self.jwt_expire_seconds
                 },
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('SESSION_SERVICE', 'SUCCESS', '用户登录成功', 
-                          {'username': username, 'session_id': session_id}))
+            self.logger.sess.info('User login successful', 
+                          {'username': username})
             return result
             
         except Exception as e:
-            self.logger.error(f"登录失败: {str(e)}")
+            self.logger.sess.error('Login failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"登录失败: {str(e)}",
@@ -191,8 +177,8 @@ class SessionService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('SESSION_SERVICE', 'SUCCESS', '获取用户信息成功', 
-                          {'username': username}))
+            self.logger.sess.info('User information retrieved successfully', 
+                          {'username': username})
             return result
             
         except jwt.ExpiredSignatureError:
@@ -201,14 +187,14 @@ class SessionService:
                 "msg": "令牌已过期",
                 "data": None
             }
-        except jwt.JWTError:
+        except Exception:
             return {
                 "code": 401,
                 "msg": "无效的令牌",
                 "data": None
             }
         except Exception as e:
-            self.logger.error(f"获取用户信息失败: {str(e)}")
+            self.logger.sess.error('Get user info failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"获取用户信息失败: {str(e)}",
@@ -262,12 +248,12 @@ class SessionService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('SESSION_SERVICE', 'SUCCESS', '用户登出成功', 
-                          {'session_id': session_id}))
+            self.logger.sess.info('User logout successful', 
+                          {'session_id': session_id})
             return result
             
         except Exception as e:
-            self.logger.error(f"登出失败: {str(e)}")
+            self.logger.sess.error('Logout failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"登出失败: {str(e)}",
@@ -312,8 +298,8 @@ class SessionService:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(log_step('SESSION_SERVICE', 'SUCCESS', '会话刷新成功', 
-                          {'username': username}))
+            self.logger.sess.info('Session refreshed successfully', 
+                          {'username': username})
             return result
             
         except jwt.ExpiredSignatureError:
@@ -322,14 +308,14 @@ class SessionService:
                 "msg": "令牌已过期，需要重新登录",
                 "data": None
             }
-        except jwt.JWTError:
+        except Exception:
             return {
                 "code": 401,
                 "msg": "无效的令牌",
                 "data": None
             }
         except Exception as e:
-            self.logger.error(f"会话刷新失败: {str(e)}")
+            self.logger.sess.error('Session refresh failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"会话刷新失败: {str(e)}",
@@ -376,7 +362,7 @@ class SessionService:
             return result
             
         except Exception as e:
-            self.logger.error(f"获取会话信息失败: {str(e)}")
+            self.logger.sess.error('Get session info failed', {'error': str(e)})
             return {
                 "code": 500,
                 "msg": f"获取会话信息失败: {str(e)}",

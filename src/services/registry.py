@@ -5,6 +5,7 @@
 """
 from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
+from src.common.enhanced_logger import get_enhanced_logger
 
 
 class ServiceInterface(ABC):
@@ -25,7 +26,8 @@ class ServiceRegistry:
     def register_service(self, name: str, service: Any):
         """注册服务"""
         self.services[name] = service
-        print(f"服务 {name} 已注册")
+        logger = get_enhanced_logger()
+        logger.sys.info(f"Service {name} registered")
     
     def get_service(self, name: str) -> Optional[Any]:
         """获取服务"""
@@ -35,7 +37,8 @@ class ServiceRegistry:
         """注销服务"""
         if name in self.services:
             del self.services[name]
-            print(f"服务 {name} 已注销")
+            logger = get_enhanced_logger()
+            logger.sys.info(f"Service {name} unregistered")
 
 
 # 全局服务注册表实例
