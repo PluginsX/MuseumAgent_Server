@@ -13,7 +13,7 @@ from src.common.auth_utils import (
     verify_password,
 )
 from src.db.database import get_db_session
-from src.db.models import User
+from src.db.models import AdminUser
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
@@ -43,7 +43,7 @@ def login(
     db: Session = Depends(get_db_session),
 ):
     """登录，返回 JWT"""
-    user = db.query(User).filter(User.username == body.username).first()
+    user = db.query(AdminUser).filter(AdminUser.username == body.username).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not verify_password(body.password, user.password_hash):
@@ -68,7 +68,7 @@ def login(
 def get_me(payload: dict = Depends(get_current_user), db: Session = Depends(get_db_session)):
     """获取当前用户信息"""
     user_id = payload.get("user_id")
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     return UserInfoResponse(

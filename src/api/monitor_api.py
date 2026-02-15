@@ -9,7 +9,7 @@ from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from src.common.log_utils import get_logger
+from src.common.enhanced_logger import get_enhanced_logger
 from src.common.response_utils import success_response
 
 router = APIRouter()
@@ -94,7 +94,8 @@ async def clear_logs():
             # 清空文件内容
             with open(log_file, 'w', encoding='utf-8') as f:
                 f.write('')
-            get_logger().info("日志文件已清空")
+            logger = get_enhanced_logger()
+            logger.sys.info("日志文件已清空")
             return success_response(msg="日志已清空")
         else:
             return success_response(msg="日志文件不存在")

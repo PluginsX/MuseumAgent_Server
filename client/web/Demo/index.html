@@ -3,176 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MuseumAgent 客户端Demo</title>
+    <title>MuseumAgent - 智能体客户端</title>
+    <link rel="icon" href="res/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header class="app-header">
-            <h1>MuseumAgent 客户端Demo</h1>
-            <p class="subtitle">博物馆智能体Web客户端测试</p>
-        </header>
-
-        <div class="main-container">
-            <div class="config-panel server-config">
-                <h2>1. 服务器配置</h2>
-                <div class="config-content">
-                    <div class="form-group">
-                        <label for="serverUrl">服务器地址:</label>
-                        <input type="text" id="serverUrl" placeholder="输入服务器地址" value="http://localhost:8001">
-                    </div>
-                    <div class="form-group">
-                        <label for="username">用户名:</label>
-                        <input type="text" id="username" placeholder="输入用户名" value="123">
-                    </div>
-                    <div class="form-group">
-                        <label for="password">密码:</label>
-                        <input type="password" id="password" placeholder="输入密码" value="123">
-                    </div>
-                    <button id="loginBtn" class="btn btn-primary">登录</button>
-                    <button id="logoutBtn" class="btn btn-secondary" disabled>登出</button>
-                    
-                    <div class="form-group">
-                        <label>登录状态:</label>
-                        <span id="loginStatus" class="status-badge status-offline">未登录</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="resize-handle" id="resizeHandle1"></div>
-
-            <div class="config-panel client-config">
-                <h2>2. 客户端配置</h2>
-                <div class="config-content">
-                    <div class="form-group">
-                        <label for="clientType">客户端类型:</label>
-                        <input type="text" id="clientType" placeholder="输入客户端类型" value="web">
-                    </div>
-                    <div class="form-group">
-                        <label for="sceneType">场景类型:</label>
-                        <input type="text" id="sceneType" placeholder="输入场景类型" value="public">
-                    </div>
-                    <div class="form-group">
-                        <label for="spiritId">精灵ID:</label>
-                        <input type="text" id="spiritId" placeholder="输入精灵ID">
-                    </div>
-                    <div class="form-group">
-                        <label for="functions">客户端支持的函数定义 (JSON格式):</label>
-                        <textarea id="functions" class="functions-input" placeholder='[
-                        {
-                            "name": "get_weather",
-                            "description": "获取天气信息",
-                            "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": {
-                                "type": "string",
-                                "description": "城市名称"
-                                }
-                            },
-                            "required": ["location"]
-                            }
-                        }
-                        ]'>[
-                        {
-                            "name": "get_weather",
-                            "description": "获取天气信息",
-                            "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": {
-                                "type": "string",
-                                "description": "城市名称"
-                                }
-                            },
-                            "required": ["location"]
-                            }
-                        }
-                        ]</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="enableTTS">启用语音播报:</label>
-                        <input type="checkbox" id="enableTTS">
-                    </div>
-                    <div class="form-group">
-                        <label for="autoPlayVoice">自动播放语音消息:</label>
-                        <input type="checkbox" id="autoPlayVoice" checked>
-                    </div>
-                    <div class="form-group">
-                        <label>会话状态:</label>
-                        <span id="sessionStatus" class="status-badge status-offline">未连接</span>
-                    </div>
-                    <div class="form-group">
-                        <label>会话ID:</label>
-                        <span id="sessionId">-</span>
-                    </div>
-                    <button id="registerSessionBtn" class="btn btn-primary" disabled>注册会话</button>
-                    <button id="validateSessionBtn" class="btn btn-secondary" disabled>验证会话</button>
-                    <button id="disconnectSessionBtn" class="btn btn-danger" disabled>断开会话</button>
-                </div>
-            </div>
-
-            <div class="resize-handle" id="resizeHandle2"></div>
-
-            <div class="chat-panel">
-                <h2>3. 聊天窗</h2>
-                <div class="chat-container">
-                    <div class="message-history" id="messageHistory">
-                        <!-- 消息历史记录 -->
-                    </div>
-                    <div class="message-input">
-                        <div class="input-tools">
-                            <button id="textInputBtn" class="tool-btn active">文本</button>
-                            <button id="voiceInputBtn" class="tool-btn">语音</button>
-                            <button id="callInputBtn" class="tool-btn" disabled>语音电话</button>
-                        </div>
-                        <div class="input-area">
-                            <textarea id="chatInput" placeholder="输入消息..."></textarea>
-                        </div>
-                        <div class="voice-recorder" id="voiceRecorder" style="display: none;">
-                            <button id="sendFileBtn" class="btn btn-secondary">发送文件</button>
-                            <button id="startRecordBtn" class="btn btn-primary">开始录音</button>
-                            <button id="stopRecordBtn" class="btn btn-danger" disabled>停止录音</button>
-                            <span id="recordTime" class="record-time">00:00</span>
-                        </div>
-                        <button id="sendMessageBtn" class="btn btn-primary">发送</button>
-                    </div>
-                </div>
-                
-                <!-- 语音电话模式界面 -->
-                <div class="voice-call-overlay" id="voiceCallOverlay" style="display: none;">
-                    <div class="voice-call-content">
-                        <div class="call-status">
-                            <div class="call-avatar">
-                                <div class="avatar-icon">🤖</div>
-                            </div>
-                            <h3>语音通话中</h3>
-                            <p id="callDuration">00:00</p>
-                        </div>
-                        <div class="call-controls">
-                            <button id="endCallBtn" class="btn btn-danger btn-large">挂断</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="resize-handle resize-handle-vertical" id="resizeHandle3"></div>
-
-        <div class="log-panel">
-            <div class="log-header">
-                <h2>控制台</h2>
-                <button id="clearLogBtn" class="btn btn-small btn-secondary">清空</button>
-            </div>
-            <div id="logContent" class="log-content"></div>
-        </div>
-    </div>
-
     <!-- 隐藏的文件输入元素 -->
     <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
 
-    <script src="js/lib/MuseumAgent_Client.js"></script>
-    <script src="js/app.js"></script>
+    <!-- 脚本引用 -->
+    <script src="./js/lib/MuseumAgent_Client.js"></script>
+    <script type="module">
+        // 导入MuseumAgentDemo类
+        import MuseumAgentDemo from './js/app.js';
+        
+        // 全局变量
+        window.MuseumAgentDemo = MuseumAgentDemo;
+    </script>
+    <script type="module" src="./js/app/main.js"></script>
 </body>
 </html>

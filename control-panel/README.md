@@ -1,73 +1,256 @@
-# React + TypeScript + Vite
+# MuseumAgent 控制面板
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 React + TypeScript + Vite + Ant Design 的现代化管理后台系统。
 
-Currently, two official plugins are available:
+## 🚀 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **框架**: React 19.2.0 + TypeScript
+- **构建工具**: Vite 7.2.4
+- **UI组件库**: Ant Design 5.22.0
+- **路由**: React Router 7.0.0
+- **HTTP客户端**: Axios 1.7.0
+- **日期处理**: Day.js 1.11.10
 
-## React Compiler
+## 📦 功能模块
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 核心功能
+- ✅ 用户认证与授权
+- ✅ 仪表盘概览
+- ✅ LLM/STT/TTS/SRS 配置管理
+- ✅ 客户端连接管理
+- ✅ 会话配置管理
+- ✅ 系统监控与日志
+- ✅ 用户管理
+- ✅ 客户账户管理
+- ✅ 审计日志查询
 
-## Expanding the ESLint configuration
+### 技术特性
+- 🎨 现代化UI设计，响应式布局
+- 🔐 基于Token的身份认证
+- 🚦 统一的API请求拦截和错误处理
+- 📱 移动端适配
+- ⚡ 路由懒加载，优化首屏加载
+- 🛡️ 错误边界保护
+- 🔄 自动刷新和实时更新
+- 📊 数据可视化展示
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🛠️ 开发指南
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 环境要求
+- Node.js >= 18.0.0
+- npm >= 9.0.0 或 pnpm >= 8.0.0
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 安装依赖
+```bash
+npm install
+# 或
+pnpm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 开发模式
+```bash
+npm run dev
 ```
+访问 http://localhost:3000/Control
+
+### 构建生产版本
+```bash
+npm run build
+```
+
+### 预览生产构建
+```bash
+npm run preview
+```
+
+### 代码检查
+```bash
+npm run lint
+```
+
+## 📁 项目结构
+
+```
+control-panel/
+├── src/
+│   ├── api/              # API接口定义
+│   │   └── client.ts     # 统一的API客户端
+│   ├── components/       # 公共组件
+│   │   ├── ErrorBoundary.tsx    # 错误边界
+│   │   └── LoadingFallback.tsx  # 加载占位符
+│   ├── pages/            # 页面组件
+│   │   ├── Login.tsx           # 登录页
+│   │   ├── Layout.tsx          # 布局组件
+│   │   ├── Dashboard.tsx       # 仪表盘
+│   │   ├── ConfigLLM.tsx       # LLM配置
+│   │   ├── ConfigSTT.tsx       # STT配置
+│   │   ├── ConfigTTS.tsx       # TTS配置
+│   │   ├── ConfigSRS.tsx       # SRS配置
+│   │   ├── Clients.tsx         # 客户端管理
+│   │   ├── ClientManagement.tsx # 客户账户管理
+│   │   ├── SessionConfig.tsx   # 会话配置
+│   │   ├── Monitor.tsx         # 系统监控
+│   │   ├── Users.tsx           # 用户管理
+│   │   └── AuditLogs.tsx       # 审计日志
+│   ├── types/            # TypeScript类型定义
+│   │   └── index.ts
+│   ├── utils/            # 工具函数
+│   │   ├── request.ts    # HTTP请求封装
+│   │   └── helpers.ts    # 辅助函数
+│   ├── App.tsx           # 应用入口
+│   ├── main.tsx          # 主入口
+│   └── index.css         # 全局样式
+├── public/               # 静态资源
+├── dist/                 # 构建输出
+├── .env.development      # 开发环境变量
+├── .env.production       # 生产环境变量
+├── vite.config.ts        # Vite配置
+├── tsconfig.json         # TypeScript配置
+└── package.json          # 项目配置
+```
+
+## 🔧 配置说明
+
+### 环境变量
+在项目根目录创建 `.env.development` 和 `.env.production` 文件：
+
+```env
+# API基础URL
+VITE_API_BASE_URL=http://localhost:8001
+
+# 请求超时时间（毫秒）
+VITE_API_TIMEOUT=30000
+```
+
+### Vite配置
+- **Base URL**: `/Control/` - 应用的基础路径
+- **开发端口**: 3000
+- **代理配置**: 自动代理 `/api` 和 `/internal` 请求到后端服务器
+- **代码分割**: 自动分离 React 和 Ant Design 依赖
+
+## 🎨 主题定制
+
+项目使用 Ant Design 的主题定制功能，主色调为 `#42b883`（绿色）。
+
+可在 `src/App.tsx` 中修改主题配置：
+
+```typescript
+<ConfigProvider theme={{
+  token: {
+    colorPrimary: '#42b883',
+    // 其他主题配置...
+  }
+}}>
+```
+
+## 📝 API接口规范
+
+### 请求格式
+所有API请求自动携带以下header：
+- `Content-Type: application/json`
+- `Authorization: Bearer {token}` (登录后)
+
+### 响应格式
+统一的响应格式：
+```typescript
+{
+  code: 200,           // 状态码
+  msg: "success",      // 消息
+  data: {...}          // 数据
+}
+```
+
+### 错误处理
+- 401: 自动跳转到登录页
+- 403: 权限不足提示
+- 404: 资源不存在提示
+- 500: 服务器错误提示
+- 其他: 显示具体错误信息
+
+## 🔐 权限管理
+
+### 路由守卫
+使用 `Protected` 组件保护需要登录的路由：
+```typescript
+<Route path="/" element={<Protected><Layout /></Protected>}>
+  {/* 受保护的路由 */}
+</Route>
+```
+
+### Token管理
+- Token存储在 `localStorage` 中
+- 请求拦截器自动添加Token
+- Token过期自动跳转登录页
+
+## 🐛 调试技巧
+
+### 开发工具
+- React DevTools: 调试React组件
+- Redux DevTools: 查看状态管理（如需要）
+- Network面板: 查看API请求
+
+### 日志输出
+开发环境下，所有API请求和响应都会在控制台输出。
+
+### 错误追踪
+使用 `ErrorBoundary` 组件捕获并显示运行时错误。
+
+## 📊 性能优化
+
+### 已实现的优化
+- ✅ 路由懒加载
+- ✅ 代码分割（React、Ant Design分离）
+- ✅ 生产环境关闭 sourcemap
+- ✅ 图片和静态资源优化
+- ✅ 请求防抖和节流
+
+### 建议的优化
+- 使用虚拟滚动处理大列表
+- 实现请求缓存机制
+- 添加 Service Worker 支持离线访问
+
+## 🚀 部署指南
+
+### 构建
+```bash
+npm run build
+```
+
+### 部署到Nginx
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location /Control/ {
+        alias /path/to/dist/;
+        try_files $uri $uri/ /Control/index.html;
+    }
+    
+    location /api/ {
+        proxy_pass http://localhost:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## 🤝 贡献指南
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证。
+
+## 📮 联系方式
+
+如有问题或建议，请提交 Issue 或联系开发团队。
+
+---
+
+**注意**: 本项目仅供学习和参考使用。

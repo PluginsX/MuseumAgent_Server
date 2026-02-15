@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 会话管理服务模块
-管理用户会话和认证
+管理用户会话和认证 - 现在统一使用StrictSessionManager
 """
 import jwt
 import hashlib
@@ -12,10 +12,11 @@ from passlib.context import CryptContext
 
 from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
+from src.session.strict_session_manager import strict_session_manager
 
 
 class SessionService:
-    """会话管理服务"""
+    """会话管理服务 - 现在整合了StrictSessionManager功能"""
     
     def __init__(self):
         """初始化会话管理服务"""
@@ -30,17 +31,19 @@ class SessionService:
         # 密码哈希配置
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         
-        # 存储活跃会话
-        self.active_sessions = {}
-        
-        # 用户数据（实际应用中应使用数据库）
-        # 延迟初始化用户数据，避免在构造函数中进行哈希计算
-        self._users = None
+        # 现在使用统一的StrictSessionManager，不再维护本地active_sessions
+        # self.active_sessions = {}
+
+    @property
+    def active_sessions(self):
+        """提供active_sessions属性以兼容原有代码，但现在使用StrictSessionManager的数据"""
+        # 返回StrictSessionManager中的活跃会话
+        return strict_session_manager.get_all_sessions()
 
     @property
     def users(self):
         """懒加载用户数据"""
-        if self._users is None:
+        if not hasattr(self, '_users'):
             # 为避免bcrypt长度限制，使用较短的密码或备用哈希算法
             try:
                 hashed_password = self.pwd_context.hash("123")  # 默认密码
@@ -203,7 +206,7 @@ class SessionService:
     
     async def validate_session(self, session_id: str) -> bool:
         """
-        验证会话有效性
+        验证会话有效性 - 现在使用StrictSessionManager
         
         Args:
             session_id: 会话ID
@@ -211,18 +214,12 @@ class SessionService:
         Returns:
             会话是否有效
         """
-        if session_id not in self.active_sessions:
-            return False
-        
-        session_data = self.active_sessions[session_id]
-        
-        # 检查会话是否过期
-        if datetime.now() > session_data["expires_at"]:
-            # 清理过期会话
-            del self.active_sessions[session_id]
-            return False
-        
-        return session_data["active"]
+        # 现在使用统一的StrictSessionManager进行验证
+        session = strict_session_manager.validate_session(session_id)
+        is_valid = session is not None
+        self.logger.sess.info(f'Session validation result: {is_valid}', 
+                      {'session_id': session_id[:8] if session_id else None})
+        return is_valid
     
     async def logout(self, session_id: str) -> Dict[str, Any]:
         """
@@ -235,21 +232,18 @@ class SessionService:
             登出结果
         """
         try:
-            if session_id in self.active_sessions:
-                # 标记会话为非活跃
-                self.active_sessions[session_id]["active"] = False
-                # 可选：立即删除会话
-                del self.active_sessions[session_id]
+            # 使用StrictSessionManager注销会话
+            success = strict_session_manager.unregister_session(session_id)
             
             result = {
                 "code": 200,
                 "msg": "登出成功",
-                "data": {"session_id": session_id},
+                "data": {"session_id": session_id, "unregistered": success},
                 "timestamp": datetime.now().isoformat()
             }
             
             self.logger.sess.info('User logout successful', 
-                          {'session_id': session_id})
+                          {'session_id': session_id, 'success': success})
             return result
             
         except Exception as e:
@@ -257,6 +251,76 @@ class SessionService:
             return {
                 "code": 500,
                 "msg": f"登出失败: {str(e)}",
+                "data": None
+            }
+    
+    async def get_session_operations(self, session_id: str) -> Dict[str, Any]:
+        """
+        获取会话的操作集合（兼容旧版API）
+        
+        Args:
+            session_id: 会话ID
+            
+        Returns:
+            操作集合
+        """
+        try:
+            operations = strict_session_manager.get_operation_set_for_session(session_id)
+            
+            result = {
+                "code": 200,
+                "msg": "获取操作集合成功",
+                "data": {
+                    "session_id": session_id,
+                    "operations": operations
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.logger.sess.info('Session operations retrieved', 
+                          {'session_id': session_id, 'operation_count': len(operations)})
+            return result
+            
+        except Exception as e:
+            self.logger.sess.error('Get session operations failed', {'error': str(e)})
+            return {
+                "code": 500,
+                "msg": f"获取操作集合失败: {str(e)}",
+                "data": None
+            }
+    
+    async def get_session_functions(self, session_id: str) -> Dict[str, Any]:
+        """
+        获取会话的函数定义
+        
+        Args:
+            session_id: 会话ID
+            
+        Returns:
+            函数定义列表
+        """
+        try:
+            functions = strict_session_manager.get_functions_for_session(session_id)
+            
+            result = {
+                "code": 200,
+                "msg": "获取函数定义成功",
+                "data": {
+                    "session_id": session_id,
+                    "functions": functions
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.logger.sess.info('Session functions retrieved', 
+                          {'session_id': session_id, 'function_count': len(functions)})
+            return result
+            
+        except Exception as e:
+            self.logger.sess.error('Get session functions failed', {'error': str(e)})
+            return {
+                "code": 500,
+                "msg": f"获取函数定义失败: {str(e)}",
                 "data": None
             }
     
@@ -333,28 +397,28 @@ class SessionService:
             会话信息
         """
         try:
-            if session_id not in self.active_sessions:
+            # 使用strict_session_manager获取会话
+            session = strict_session_manager.get_session(session_id)
+            if not session:
                 return {
                     "code": 404,
                     "msg": "会话不存在",
                     "data": None
                 }
             
-            session_data = self.active_sessions[session_id]
-            
             # 计算剩余有效期
-            remaining_time = (session_data["expires_at"] - datetime.now()).total_seconds()
+            remaining_time = (session.expires_at - datetime.now()).total_seconds()
             
             result = {
                 "code": 200,
                 "msg": "获取会话信息成功",
                 "data": {
-                    "session_id": session_data["session_id"],
-                    "username": session_data["username"],
-                    "login_time": session_data["login_time"].isoformat(),
-                    "expires_at": session_data["expires_at"].isoformat(),
+                    "session_id": session.session_id,
+                    "username": session.client_metadata.get("user_id", "unknown"),
+                    "login_time": session.created_at.isoformat(),
+                    "expires_at": session.expires_at.isoformat(),
                     "remaining_seconds": max(0, int(remaining_time)),
-                    "active": session_data["active"]
+                    "active": session.is_active()
                 },
                 "timestamp": datetime.now().isoformat()
             }

@@ -23,6 +23,13 @@ class EnhancedClientSession:
     last_activity: datetime  # 新增：最后活动时间
     expires_at: datetime
     is_registered: bool = True
+    operation_set: List[str] = None  # 新增：操作集合，保持向后兼容
+    
+    def __post_init__(self):
+        """初始化后处理"""
+        if self.operation_set is None:
+            # 从client_metadata中提取操作集合，如果有的话
+            self.operation_set = self.client_metadata.get("operation_set", [])
     
     def is_expired(self) -> bool:
         """检查会话是否过期"""
@@ -217,27 +224,32 @@ class StrictSessionManager:
         with self._lock:
             self.logger.sess.info('Performing deep session validation')
             
-            valid_sessions = {}
-            invalid_count = 0
+            invalid_sessions = []
             
-            for session_id, session in self.sessions.items():
+            for session_id, session in list(self.sessions.items()):  # 使用list()避免在迭代时修改字典
                 # 严格验证条件
-                if (session.is_registered and 
-                    not session.is_expired()):
-                    valid_sessions[session_id] = session
-                else:
-                    invalid_count += 1
+                is_valid = (session.is_registered and 
+                           not session.is_expired())
+                
+                if not is_valid:
+                    invalid_sessions.append(session_id)
                     self.logger.sess.warn('Found invalid session', 
                                   {'session_id': session_id[:8],
                                    'registered': session.is_registered,
                                    'expired': session.is_expired(),
                                    'function_count': len(session.client_metadata.get('functions', []))})
             
-            if invalid_count > 0:
-                self.sessions = valid_sessions
+            # 删除无效会话
+            removed_count = 0
+            for session_id in invalid_sessions:
+                if session_id in self.sessions:
+                    del self.sessions[session_id]
+                    removed_count += 1
+            
+            if removed_count > 0:
                 self.logger.sess.info('Deep validation repair completed', 
-                              {'removed_invalid': invalid_count,
-                               'remaining_valid': len(valid_sessions)})
+                              {'removed_invalid': removed_count,
+                               'remaining_valid': len(self.sessions)})
     
     def register_session(self, session_id: str, client_metadata: Dict[str, Any]) -> EnhancedClientSession:
         """严格会话注册（基于函数调用）"""
@@ -269,7 +281,9 @@ class StrictSessionManager:
                           {'session_id': session_id[:8],
                            'client_type': client_metadata.get('client_type', 'unknown'),
                            'function_count': len(client_metadata.get('functions', [])),
-                           'expires_in': self.session_timeout.total_seconds()/60})
+                           'expires_in': self.session_timeout.total_seconds()/60,
+                           'total_sessions': len(self.sessions),
+                           'session_ids': list(self.sessions.keys())[:5]})
             
             return session
     
@@ -294,11 +308,10 @@ class StrictSessionManager:
             
             self.logger.sess.debug(f'Session validation {session_id[:8]}', validation_checks)
             
-            # 如果会话无效，立即清理
+            # 如果会话无效，返回None但不删除（让清理线程处理）
             if not all(validation_checks.values()):
-                self.logger.sess.warn('Invalid session rejected', 
+                self.logger.sess.warn('Invalid session detected', 
                               {'session_id': session_id[:8], 'checks': validation_checks})
-                del self.sessions[session_id]
                 return None
             
             # 更新活动时间
@@ -315,14 +328,24 @@ class StrictSessionManager:
             return session
     
     def heartbeat(self, session_id: str) -> bool:
-        """心跳更新"""
+        """心跳更新（带防抖和日志降级）"""
         with self._lock:
             session = self.sessions.get(session_id)
             if session and session.is_registered and not session.is_expired():
+                now = datetime.now()
+                
+                # 防抖：如果距离上次心跳不到1秒，静默更新（不记录日志）
+                time_since_last_heartbeat = (now - session.last_heartbeat).total_seconds()
+                
                 session.update_heartbeat()
                 session.update_activity()
-                self.logger.sess.info('Heartbeat updated successfully', 
-                              {'session_id': session_id[:8]})
+                
+                # 只在心跳间隔大于1秒时记录日志，避免日志风暴
+                if time_since_last_heartbeat >= 1.0:
+                    self.logger.sess.debug('Heartbeat updated', 
+                                  {'session_id': session_id[:8], 
+                                   'interval': f'{time_since_last_heartbeat:.1f}s'})
+                
                 return True
             
             self.logger.sess.warn('Heartbeat update failed', 
@@ -364,12 +387,80 @@ class StrictSessionManager:
         
         return self.register_session(session_id, client_metadata)
 
+    def update_session_attributes(
+        self,
+        session_id: str,
+        require_tts: Optional[bool] = None,
+        function_calling_op: Optional[str] = None,
+        function_calling: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        """按协议更新会话属性：require_tts、function_calling（REPLACE/ADD/UPDATE/DELETE）"""
+        if not function_calling:
+            function_calling = []
+        with self._lock:
+            session = self.sessions.get(session_id)
+            if not session:
+                return False
+            if require_tts is not None:
+                session.client_metadata["require_tts"] = require_tts
+            if function_calling_op and function_calling is not None:
+                fc = session.client_metadata.get("functions", [])
+                names = {f.get("name") for f in fc if isinstance(f, dict) and f.get("name")}
+                if function_calling_op == "REPLACE":
+                    session.client_metadata["functions"] = list(function_calling)
+                    session.client_metadata["function_names"] = [f.get("name", "") for f in function_calling if isinstance(f, dict)]
+                elif function_calling_op == "ADD":
+                    session.client_metadata["functions"] = fc + list(function_calling)
+                    session.client_metadata["function_names"] = session.client_metadata.get("function_names", []) + [
+                        f.get("name", "") for f in function_calling if isinstance(f, dict)
+                    ]
+                elif function_calling_op == "UPDATE":
+                    new_names = {f.get("name") for f in function_calling if isinstance(f, dict) and f.get("name")}
+                    fc = [x for x in fc if x.get("name") not in new_names]
+                    fc.extend(function_calling)
+                    session.client_metadata["functions"] = fc
+                    session.client_metadata["function_names"] = [f.get("name", "") for f in fc if isinstance(f, dict) and f.get("name")]
+                elif function_calling_op == "DELETE":
+                    del_names = {f.get("name") for f in function_calling if isinstance(f, dict)}
+                    fc = [x for x in fc if x.get("name") not in del_names]
+                    session.client_metadata["functions"] = fc
+                    session.client_metadata["function_names"] = [f.get("name", "") for f in fc if isinstance(f, dict) and f.get("name")]
+            return True
+
+    def get_protocol_session_data(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """返回协议 SESSION_INFO.session_data 所需格式"""
+        with self._lock:
+            session = self.sessions.get(session_id)
+            if not session:
+                return None
+            remaining = max(0, (session.expires_at - datetime.now()).total_seconds())
+            return {
+                "platform": session.client_metadata.get("platform", session.client_metadata.get("client_type", "WEB")),
+                "require_tts": session.client_metadata.get("require_tts", False),
+                "function_calling": session.client_metadata.get("functions", []),
+                "create_time": int(session.created_at.timestamp() * 1000),
+                "remaining_seconds": int(remaining),
+            }
+
     def get_functions_for_session(self, session_id: str) -> List[Dict[str, Any]]:
         """获取会话支持的函数定义"""
-        session = self.validate_session(session_id)
-        if session:
-            return session.client_metadata.get("functions", [])
+        with self._lock:
+            session = self.sessions.get(session_id)
+            if session:
+                functions = session.client_metadata.get("functions", [])
+                return functions
+            else:
+                self.logger.sess.warn('Functions requested for non-existent session', 
+                              {'session_id': session_id[:8] if session_id else None})
         return []
+
+    def get_operation_set_for_session(self, session_id: str) -> List[str]:
+        """获取会话的操作集合（兼容旧版API）"""
+        with self._lock:
+            session = self.sessions.get(session_id)
+            if session:
+                return session.operation_set or session.client_metadata.get("operation_set", [])
+            return []
 
     def unregister_session(self, session_id: str) -> bool:
         """主动注销会话"""

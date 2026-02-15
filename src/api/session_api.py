@@ -184,7 +184,7 @@ async def unregister_session(session_id: str = Header()):
 
 
 @router.get("/functions", response_model=SessionOperationsResponse)
-async def get_session_functions(session_id: str = Header()):
+async def get_session_functions(session_id: str = Header(...)):
     """
     获取会话支持的OpenAI标准函数定义
     """

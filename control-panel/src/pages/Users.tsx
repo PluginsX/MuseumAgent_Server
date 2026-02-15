@@ -16,9 +16,25 @@ export default function Users() {
   const loadUsers = () => {
     setLoading(true);
     usersApi.list()
-      .then((r) => setUsers(r.data))  // 直接使用返回的数据，不需要包装在 users 属性中
+      .then((r) => {
+        console.log('获取用户列表成功，响应:', r);
+        console.log('响应数据:', r.data);
+        // 检查响应格式，适应服务器返回的实际格式
+        if (Array.isArray(r.data)) {
+          // 直接返回用户列表
+          setUsers(r.data);
+        } else if (r.data && Array.isArray(r.data.data)) {
+          // 嵌套格式: {data: [用户列表]}
+          setUsers(r.data.data);
+        } else {
+          console.error('响应格式不正确:', r.data);
+          message.error('获取用户列表失败：响应格式不正确');
+        }
+      })
       .catch((e: any) => {
         console.error('获取用户列表失败:', e);
+        console.log('错误响应:', e.response);
+        console.log('错误数据:', e.response?.data);
         let errorMessage = '获取用户列表失败';
         if (e.response?.data?.detail) {
           errorMessage = e.response.data.detail;
@@ -66,6 +82,7 @@ export default function Users() {
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      console.log('表单值:', values);
       if (editingUser) {
         // 编辑用户时，只更新提供的字段
         const updateData: any = {};
@@ -77,7 +94,9 @@ export default function Users() {
           updateData.password = values.password;
         }
         
-        await usersApi.update(editingUser.id as number, updateData);
+        console.log('更新用户数据:', updateData);
+        const updateResponse = await usersApi.update(editingUser.id as number, updateData);
+        console.log('更新用户成功，响应:', updateResponse);
         message.success('更新成功');
       } else {
         // 创建新用户时需要密码
@@ -85,7 +104,9 @@ export default function Users() {
           message.error('创建用户需要提供密码');
           return;
         }
-        await usersApi.create(values);
+        console.log('创建用户数据:', values);
+        const createResponse = await usersApi.create(values);
+        console.log('创建用户成功，响应:', createResponse);
         message.success('创建成功');
       }
       setModalVisible(false);

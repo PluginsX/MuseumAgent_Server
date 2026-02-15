@@ -90,8 +90,8 @@
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
     "model": "cosyvoice-v3-flash",
-    "voice": "cosyvoice-v3-flash-bailian-06706127c4f34cc4977ed764ad44351b",
-    "format": "MP3_22050HZ_MONO_128KBPS"
+    "voice": "longanhuan",
+    "format": "PCM_16000HZ_MONO_16BIT"
   },
   "stt": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",

@@ -1,1 +1,1 @@
-start http://localhost:18000 & call python -m http.server 18000
+cd /d "%~dp0" & start http://localhost:18000 & call python -m http.server 18000

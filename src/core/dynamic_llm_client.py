@@ -3,15 +3,13 @@
 动态LLM客户端
 支持会话感知的指令集动态提示词生成
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, AsyncGenerator
 import json
 import os
 import requests
 from datetime import datetime
 
 from ..common.config_utils import get_global_config
-# 移除对已删除模块的导入
-# from ..session.session_manager import session_manager
 from src.common.enhanced_logger import get_enhanced_logger
 
 
@@ -225,6 +223,183 @@ class DynamicLLMClient:
                 "type": "direct_response",
                 "format": "openai_standard"
             }
+
+    async def _chat_completions_with_functions_stream(self, payload: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        流式调用支持函数调用的Chat Completions API
+        
+        Args:
+            payload: 包含functions参数的请求负载
+            
+        Yields:
+            包含type和content的字典，type可以是'text'或'function_call'
+        """
+        if not self.base_url or not self.api_key:
+            raise RuntimeError("LLM 未配置 base_url 或 api_key，请在 config.json 或环境变量中设置")
+        
+        self.logger.llm.info('Sending streaming function call request to LLM', 
+                          {'model': self.model, 'has_functions': 'functions' in payload})
+        
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        payload["stream"] = True
+        
+        self.logger.llm.info('Sending request to External LLM API (Stream with Functions)', 
+                          {'endpoint': url})
+        
+        function_call_name = None
+        function_call_arguments = ""
+        
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                self.logger.llm.info('Created aiohttp session')
+                async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
+                    self.logger.llm.info('Received response from LLM API', {
+                        'status_code': resp.status,
+                        'headers': dict(resp.headers)
+                    })
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        self.logger.llm.error('LLM API call failed', 
+                                      {'status_code': resp.status, 'error': error_text})
+                        raise RuntimeError(f"LLM API 调用失败 [code={resp.status}]: {error_text}")
+                    
+                    self.logger.llm.info('Starting to read response content')
+                    line_count = 0
+                    async for line in resp.content:
+                        line_count += 1
+                        if line:
+                            line_str = line.decode('utf-8').strip()
+                            self.logger.llm.info('Received line from LLM', {
+                                'line': line_str,
+                                'line_count': line_count
+                            })
+                            if line_str.startswith('data: '):
+                                data_str = line_str[6:]
+                                self.logger.llm.info('Received data from LLM', {
+                                    'data': data_str
+                                })
+                                if data_str == '[DONE]':
+                                    self.logger.llm.info('Received [DONE] from LLM')
+                                    # 当收到[DONE]标记时，检查是否有未处理的函数调用
+                                    if function_call_name and function_call_arguments:
+                                        self.logger.llm.info('Processing function call at [DONE]', {
+                                            'function_name': function_call_name,
+                                            'arguments': function_call_arguments
+                                        })
+                                        try:
+                                            arguments_json = json.loads(function_call_arguments)
+                                            self.logger.llm.info('Yielding function call at [DONE]', {
+                                                'function_name': function_call_name,
+                                                'arguments': arguments_json
+                                            })
+                                            yield {
+                                                'type': 'function_call',
+                                                'name': function_call_name,
+                                                'arguments': arguments_json
+                                            }
+                                        except json.JSONDecodeError as e:
+                                            self.logger.llm.warn('Failed to parse function call arguments at the end', {
+                                                'error': str(e),
+                                                'arguments': function_call_arguments
+                                            })
+                                    else:
+                                        self.logger.llm.info('No function call to process at [DONE]')
+                                    break
+                                
+                                try:
+                                    import json
+                                    data = json.loads(data_str)
+                                    self.logger.llm.info('Parsed JSON data from LLM', {
+                                        'data': data
+                                    })
+                                    choices = data.get('choices', [])
+                                    self.logger.llm.info('Processing choices from LLM', {
+                                        'choices': choices
+                                    })
+                                    if choices:
+                                        delta = choices[0].get('delta', {})
+                                        self.logger.llm.info('Processing delta from LLM', {
+                                            'delta': delta
+                                        })
+                                        
+                                        # 检查是否有文本内容
+                                        content = delta.get('content', '')
+                                        if content:
+                                            self.logger.llm.info('Yielding text content', {
+                                                'content': content
+                                            })
+                                            yield {
+                                                'type': 'text',
+                                                'content': content
+                                            }
+                                        
+                                        # 检查是否有函数调用
+                                        function_call = delta.get('function_call')
+                                        if function_call:
+                                            self.logger.llm.info('Received function call delta', {
+                                                'function_call': function_call
+                                            })
+                                            # 收集函数名称
+                                            if 'name' in function_call:
+                                                function_call_name = function_call['name']
+                                                self.logger.llm.info('Updated function call name', {
+                                                    'function_name': function_call_name
+                                                })
+                                            
+                                            # 累积函数参数
+                                            if 'arguments' in function_call:
+                                                function_call_arguments += function_call['arguments']
+                                                self.logger.llm.info('Updated function call arguments', {
+                                                    'arguments': function_call_arguments
+                                                })
+                                            
+                                            # 尝试解析参数，即使可能还没有完全收到
+                                            # 但只有当参数可以成功解析时才yield
+                                            if function_call_name and function_call_arguments:
+                                                try:
+                                                    arguments_json = json.loads(function_call_arguments)
+                                                    self.logger.llm.info('Yielding function call', {
+                                                        'function_name': function_call_name,
+                                                        'arguments': arguments_json
+                                                    })
+                                                    yield {
+                                                        'type': 'function_call',
+                                                        'name': function_call_name,
+                                                        'arguments': arguments_json
+                                                    }
+                                                except json.JSONDecodeError as e:
+                                                    # 参数还没有完全收到，继续等待
+                                                    self.logger.llm.info('Failed to parse function call arguments, continuing to wait', {
+                                                        'error': str(e),
+                                                        'arguments': function_call_arguments
+                                                    })
+                                                    pass
+                                        else:
+                                            self.logger.llm.info('No function call in delta', {
+                                                'delta': delta
+                                            })
+                                except json.JSONDecodeError as e:
+                                    self.logger.llm.info('Failed to parse JSON data from LLM', {
+                                        'error': str(e),
+                                        'data_str': data_str
+                                    })
+                                    continue
+                    self.logger.llm.info('Finished reading response content', {
+                        'total_lines': line_count
+                    })
+        except Exception as e:
+            self.logger.llm.error('LLM stream exception', {'error': str(e)})
+            import traceback
+            self.logger.llm.error('LLM stream exception traceback', {
+                'traceback': traceback.format_exc()
+            })
+            raise RuntimeError(f"LLM 流式请求异常: {str(e)}") from e
 
     def _chat_completions(self, prompt: str) -> str:
         """

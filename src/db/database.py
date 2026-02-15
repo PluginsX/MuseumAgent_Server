@@ -53,7 +53,8 @@ def init_db():
     """初始化表结构"""
     # 延迟导入，避免循环导入
     from src.db.models import Base
-    Base.metadata.create_all(bind=get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
 
 
 @contextmanager

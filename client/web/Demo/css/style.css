@@ -14,13 +14,15 @@ body {
     padding: 0;
 }
 
-.container {
+.container,
+.app-container {
     width: 100vw;
     height: 100vh;
     display: flex;
     flex-direction: column;
     background: white;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
 }
 
 .app-header {
@@ -45,6 +47,7 @@ body {
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-height: 0;
 }
 
 .config-panel {
@@ -68,7 +71,6 @@ body {
 }
 
 .config-content {
-    overflow-y: auto;
     flex: 1;
     min-height: 0;
 }
@@ -102,6 +104,20 @@ body {
 
 .client-config {
     width: 350px;
+    overflow: auto;
+}
+
+.functions-config {
+    width: 400px;
+}
+
+.full-width {
+    width: 100%;
+}
+
+.form-group.full-width {
+    width: 100%;
+    height: 100%;
 }
 
 .chat-panel {
@@ -189,6 +205,18 @@ body {
     padding-bottom: 4px;
 }
 
+.message-function-call {
+    font-size: 12px;
+    background-color: #f0f8ff;
+    color: #4a90e2;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #4a90e2;
+    display: inline-block;
+    margin-top: 4px;
+    font-family: monospace;
+}
+
 .voice-message {
     display: flex;
     align-items: center;
@@ -201,7 +229,7 @@ body {
 }
 
 .message.sent .voice-message {
-    background: #5568d3;
+    background: #0058ff;
     color: white;
     border-bottom-right-radius: 4px;
 }
@@ -331,10 +359,34 @@ body {
 .voice-recorder {
     display: flex;
     align-items: center;
-    margin-bottom: 10px;
     padding: 10px;
     background: #f8f9fa;
     border-radius: 20px;
+}
+
+.voice-recorder:not(.input-controls .voice-recorder) {
+    margin-bottom: 10px;
+}
+
+.input-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.input-controls .voice-recorder {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 20px;
+    margin: 0;
+}
+
+.voice-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .record-time {
@@ -372,6 +424,7 @@ body {
 
 .functions-input {
     width: 100%;
+    height: 100%;
     min-height: 150px;
     padding: 8px 10px;
     border: 1px solid #ced4da;
@@ -474,7 +527,8 @@ body {
     border-top: 1px solid #e9ecef;
     padding: 15px;
     flex-shrink: 0;
-    height: 200px;
+    max-height: 300px;
+    min-height: 100px;
     display: flex;
     flex-direction: column;
 }
@@ -669,4 +723,305 @@ body {
     padding: 15px 40px;
     font-size: 16px;
     border-radius: 50px;
+}
+
+/* 登录页面样式 */
+.video-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+.video-background video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.login-container {
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 450px;
+    padding: 40px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    margin: 0 auto;
+    margin-top: 5vh;
+}
+
+.logo {
+    margin-bottom: 24px;
+}
+
+.logo h1 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #24292f;
+    margin-bottom: 8px;
+}
+
+.logo p {
+    color: #656d76;
+    font-size: 16px;
+}
+
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #d0d7de;
+    margin-bottom: 24px;
+}
+
+.tab {
+    flex: 1;
+    padding: 12px 0;
+    text-align: center;
+    cursor: pointer;
+    font-weight: 500;
+    color: #656d76;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.tab.active {
+    color: #0969da;
+    border-bottom-color: #0969da;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #24292f;
+    font-size: 14px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    background-color: #fafbfc;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    transition: border-color 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #0969da;
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+.btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ffffff;
+    background-color: #238636;
+    border: 1px solid #238636;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.btn:hover {
+    background-color: #2ea043;
+}
+
+.btn:disabled {
+    background-color: #818c99;
+    border-color: #818c99;
+    cursor: not-allowed;
+}
+
+.server-config {
+    margin-top: 30px;
+    padding-top: 24px;
+    border-top: 1px solid #d0d7de;
+    text-align: left;
+}
+
+.server-config h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #24292f;
+}
+
+.server-form-group {
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.server-form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #24292f;
+    font-size: 14px;
+}
+
+.server-input {
+    width: 100%;
+}
+
+.server-input .form-control {
+    width: 100%;
+}
+
+.server-input .port-input {
+    width: 100%;
+}
+
+.error-message {
+    color: #cf222e;
+    font-size: 14px;
+    margin-top: 8px;
+    text-align: center;
+    display: none;
+}
+
+.loading {
+    display: none;
+    text-align: center;
+    margin-top: 16px;
+}
+
+.spinner {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #0969da;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.footer {
+    margin-top: 24px;
+    color: #656d76;
+    font-size: 14px;
+}
+
+.footer a {
+    color: #0969da;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+/* 鐧诲綍椤甸潰鏍峰紡 */
+.login-page {
+    display: none;
+}
+
+.login-page.active {
+    display: block;
+    width: 100%;
+    height: 100vh;
+}
+
+/* 录音按钮状态样式 */
+#recordToggleBtn.btn-primary {
+    background: #28a745; /* 绿色表示开始录音 */
+    color: white;
+}
+
+#recordToggleBtn.btn-danger {
+    background: #dc3545; /* 红色表示停止录音 */
+    color: white;
+}
+
+#recordToggleBtn.btn-primary:hover:not(:disabled) {
+    background: #218838; /* 深绿色悬停效果 */
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+#recordToggleBtn.btn-danger:hover:not(:disabled) {
+    background: #c82333; /* 深红色悬停效果 */
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+
+
+/* VAD 配置样式 */
+.form-group-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.form-group-section h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.form-group small {
+    display: block;
+    color: #666;
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.vad-status {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.vad-status.vad-inactive {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+}
+
+.vad-status.vad-active {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    animation: vad-pulse 1.5s infinite;
+}
+
+@keyframes vad-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
 }

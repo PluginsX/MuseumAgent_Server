@@ -95,7 +95,7 @@ from src.api.session_api import router as session_router
 from src.api.client_api import router as client_router
 from src.api.session_config_api import router as session_config_router
 from src.api.function_api import router as function_router  # OpenAI标准函数API
-from src.api.websocket_api import router as websocket_router  # WebSocket API
+from src.ws import agent_stream_router  # WebSocket 协议层
 from src.api.audio_api import router as audio_router  # 音频处理API
 
 app.include_router(auth_router)
@@ -106,7 +106,7 @@ app.include_router(session_router)
 app.include_router(client_router)
 app.include_router(session_config_router)
 app.include_router(function_router)  # 添加OpenAI标准函数API路由
-app.include_router(websocket_router)  # 添加WebSocket API路由
+app.include_router(agent_stream_router)  # WebSocket 通信（协议：CommunicationProtocol_CS.md）
 app.include_router(audio_router)  # 添加音频处理API路由
 
 
@@ -139,13 +139,10 @@ def _register_services():
     from src.services.voice_call_service import VoiceCallService
     service_registry.register_service("voice_call", VoiceCallService())
     
-    # 注册会话管理服务 - 使用适配器以确保与API端点使用相同实例
-    from src.services.session_service_adapter import SessionServiceAdapter
-    service_registry.register_service("session", SessionServiceAdapter())
-    
-    from src.common.log_utils import get_logger
-    logger = get_logger()
-    logger.info("所有服务已注册到agent_api")
+    # 会话管理服务已经在API网关中注册，无需重复注册
+    from src.common.enhanced_logger import get_enhanced_logger
+    logger = get_enhanced_logger()
+    logger.sys.info("所有服务已注册到agent_api")
 
 # 全局CommandGenerator实例（延迟初始化）
 _command_generator: CommandGenerator | None = None

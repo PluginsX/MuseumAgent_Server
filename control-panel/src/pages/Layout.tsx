@@ -8,11 +8,15 @@ const { Header, Sider, Content } = AntLayout;
 const menuItems = [
   { key: '/', label: <Link to="/">仪表盘</Link>, icon: <SettingOutlined /> },
   { key: '/config/llm', label: <Link to="/config/llm">LLM 配置</Link>, icon: <CodeOutlined /> },
+  { key: '/config/stt', label: <Link to="/config/stt">STT 配置</Link>, icon: <CodeOutlined /> },
+  { key: '/config/tts', label: <Link to="/config/tts">TTS 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/srs', label: <Link to="/config/srs">SRS配置</Link>, icon: <BookOutlined /> },
   { key: '/clients', label: <Link to="/clients">客户信息</Link>, icon: <DesktopOutlined /> },
   { key: '/session-config', label: <Link to="/session-config">会话配置</Link>, icon: <ClockCircleOutlined /> },
   { key: '/monitor', label: <Link to="/monitor">系统监控</Link>, icon: <AreaChartOutlined /> },
   { key: '/users', label: <Link to="/users">用户管理</Link>, icon: <TeamOutlined /> },
+  { key: '/client-management', label: <Link to="/client-management">客户管理</Link>, icon: <TeamOutlined /> },
+  { key: '/audit-logs', label: <Link to="/audit-logs">审计日志</Link>, icon: <BookOutlined /> },
 ];
 
 export default function Layout() {
@@ -21,7 +25,7 @@ export default function Layout() {
 
   const logout = () => {
     localStorage.removeItem('token');
-    navigate('/Control/login');
+    navigate('/login', { replace: true });
   };
 
   return (

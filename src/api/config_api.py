@@ -93,6 +93,20 @@ class SRSConfigUpdate(BaseModel):
     search_params: Optional[Dict[str, Any]] = None
 
 
+class STTConfigUpdate(BaseModel):
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+
+class TTSConfigUpdate(BaseModel):
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+
 @router.get("/srs")
 def get_srs_config(_: dict = Depends(get_current_user)):
     """获取 SRS 配置（API Key 脱敏）"""
@@ -153,6 +167,112 @@ def update_srs_config(
     return srs
 
 
+# ---------- STT (Speech to Text) ----------
+@router.get("/stt")
+def get_stt_config(_: dict = Depends(get_current_user)):
+    """获取 STT 配置（API Key 脱敏）"""
+    cfg = get_global_config()
+    stt = cfg.get("stt", {}).copy()
+    if "api_key" in stt and stt["api_key"]:
+        stt["api_key"] = _mask_api_key(stt["api_key"])
+    stt["version"] = 1
+    return stt
+
+
+@router.get("/stt/raw")
+def get_stt_config_raw(_: dict = Depends(get_current_user)):
+    """获取 STT 配置（完整API Key，仅限管理员配置页面使用）"""
+    cfg = get_global_config()
+    stt = cfg.get("stt", {}).copy()
+    stt["version"] = 1
+    return stt
+
+
+@router.put("/stt")
+def update_stt_config(
+    body: STTConfigUpdate,
+    _: dict = Depends(get_current_user),
+):
+    """更新 STT 配置（写入 config.json，需重启生效）"""
+    import os
+    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    stt = data.setdefault("stt", {})
+    if body.base_url is not None:
+        stt["base_url"] = body.base_url
+    if body.api_key is not None:
+        stt["api_key"] = body.api_key
+    if body.model is not None:
+        stt["model"] = body.model
+    if body.parameters is not None:
+        stt["parameters"] = {**(stt.get("parameters") or {}), **body.parameters}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    from src.common.config_utils import load_config
+    load_config()
+    
+    stt = get_global_config().get("stt", {}).copy()
+    if "api_key" in stt and stt["api_key"]:
+        stt["api_key"] = _mask_api_key(stt["api_key"])
+    return stt
+
+
+# ---------- TTS (Text to Speech) ----------
+@router.get("/tts")
+def get_tts_config(_: dict = Depends(get_current_user)):
+    """获取 TTS 配置（API Key 脱敏）"""
+    cfg = get_global_config()
+    tts = cfg.get("tts", {}).copy()
+    if "api_key" in tts and tts["api_key"]:
+        tts["api_key"] = _mask_api_key(tts["api_key"])
+    tts["version"] = 1
+    return tts
+
+
+@router.get("/tts/raw")
+def get_tts_config_raw(_: dict = Depends(get_current_user)):
+    """获取 TTS 配置（完整API Key，仅限管理员配置页面使用）"""
+    cfg = get_global_config()
+    tts = cfg.get("tts", {}).copy()
+    tts["version"] = 1
+    return tts
+
+
+@router.put("/tts")
+def update_tts_config(
+    body: TTSConfigUpdate,
+    _: dict = Depends(get_current_user),
+):
+    """更新 TTS 配置（写入 config.json，需重启生效）"""
+    import os
+    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    tts = data.setdefault("tts", {})
+    if body.base_url is not None:
+        tts["base_url"] = body.base_url
+    if body.api_key is not None:
+        tts["api_key"] = body.api_key
+    if body.model is not None:
+        tts["model"] = body.model
+    if body.parameters is not None:
+        tts["parameters"] = {**(tts.get("parameters") or {}), **body.parameters}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    from src.common.config_utils import load_config
+    load_config()
+    
+    tts = get_global_config().get("tts", {}).copy()
+    if "api_key" in tts and tts["api_key"]:
+        tts["api_key"] = _mask_api_key(tts["api_key"])
+    return tts
+
+
 # ---------- Validate / Test ----------
 class ValidateLLMRequest(BaseModel):
     base_url: str
@@ -207,6 +327,56 @@ def validate_srs_config(
         if r.status_code == 200:
             return {"valid": True, "message": "连接成功"}
         return {"valid": False, "message": r.text or f"HTTP {r.status_code}"}
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
+
+
+class ValidateSTTRequest(BaseModel):
+    base_url: str
+    api_key: str
+    model: str
+
+
+@router.post("/stt/validate")
+def validate_stt_config(
+    body: ValidateSTTRequest,
+    _: dict = Depends(get_current_user),
+):
+    """验证 STT 配置是否可用"""
+    # 由于STT是WebSocket API，这里只验证URL格式和API Key是否存在
+    try:
+        if not body.base_url.startswith("wss://"):
+            return {"valid": False, "message": "STT Base URL 必须以 wss:// 开头"}
+        if not body.api_key:
+            return {"valid": False, "message": "API Key 不能为空"}
+        if not body.model:
+            return {"valid": False, "message": "Model 不能为空"}
+        return {"valid": True, "message": "配置格式正确"}
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
+
+
+class ValidateTTSRequest(BaseModel):
+    base_url: str
+    api_key: str
+    model: str
+
+
+@router.post("/tts/validate")
+def validate_tts_config(
+    body: ValidateTTSRequest,
+    _: dict = Depends(get_current_user),
+):
+    """验证 TTS 配置是否可用"""
+    # 由于TTS是WebSocket API，这里只验证URL格式和API Key是否存在
+    try:
+        if not body.base_url.startswith("wss://"):
+            return {"valid": False, "message": "TTS Base URL 必须以 wss:// 开头"}
+        if not body.api_key:
+            return {"valid": False, "message": "API Key 不能为空"}
+        if not body.model:
+            return {"valid": False, "message": "Model 不能为空"}
+        return {"valid": True, "message": "配置格式正确"}
     except Exception as e:
         return {"valid": False, "message": str(e)}
 

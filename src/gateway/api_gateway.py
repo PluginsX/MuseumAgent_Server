@@ -17,7 +17,7 @@ from src.common.enhanced_logger import get_enhanced_logger
 from src.common.auth_utils import decode_access_token
 from src.api.auth_api import get_current_user
 from src.services.registry import service_registry
-from src.api.websocket_api import router as websocket_router
+from src.ws import agent_stream_router
 
 
 class APIGateway:
@@ -247,21 +247,24 @@ class APIGateway:
                 
                 username = user_info["data"]["username"]
                 
-                # 生成新的会话ID并注册会话
+                # 从请求中提取函数定义
+                client_metadata = request.get("client_metadata", {})
+                functions = request.get("functions", [])
+                
+                # 生成会话ID
                 import secrets
                 session_id = f"sess_{secrets.token_hex(16)}"
                 
-                # 在会话服务中记录活跃会话
-                from datetime import datetime, timedelta
-                session_data = {
-                    "session_id": session_id,
-                    "username": username,
-                    "login_time": datetime.now(),
-                    "expires_at": datetime.now() + timedelta(seconds=service.jwt_expire_seconds),
-                    "active": True
-                }
-                service.active_sessions[session_id] = session_data
-                self.logger.api.debug('Session stored', {'session_id': session_id, 'total_sessions': len(service.active_sessions)})
+                # 使用strict_session_manager注册会话（包含函数定义）
+                from src.session.strict_session_manager import strict_session_manager
+                session = strict_session_manager.register_session_with_functions(
+                    session_id=session_id,
+                    client_metadata=client_metadata,
+                    functions=functions
+                )
+                
+                self.logger.api.debug('Session registered with strict manager', 
+                                 {'session_id': session_id, 'function_count': len(functions)})
                 
                 # 返回会话信息
                 result = {
@@ -392,8 +395,60 @@ class APIGateway:
                 self.logger.api.error('Agent parse failed', {'error': str(e)})
                 raise HTTPException(status_code=500, detail=f"智能体解析失败: {str(e)}")
         
-        # 包含WebSocket API路由
-        self.app.include_router(websocket_router)
+        # 包含 WebSocket 通信路由（协议：docs/CommunicationProtocol_CS.md）
+        self.app.include_router(agent_stream_router)
+        
+        # 包含会话管理API路由
+        from src.api.session_api import router as session_router
+        self.app.include_router(session_router)
+        
+        # 包含管理员API路由
+        from src.api.auth_api import router as auth_router
+        from src.api.config_api import router as config_router
+        from src.api.monitor_api import router as monitor_router
+        from src.api.users_api import router as users_router
+        from src.api.client_api import router as client_router
+        from src.api.session_config_api import router as session_config_router
+        
+        self.app.include_router(auth_router)
+        self.app.include_router(config_router)
+        self.app.include_router(monitor_router)
+        self.app.include_router(users_router)
+        self.app.include_router(client_router)
+        self.app.include_router(session_config_router)
+        
+        # 包含内部管理员API路由（仅内部使用）
+        from src.api.internal_admin_api import internal_router
+        self.app.include_router(internal_router)
+        
+        # 挂载管理员控制面板：优先提供新版 SPA 静态资源，不存在则使用旧版 HTML
+        import os
+        from pathlib import Path
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.responses import FileResponse
+        
+        _spa_dir = Path(__file__).resolve().parent.parent.parent / "control-panel" / "dist"
+        if _spa_dir.exists():
+            # 挂载静态文件
+            self.app.mount("/Control/static", StaticFiles(directory=str(_spa_dir)), name="control-static")
+            
+            # 处理SPA路由 - 对于所有Control下的路径，如果文件不存在则返回index.html
+            @self.app.get("/Control/{full_path:path}")
+            async def serve_spa(full_path: str):
+                file_path = _spa_dir / full_path
+                if file_path.exists() and file_path.is_file():
+                    return FileResponse(str(file_path))
+                else:
+                    # 对于不存在的路径，返回index.html让前端路由处理
+                    return FileResponse(str(_spa_dir / "index.html"))
+            
+            # 根路径特殊处理
+            @self.app.get("/Control")
+            async def serve_control_root():
+                return FileResponse(str(_spa_dir / "index.html"))
+        else:
+            from src.api.admin_api import router as admin_router
+            self.app.include_router(admin_router)
     
     def get_app(self):
         """获取FastAPI应用实例"""

@@ -81,7 +81,11 @@ class CommandGenerator:
         
         # 2. 获取会话中的OpenAI标准函数定义
         print(f"[Coordinator] 步骤2: 获取函数定义（可能为空）")
+        print(f"[Coordinator] Session ID: {session_id}")
         functions = strict_session_manager.get_functions_for_session(session_id)
+        print(f"[Coordinator] 获取到的函数数量: {len(functions)}")
+        if functions:
+            print(f"[Coordinator] 函数列表: {[f.get('name') for f in functions]}")
         
         # 支持无函数定义的普通对话模式
         if not functions:
@@ -153,20 +157,34 @@ class CommandGenerator:
         rag_context = self._perform_rag_retrieval(user_input)
         rag_context["timestamp"] = datetime.now().isoformat()
         
-        # 2. 构建RAG增强的提示词
-        print(f"[Coordinator] 步骤2: 构建提示词")
+        # 2. 获取会话中的OpenAI标准函数定义
+        print(f"[Coordinator] 步骤2: 获取函数定义（可能为空）")
+        functions = strict_session_manager.get_functions_for_session(session_id)
+        
+        # 支持无函数定义的普通对话模式
+        if not functions:
+            print(f"[Coordinator] 检测到普通对话模式，跳过函数调用流程")
+        else:
+            print(f"[Coordinator] 检测到函数调用模式，函数数量: {len(functions)}")
+        
+        # 3. 构建RAG增强的提示词（基于Function Calling）
+        print(f"[Coordinator] 步骤3: 构建基于Function Calling的提示词")
         rag_instruction = self._build_rag_instruction(rag_context)
         
-        # 3. 调用LLM流式生成
-        print(f"[Coordinator] 步骤3: 调用LLM流式生成")
-        system_message = "你是智能助手。以友好、专业的态度回答用户问题。"
-        user_message = f"场景：{scene_type}\n{rag_instruction}\n用户输入：{user_input}"
+        # 4. 生成OpenAI标准函数调用负载
+        print(f"[Coordinator] 步骤4: 生成OpenAI标准函数调用请求")
+        payload = self.llm_client.generate_function_calling_payload(
+            session_id=session_id,
+            user_input=user_input,
+            scene_type=scene_type,
+            rag_instruction=rag_instruction,
+            functions=functions
+        )
         
-        messages = [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ]
+        # 5. 调用LLM流式生成（支持函数调用）
+        print(f"[Coordinator] 步骤5: 调用LLM流式生成")
+        print(f"[DEBUG] 发送到LLM的请求负载:")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         
-        # 调用流式生成
-        async for chunk in self.llm_client.stream_chat_completions(messages):
+        async for chunk in self.llm_client._chat_completions_with_functions_stream(payload):
             yield chunk

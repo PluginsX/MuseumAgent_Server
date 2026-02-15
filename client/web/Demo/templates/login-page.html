@@ -1,0 +1,76 @@
+<!-- 登录页面模板 -->
+<div class="login-page active" id="loginPage">
+    <!-- 视频背景 -->
+    <div class="video-background">
+        <video autoplay loop muted playsinline>
+            <source src="./res/Loading.mp4" type="video/mp4">
+            您的浏览器不支持视频标签。
+        </video>
+    </div>
+
+    <div class="login-container">
+        <div class="logo">
+            <h1>MuseumAgent</h1>
+            <p>博物馆智能体客户端</p>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="credentials">账户登录</div>
+            <div class="tab" data-tab="apikey">密钥登录</div>
+        </div>
+
+        <div class="tab-content active" id="credentials-tab">
+            <form id="credentials-form">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" class="form-control" placeholder="输入用户名" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" class="form-control" placeholder="输入密码" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn" id="login-btn">登录</button>
+            </form>
+        </div>
+
+        <div class="tab-content" id="apikey-tab">
+            <form id="apikey-form">
+                <div class="form-group">
+                    <label for="apikey-username">用户名（可选）</label>
+                    <input type="text" id="apikey-username" class="form-control" placeholder="输入用户名" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="api-key">API密钥</label>
+                    <input type="password" id="api-key" class="form-control" placeholder="输入API密钥" required autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn" id="apikey-login-btn">使用密钥登录</button>
+            </form>
+        </div>
+
+        <div class="error-message" id="error-message"></div>
+        <div class="loading" id="loading">
+            <span class="spinner"></span>
+            <span>正在登录...</span>
+        </div>
+
+        <div class="server-config">
+            <h3>服务器配置</h3>
+            <div class="server-form-group">
+                <label for="server-host">服务器地址</label>
+                <div class="server-input">
+                    <input type="text" id="server-host" class="form-control" placeholder="例如: museum-agent.com" value="localhost">
+                </div>
+            </div>
+            <div class="server-form-group">
+                <label for="server-port">端口</label>
+                <div class="server-input">
+                    <input type="number" id="server-port" class="form-control port-input" placeholder="端口" value="8001">
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>需要帮助? <a href="#" onclick="showHelp()">查看文档</a></p>
+        </div>
+    </div>
+</div>

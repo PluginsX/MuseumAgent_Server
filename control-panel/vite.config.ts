@@ -9,10 +9,29 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': { 
-        target: 'https://localhost:8000',  // 改为https
+        target: 'http://localhost:8001',
         changeOrigin: true,
-        secure: false  // 允许不安全的HTTPS连接
+        secure: false,
+        rewrite: (path) => path
+      },
+      '/internal': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path
+      }
       },
     },
-  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'antd-vendor': ['antd', '@ant-design/icons'],
+        }
+      }
+    }
+  }
 })

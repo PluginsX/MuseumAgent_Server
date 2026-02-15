@@ -1,3 +1,7 @@
+-1. 请你牢记！通信协议是定死的！永远不许改！CommunicationProtocol_CS.md 
+
+0. 只允许修改client\web\Demo文件夹内的文件，禁止修改任何该Demo文件夹以外的内容！
+
 1. 每次修改架构时，都要更新图表和文档
    - 架构图表存储在 `docs\diagram\*.mermaid`
    - 架构文档存储在 `docs\*.md`
@@ -16,7 +20,7 @@
 
 8.  本服务服务器提供了管理员用的前端web页面，前端项目位置在：`E:\Project\Python\MuseumAgent_Server\control-panel`
 
-9.  前端修改后必须重新构建 `cd E:\Project\Python\MuseumAgent_Server\control-panel; npm run build`
+9.  管理员控制面板web前端项目，修改后必须重新构建 `cd E:\Project\Python\MuseumAgent_Server\control-panel; npm run build`
 
 10. 专用名词解释
     - SRS：Semantic Retrieval System，语义检索系统，是外部提供的资料检索服务，通过API调用。
@@ -39,4 +43,4 @@
    - Api key: ``
 
 12. 永远不需要考虑兼容旧版本代码！新版本代码必须完全基于新的架构和协议！
-13. 严控文件命名规范！升级文件必须替换原文件，已有文件禁止新增多版本文件！文件名禁止出现版本修饰词，如new、fixed、simple等WWWWWWWW
+13. 严控文件命名规范！升级文件必须替换原文件，已有文件禁止新增多版本文件！文件名禁止出现版本修饰词，如new、fixed、simple等

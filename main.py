@@ -54,8 +54,17 @@ def main():
     logger = get_enhanced_logger()
     logger.sys.info("博物馆智能体服务器启动")
     
+    # 初始化数据库
+    print("2. 初始化数据库...")
+    try:
+        from src.db.seed import seed_admin
+        seed_admin()
+        print("   ✓ 数据库初始化成功")
+    except Exception as e:
+        print(f"   ✗ 数据库初始化失败: {e}")
+    
     # 初始化API网关
-    print("2. 初始化API网关...")
+    print("3. 初始化API网关...")
     try:
         gateway = APIGateway(auto_init=False)  # 先不自动初始化
         gateway.initialize()  # 在配置加载完成后手动初始化

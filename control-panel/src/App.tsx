@@ -1,15 +1,23 @@
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import { lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import Clients from './pages/Clients';
-import ConfigLLM from './pages/ConfigLLM';
-import ConfigSRS from './pages/ConfigSRS';
-import Dashboard from './pages/Dashboard';
+import { LazyLoad } from './components/LoadingFallback';
 import Layout from './pages/Layout';
 import Login from './pages/Login';
-import Monitor from './pages/Monitor';
-import SessionConfig from './pages/SessionConfig';
-import Users from './pages/Users';
+
+// 懒加载页面组件
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ConfigLLM = lazy(() => import('./pages/ConfigLLM'));
+const ConfigSTT = lazy(() => import('./pages/ConfigSTT'));
+const ConfigTTS = lazy(() => import('./pages/ConfigTTS'));
+const ConfigSRS = lazy(() => import('./pages/ConfigSRS'));
+const Clients = lazy(() => import('./pages/Clients'));
+const ClientManagement = lazy(() => import('./pages/ClientManagement'));
+const SessionConfig = lazy(() => import('./pages/SessionConfig'));
+const Monitor = lazy(() => import('./pages/Monitor'));
+const Users = lazy(() => import('./pages/Users'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 
 function Protected({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -84,13 +92,17 @@ export default function App() {
               </Protected>
             }
           >
-            <Route index element={<Dashboard />} />
-            <Route path="config/llm" element={<ConfigLLM />} />
-            <Route path="config/srs" element={<ConfigSRS />} />
-            <Route path="/clients" element={<Clients />} />
-            <Route path="/session-config" element={<SessionConfig />} />
-            <Route path="monitor" element={<Monitor />} />
-            <Route path="users" element={<Users />} />
+            <Route index element={<LazyLoad><Dashboard /></LazyLoad>} />
+            <Route path="config/llm" element={<LazyLoad><ConfigLLM /></LazyLoad>} />
+            <Route path="config/stt" element={<LazyLoad><ConfigSTT /></LazyLoad>} />
+            <Route path="config/tts" element={<LazyLoad><ConfigTTS /></LazyLoad>} />
+            <Route path="config/srs" element={<LazyLoad><ConfigSRS /></LazyLoad>} />
+            <Route path="clients" element={<LazyLoad><Clients /></LazyLoad>} />
+            <Route path="session-config" element={<LazyLoad><SessionConfig /></LazyLoad>} />
+            <Route path="monitor" element={<LazyLoad><Monitor /></LazyLoad>} />
+            <Route path="users" element={<LazyLoad><Users /></LazyLoad>} />
+            <Route path="client-management" element={<LazyLoad><ClientManagement /></LazyLoad>} />
+            <Route path="audit-logs" element={<LazyLoad><AuditLogs /></LazyLoad>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
