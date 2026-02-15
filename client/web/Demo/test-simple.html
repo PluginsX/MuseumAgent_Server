@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuseumAgent - 测试版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 400px;
+        }
+
+        .login-container h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .chat-container {
+            width: 100%;
+            height: 100%;
+            background: white;
+            display: none;
+            flex-direction: column;
+        }
+
+        .chat-container.active {
+            display: flex;
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+        }
+
+        .message.sent {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.sent .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.received .message-content {
+            background: white;
+            color: #333;
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area textarea {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 24px;
+            resize: none;
+            font-family: inherit;
+        }
+
+        .input-area button {
+            width: auto;
+            padding: 12px 24px;
+            margin: 0;
+        }
+
+        .error {
+            color: #f44336;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 登录界面 -->
+        <div id="login" class="login-container">
+            <h2>MuseumAgent 登录</h2>
+            <div class="form-group">
+                <label>服务器地址</label>
+                <input type="text" id="server" value="localhost:8001" placeholder="localhost:8001">
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="username" value="admin" placeholder="admin">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="password" value="admin123" placeholder="admin123">
+            </div>
+            <button onclick="login()">登录</button>
+            <div id="error" class="error"></div>
+        </div>
+
+        <!-- 聊天界面 -->
+        <div id="chat" class="chat-container">
+            <div class="chat-header">
+                <h1>MuseumAgent 智能体</h1>
+                <button onclick="logout()" style="width: auto; padding: 10px 20px; margin: 0;">登出</button>
+            </div>
+            <div id="messages" class="messages"></div>
+            <div class="input-area">
+                <textarea id="input" placeholder="输入消息..." rows="1"></textarea>
+                <button onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let sessionId = null;
+
+        function showError(msg) {
+            document.getElementById('error').textContent = msg;
+        }
+
+        function login() {
+            const server = document.getElementById('server').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!server || !username || !password) {
+                showError('请填写所有字段');
+                return;
+            }
+
+            showError('连接中...');
+
+            // 连接 WebSocket
+            ws = new WebSocket(`ws://${server}/ws/agent/stream`);
+
+            ws.onopen = () => {
+                console.log('WebSocket 连接成功');
+                
+                // 发送注册消息
+                const registerMsg = {
+                    version: '1.0',
+                    msg_type: 'REGISTER',
+                    session_id: null,
+                    payload: {
+                        auth: {
+                            type: 'ACCOUNT',
+                            account: username,
+                            password: password
+                        },
+                        platform: 'WEB',
+                        require_tts: false,
+                        function_calling: []
+                    },
+                    timestamp: Date.now()
+                };
+
+                ws.send(JSON.stringify(registerMsg));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('收到消息:', data);
+
+                if (data.msg_type === 'REGISTER_ACK') {
+                    sessionId = data.payload.session_id;
+                    console.log('注册成功，会话ID:', sessionId);
+                    
+                    // 切换到聊天界面
+                    document.getElementById('login').style.display = 'none';
+                    document.getElementById('chat').classList.add('active');
+                    
+                } else if (data.msg_type === 'RESPONSE') {
+                    // 显示回复消息
+                    if (data.payload.content && data.payload.content.text) {
+                        addMessage('received', data.payload.content.text);
+                    }
+                    
+                } else if (data.msg_type === 'ERROR') {
+                    showError('错误: ' + data.payload.error_msg);
+                    
+                } else if (data.msg_type === 'HEARTBEAT') {
+                    // 回复心跳
+                    ws.send(JSON.stringify({
+                        version: '1.0',
+                        msg_type: 'HEARTBEAT_REPLY',
+                        session_id: sessionId,
+                        payload: { client_status: 'ONLINE' },
+                        timestamp: Date.now()
+                    }));
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket 错误:', error);
+                showError('连接失败');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket 连接关闭');
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+
+            if (!text || !ws || !sessionId) return;
+
+            // 显示发送的消息
+            addMessage('sent', text);
+            input.value = '';
+
+            // 发送请求
+            const requestMsg = {
+                version: '1.0',
+                msg_type: 'REQUEST',
+                session_id: sessionId,
+                payload: {
+                    request_id: 'req_' + Date.now(),
+                    data_type: 'TEXT',
+                    stream_flag: false,
+                    stream_seq: 0,
+                    require_tts: false,
+                    content: { text: text }
+                },
+                timestamp: Date.now()
+            };
+
+            ws.send(JSON.stringify(requestMsg));
+        }
+
+        function addMessage(type, text) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + type;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = text;
+            
+            messageDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(messageDiv);
+            
+            // 滚动到底部
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function logout() {
+            if (ws) {
+                ws.close();
+            }
+            document.getElementById('login').style.display = 'block';
+            document.getElementById('chat').classList.remove('active');
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // 回车发送
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

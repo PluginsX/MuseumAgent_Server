@@ -3,24 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MuseumAgent - 智能体客户端</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:;">
+    <title>MuseumAgent</title>
     <link rel="icon" href="res/favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+    <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
-    <!-- 隐藏的文件输入元素 -->
-    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
-
-    <!-- 脚本引用 -->
-    <script src="./js/lib/MuseumAgent_Client.js"></script>
-    <script type="module">
-        // 导入MuseumAgentDemo类
-        import MuseumAgentDemo from './js/app.js';
-        
-        // 全局变量
-        window.MuseumAgentDemo = MuseumAgentDemo;
-    </script>
-    <script type="module" src="./js/app/main.js"></script>
+    <div id="app"></div>
+    
+    <!-- 加载应用 -->
+    <script type="module" src="./src/app.js"></script>
 </body>
 </html>
