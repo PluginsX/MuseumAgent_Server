@@ -27,6 +27,22 @@ export class AudioService {
         this.playbackQueue = [];
         this.isPlaying = false;
         this.currentSource = null;
+        this.currentPlayingMessageId = null; // 当前正在播放的消息ID
+        
+        // 流式播放器（单例，始终存在）
+        this.streamingPlayer = null;
+        
+        // 自动初始化
+        this.autoInit();
+    }
+    
+    /**
+     * 自动初始化（客户端启动时调用）
+     * 注意：AudioContext 必须在用户交互后才能创建，所以这里只是尝试初始化
+     */
+    async autoInit() {
+        // 不在这里初始化，等待用户第一次交互（点击话筒或发送消息）
+        console.log('[AudioService] 等待用户交互后初始化 AudioContext');
     }
 
     /**
@@ -42,7 +58,17 @@ export class AudioService {
                 await this.audioContext.resume();
             }
             
+            // 创建流式播放器（单例）
+            this.streamingPlayer = new StreamingAudioPlayer(this.audioContext);
+            
             console.log('[AudioService] 初始化成功，采样率:', this.audioContext.sampleRate);
+            console.log('[AudioService] 流式播放器已就绪');
+        }
+        
+        // 如果 AudioContext 被挂起，尝试恢复
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
+            console.log('[AudioService] AudioContext 已恢复');
         }
     }
 
@@ -113,7 +139,7 @@ export class AudioService {
     /**
      * 开始录音（启用VAD）
      */
-    async startRecordingWithVAD(vadParams, onDataCallback) {
+    async startRecordingWithVAD(vadParams, onSpeechStart, onAudioData, onSpeechEnd) {
         await this.init();
 
         this.vadParams = vadParams;
@@ -122,7 +148,10 @@ export class AudioService {
             isSpeaking: false,
             silenceStart: null,
             speechStart: null,
-            audioBuffer: []
+            audioBuffer: [],
+            speechStartCallback: onSpeechStart,
+            audioDataCallback: onAudioData,
+            speechEndCallback: onSpeechEnd
         };
 
         try {
@@ -156,7 +185,7 @@ export class AudioService {
                 }
 
                 // VAD处理
-                this._processVAD(inputData, pcmData.buffer, onDataCallback);
+                this._processVAD(inputData, pcmData.buffer);
 
                 eventBus.emit(Events.RECORDING_DATA, pcmData.buffer);
             };
@@ -181,8 +210,14 @@ export class AudioService {
 
     /**
      * VAD处理逻辑
+     * VAD只控制何时开始/停止发送语音消息，不控制话筒开关
      */
-    _processVAD(floatData, pcmBuffer, onDataCallback) {
+    _processVAD(floatData, pcmBuffer) {
+        if (!this.vadEnabled) {
+            console.log('[AudioService] VAD未启用，跳过处理');
+            return;
+        }
+        
         // 计算音频能量（RMS）
         let sum = 0;
         for (let i = 0; i < floatData.length; i++) {
@@ -191,6 +226,13 @@ export class AudioService {
         const rms = Math.sqrt(sum / floatData.length);
 
         const now = Date.now();
+        
+        // 调试：每100帧输出一次能量值
+        if (!this._vadDebugCounter) this._vadDebugCounter = 0;
+        this._vadDebugCounter++;
+        if (this._vadDebugCounter % 100 === 0) {
+            console.log('[AudioService] VAD能量值:', rms.toFixed(4), '阈值:', this.vadParams.speechThreshold);
+        }
 
         // 检测语音开始
         if (!this.vadState.isSpeaking) {
@@ -200,21 +242,26 @@ export class AudioService {
                 this.vadState.speechStart = now;
                 this.vadState.silenceStart = null;
                 
+                console.log('[AudioService] VAD: 检测到语音开始，RMS:', rms.toFixed(4), '创建新的语音消息');
+                
+                // 触发语音开始回调（创建新的语音消息气泡）
+                if (this.vadState.speechStartCallback) {
+                    this.vadState.speechStartCallback();
+                }
+                
                 // 添加预填充（之前缓存的音频）
                 const paddingFrames = Math.floor(this.vadParams.preSpeechPadding / (4096 / 16));
                 const startIndex = Math.max(0, this.vadState.audioBuffer.length - paddingFrames);
                 for (let i = startIndex; i < this.vadState.audioBuffer.length; i++) {
-                    if (onDataCallback) {
-                        onDataCallback(this.vadState.audioBuffer[i]);
+                    if (this.vadState.audioDataCallback) {
+                        this.vadState.audioDataCallback(this.vadState.audioBuffer[i]);
                     }
                 }
                 
                 // 发送当前帧
-                if (onDataCallback) {
-                    onDataCallback(pcmBuffer);
+                if (this.vadState.audioDataCallback) {
+                    this.vadState.audioDataCallback(pcmBuffer);
                 }
-                
-                console.log('[AudioService] VAD: 检测到语音开始');
             } else {
                 // 缓存静音帧（用于预填充）
                 this.vadState.audioBuffer.push(pcmBuffer);
@@ -241,24 +288,34 @@ export class AudioService {
                         // 添加后填充
                         const paddingFrames = Math.floor(this.vadParams.postSpeechPadding / (4096 / 16));
                         for (let i = 0; i < paddingFrames && i < this.vadState.audioBuffer.length; i++) {
-                            if (onDataCallback) {
-                                onDataCallback(this.vadState.audioBuffer[i]);
+                            if (this.vadState.audioDataCallback) {
+                                this.vadState.audioDataCallback(this.vadState.audioBuffer[i]);
                             }
                         }
                         
                         console.log('[AudioService] VAD: 检测到语音结束，时长:', (speechDuration / 1000).toFixed(2), '秒');
+                        console.log('[AudioService] VAD: 结束本次语音消息发送，继续监听下一次语音');
+                        
+                        // 触发语音结束回调（结束本次语音消息发送）
+                        if (this.vadState.speechEndCallback) {
+                            this.vadState.speechEndCallback();
+                        }
+                    } else {
+                        console.log('[AudioService] VAD: 语音时长不足，忽略:', (speechDuration / 1000).toFixed(2), '秒');
                     }
                     
-                    // 重置状态
+                    // 重置VAD状态，准备检测下一次语音
+                    // 注意：不关闭话筒，继续监听
                     this.vadState.isSpeaking = false;
                     this.vadState.speechStart = null;
                     this.vadState.silenceStart = null;
                     this.vadState.audioBuffer = [];
+                    return;
                 }
                 
                 // 继续发送当前帧（后填充）
-                if (onDataCallback) {
-                    onDataCallback(pcmBuffer);
+                if (this.vadState.audioDataCallback) {
+                    this.vadState.audioDataCallback(pcmBuffer);
                 }
                 this.vadState.audioBuffer.push(pcmBuffer);
             } else {
@@ -266,8 +323,8 @@ export class AudioService {
                 this.vadState.silenceStart = null;
                 
                 // 发送当前帧
-                if (onDataCallback) {
-                    onDataCallback(pcmBuffer);
+                if (this.vadState.audioDataCallback) {
+                    this.vadState.audioDataCallback(pcmBuffer);
                 }
             }
         }
@@ -353,22 +410,92 @@ export class AudioService {
     }
 
     /**
-     * 流式播放音频（边接收边播放）
+     * 开始播放新的流式消息
      */
-    async playStreamPCM(pcmChunks) {
-        await this.init();
-
-        // 合并所有 PCM 数据
-        const totalLength = pcmChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-        const combined = new Uint8Array(totalLength);
-        
-        let offset = 0;
-        for (const chunk of pcmChunks) {
-            combined.set(new Uint8Array(chunk), offset);
-            offset += chunk.byteLength;
+    async startStreamingMessage(messageId) {
+        // 确保初始化（用户交互后可以成功）
+        try {
+            await this.init();
+            console.log('[AudioService] AudioContext 状态:', this.audioContext?.state);
+            console.log('[AudioService] 流式播放器状态:', this.streamingPlayer ? '已就绪' : '未初始化');
+        } catch (error) {
+            console.error('[AudioService] 初始化失败:', error);
+            return false;
         }
-
-        return this.playPCM(combined.buffer);
+        
+        if (!this.streamingPlayer) {
+            console.error('[AudioService] 流式播放器未初始化');
+            return false;
+        }
+        
+        // 停止当前正在播放的其他消息
+        if (this.currentPlayingMessageId && this.currentPlayingMessageId !== messageId) {
+            console.log('[AudioService] 停止当前播放:', this.currentPlayingMessageId);
+            this.streamingPlayer.stop();
+        }
+        
+        // 开始新消息
+        this.streamingPlayer.startMessage(messageId);
+        this.currentPlayingMessageId = messageId;
+        
+        console.log('[AudioService] 开始流式播放消息:', messageId);
+        return true;
+    }
+    
+    /**
+     * 添加音频块到流式播放器
+     */
+    async addStreamingChunk(messageId, pcmData) {
+        // 如果播放器未初始化，尝试初始化
+        if (!this.streamingPlayer) {
+            try {
+                console.log('[AudioService] 流式播放器未初始化，尝试初始化...');
+                await this.init();
+                console.log('[AudioService] 初始化完成，AudioContext:', this.audioContext?.state, '播放器:', this.streamingPlayer ? '已就绪' : '未初始化');
+            } catch (error) {
+                console.error('[AudioService] 初始化失败:', error);
+                return;
+            }
+        }
+        
+        if (!this.streamingPlayer) {
+            console.error('[AudioService] 流式播放器仍未初始化');
+            return;
+        }
+        
+        this.streamingPlayer.addChunk(messageId, pcmData);
+    }
+    
+    /**
+     * 结束流式消息
+     */
+    endStreamingMessage(messageId) {
+        if (!this.streamingPlayer) {
+            return;
+        }
+        
+        this.streamingPlayer.endMessage(messageId);
+        
+        // 如果是当前播放的消息，清除ID
+        if (this.currentPlayingMessageId === messageId) {
+            this.currentPlayingMessageId = null;
+        }
+        
+        console.log('[AudioService] 流式消息结束:', messageId);
+    }
+    
+    /**
+     * 停止流式播放
+     */
+    stopStreamingPlayback() {
+        if (!this.streamingPlayer) {
+            return;
+        }
+        
+        this.streamingPlayer.stop();
+        this.currentPlayingMessageId = null;
+        
+        console.log('[AudioService] 停止流式播放');
     }
 
     /**
@@ -381,6 +508,7 @@ export class AudioService {
         }
 
         this.isPlaying = false;
+        this.currentPlayingMessageId = null;
         stateManager.setState('audio.isPlaying', false);
         eventBus.emit(Events.AUDIO_PLAY_END);
     }
@@ -438,11 +566,193 @@ export class AudioService {
     cleanup() {
         this.stopRecording();
         this.stopPlayback();
+        this.stopStreamingPlayback();
 
         if (this.audioContext) {
             this.audioContext.close();
             this.audioContext = null;
         }
+        
+        this.streamingPlayer = null;
+    }
+}
+
+/**
+ * 流式音频播放器
+ * 实现真正的边接收边播放，无需等待所有数据
+ * 
+ * 设计原则：
+ * 1. 单例模式：全局唯一实例，客户端启动时初始化
+ * 2. 始终待命：随时准备接收和播放音频
+ * 3. 多消息支持：可以同时管理多个消息的播放
+ */
+class StreamingAudioPlayer {
+    constructor(audioContext) {
+        this.audioContext = audioContext;
+        this.sampleRate = 16000;
+        
+        // 当前播放的消息
+        this.currentMessageId = null;
+        this.isPlaying = false;
+        this.isStopped = false;
+        
+        // 音频队列
+        this.audioQueue = [];
+        this.isProcessing = false;
+        
+        // 播放时间跟踪
+        this.nextStartTime = 0;
+        this.startTime = 0;
+        
+        console.log('[StreamingAudioPlayer] 播放器已初始化，随时待命');
+    }
+    
+    /**
+     * 开始播放新消息
+     */
+    startMessage(messageId) {
+        // 如果正在播放其他消息，先停止
+        if (this.currentMessageId && this.currentMessageId !== messageId) {
+            console.log('[StreamingAudioPlayer] 停止当前播放:', this.currentMessageId);
+            this.stop();
+        }
+        
+        this.currentMessageId = messageId;
+        this.isPlaying = false;
+        this.isStopped = false;
+        this.audioQueue = [];
+        this.isProcessing = false;
+        this.nextStartTime = 0;
+        
+        console.log('[StreamingAudioPlayer] 开始播放新消息:', messageId);
+    }
+    
+    /**
+     * 添加音频块（实时接收）
+     */
+    addChunk(messageId, pcmData) {
+        // 检查是否是当前消息
+        if (messageId !== this.currentMessageId) {
+            console.log('[StreamingAudioPlayer] 忽略非当前消息的音频块:', messageId);
+            return;
+        }
+        
+        if (this.isStopped) {
+            console.log('[StreamingAudioPlayer] 已停止，忽略音频块');
+            return;
+        }
+        
+        console.log('[StreamingAudioPlayer] 接收音频块:', pcmData.byteLength, '字节');
+        this.audioQueue.push(pcmData);
+        
+        // 如果还没开始播放，立即开始
+        if (!this.isPlaying) {
+            this.start();
+        }
+        
+        // 处理队列
+        this.processQueue();
+    }
+    
+    /**
+     * 开始播放
+     */
+    start() {
+        if (this.isPlaying || this.isStopped) return;
+        
+        this.isPlaying = true;
+        this.startTime = this.audioContext.currentTime;
+        this.nextStartTime = this.startTime;
+        
+        console.log('[StreamingAudioPlayer] 开始播放，当前时间:', this.startTime.toFixed(3));
+    }
+    
+    /**
+     * 处理音频队列
+     */
+    async processQueue() {
+        if (this.isProcessing || this.isStopped) return;
+        
+        this.isProcessing = true;
+        
+        while (this.audioQueue.length > 0 && !this.isStopped) {
+            const pcmData = this.audioQueue.shift();
+            
+            try {
+                // 创建 AudioBuffer
+                const audioBuffer = this.audioContext.createBuffer(
+                    1,
+                    pcmData.byteLength / 2,
+                    this.sampleRate
+                );
+                
+                const channelData = audioBuffer.getChannelData(0);
+                const pcmArray = new Int16Array(pcmData);
+                
+                for (let i = 0; i < pcmArray.length; i++) {
+                    channelData[i] = pcmArray[i] / 32768;
+                }
+                
+                // 创建音频源并调度播放
+                const source = this.audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(this.audioContext.destination);
+                
+                // 计算播放时间（无缝衔接）
+                const now = this.audioContext.currentTime;
+                const startTime = Math.max(now, this.nextStartTime);
+                
+                source.start(startTime);
+                
+                // 更新下一个音频块的开始时间
+                this.nextStartTime = startTime + audioBuffer.duration;
+                
+                console.log('[StreamingAudioPlayer] 播放音频块，时长:', audioBuffer.duration.toFixed(3), '秒，开始时间:', startTime.toFixed(3));
+                
+            } catch (error) {
+                console.error('[StreamingAudioPlayer] 播放音频块失败:', error);
+            }
+        }
+        
+        this.isProcessing = false;
+    }
+    
+    /**
+     * 标记消息流结束
+     */
+    endMessage(messageId) {
+        if (messageId !== this.currentMessageId) {
+            return;
+        }
+        
+        console.log('[StreamingAudioPlayer] 消息流结束:', messageId);
+        // 处理剩余的音频块
+        this.processQueue();
+        
+        // 不清空状态，等待下一个消息
+    }
+    
+    /**
+     * 停止播放
+     */
+    stop() {
+        if (this.isStopped) return;
+        
+        this.isStopped = true;
+        this.isPlaying = false;
+        this.audioQueue = [];
+        this.currentMessageId = null;
+        
+        console.log('[StreamingAudioPlayer] 停止播放');
+    }
+    
+    /**
+     * 重置播放器（准备播放新消息）
+     */
+    reset() {
+        this.stop();
+        this.isStopped = false;
+        console.log('[StreamingAudioPlayer] 播放器已重置，准备接收新消息');
     }
 }
 

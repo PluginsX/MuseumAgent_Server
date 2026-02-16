@@ -216,21 +216,6 @@ class App {
         // 添加样式
         const style = document.createElement('style');
         style.textContent = `
-            .chat-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 10px 20px;
-                background-color: #f0f0f0;
-                border-bottom: 1px solid #ddd;
-            }
-            
-            .chat-header h1 {
-                margin: 0;
-                font-size: 18px;
-                color: #333;
-            }
-            
             .header-button-container {
                 display: flex;
                 align-items: center;

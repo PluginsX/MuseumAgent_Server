@@ -108,7 +108,7 @@ class UnifiedSTTService:
             return ('m4a', '.m4a')
         
         # 默认为mp3
-        self.logger.stt.warning(f"Unknown audio format, header: {header.hex()}, defaulting to mp3")
+        self.logger.stt.warn(f"Unknown audio format, header: {header.hex()}, defaulting to mp3")
         return ('mp3', '.mp3')
     
     def _convert_pcm_to_wav(self, pcm_data: bytes) -> bytes:
@@ -154,153 +154,7 @@ class UnifiedSTTService:
         
         return wav_header + pcm_data
     
-    async def recognize_audio(self, audio_data: bytes, audio_format_hint: str = None) -> str:
-        """
-        识别音频为文本（非流式）
-        
-        Args:
-            audio_data: 音频数据
-            audio_format_hint: 音频格式提示（可选，如'pcm', 'wav', 'mp3'等）
-            
-        Returns:
-            识别出的文本
-        """
-        if not audio_data:
-            return ""
-        
-        # 确保配置已加载
-        self._ensure_config_loaded()
-        
-        # 优先使用格式提示，否则自动检测
-        if audio_format_hint:
-            audio_format = audio_format_hint.lower()
-            file_suffix = f'.{audio_format}'
-            self.logger.stt.info(f"Using provided audio format hint: {audio_format}")
-        else:
-            audio_format, file_suffix = self._detect_audio_format(audio_data)
-        
-        self.logger.stt.info("Starting speech recognition", {
-                'audio_size': len(audio_data),
-                'format': audio_format,
-                'file_suffix': file_suffix
-            })
-        
-        # 🔍 计算音频时长
-        if audio_format == 'pcm':
-            # PCM: 16bit = 2 bytes/sample, 16kHz = 16000 samples/second
-            duration_seconds = len(audio_data) / (16000 * 2)
-            self.logger.stt.info(f"PCM audio duration: {duration_seconds:.3f} seconds")
-            
-            # ⚠️ 检查时长是否太短
-            if duration_seconds < 0.5:
-                self.logger.stt.info(f"Audio duration too short: {duration_seconds:.3f}s < 0.5s, may cause recognition failure")
-        
-        # 🔍 调试：检查音频数据的实际内容
-        if len(audio_data) >= 16:
-            header_hex = audio_data[:16].hex()
-            self.logger.stt.info(f"Audio data header (first 16 bytes): {header_hex}")
-            
-            # 检查是否全是零（静音）
-            non_zero_count = sum(1 for b in audio_data if b != 0)
-            zero_ratio = (len(audio_data) - non_zero_count) / len(audio_data)
-            self.logger.stt.info(f"Audio data analysis: non_zero={non_zero_count}/{len(audio_data)}, zero_ratio={zero_ratio:.2%}")
-            
-            # 如果是PCM格式，检查采样值范围
-            if audio_format == 'pcm' and len(audio_data) >= 2:
-                import struct
-                # 读取前几个16bit采样值
-                samples = []
-                for i in range(0, min(20, len(audio_data) - 1), 2):
-                    sample = struct.unpack('<h', audio_data[i:i+2])[0]  # 小端序16bit有符号整数
-                    samples.append(sample)
-                self.logger.stt.info(f"PCM samples (first 10): {samples[:10]}")
-                
-                # 检查采样值是否合理
-                max_sample = max(abs(s) for s in samples)
-                self.logger.stt.info(f"Max sample amplitude: {max_sample} / 32768")
-        
-        try:
-            # 将音频数据保存到临时文件以供DashScope SDK使用
-            import tempfile
-            import os
-            
-            # 使用检测到的格式保存文件
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_file:
-                temp_filename = temp_file.name
-                temp_file.write(audio_data)
-            
-            try:
-                # 记录客户端消息发送
-                self.logger.stt.info('STT recognition request sent', 
-                                      {'audio_size': len(audio_data), 'format': audio_format, 'model': self.stt_model})
-                
-                # 🔧 使用正确的格式参数调用DashScope SDK
-                # paraformer-realtime-v2 支持: wav, opus, mp3 (不支持裸pcm)
-                recognition = Recognition(
-                    model=self.stt_model,
-                    format=audio_format,  # 使用转换后的格式
-                    sample_rate=16000,    # 16kHz采样率（必须）
-                    callback=SimpleRecognitionCallback()
-                )
-                
-                response = recognition.call(file=temp_filename)
-                
-                if response.status_code == 200:
-                    # 提取识别结果
-                    full_text = ""
-                    response_str = str(response)
-                    
-                    # 从响应字符串中提取文本
-                    import re
-                    # 查找'text'字段的值，特别关注包含中文的文本
-                    text_pattern = r"'text':\s*'([^']*(?:欢迎|博物馆|智能|助手|端到端|测试)[^']*)'"
-                    text_match = re.search(text_pattern, response_str)
-                    
-                    if text_match:
-                        full_text = text_match.group(1)
-                    else:
-                        # 如果没找到，尝试其他模式
-                        # 寻找包含中文句子的模式
-                        chinese_sentence_pattern = r"'text':\s*'([^']*(?:[\u4e00-\u9fff]){5,}[^']*)'"
-                        sentence_match = re.search(chinese_sentence_pattern, response_str)
-                        if sentence_match:
-                            full_text = sentence_match.group(1)
-                        else:
-                            # 最后尝试提取所有中文字符
-                            chinese_chars = re.findall(r'[\u4e00-\u9fff]+', response_str)
-                            if chinese_chars:
-                                full_text = ''.join(chinese_chars)[:100]  # 取前100个字符
-                
-                    # 记录客户端消息接收
-                    self.logger.stt.info('STT recognition response received', 
-                                          {'recognized_text': full_text[:100]})
-                    
-                    self.logger.stt.info(f"STT识别完成: {full_text}")
-                    return full_text
-                else:
-                    self.logger.sys.error(f"STT识别失败: {response.code}, {response.message}")
-                    self.logger.stt.error(f'STT recognition failed', 
-                                  {'error_code': response.code, 'message': response.message})
-                    # 返回降级结果
-                    return "测试音频识别内容，实际环境中需要正确配置阿里云STT服务"
-                    
-            except Exception as e:
-                self.logger.stt.error(f"STT recognition exception: {str(e)}")
-                self.logger.stt.error(f'STT recognition exception', {'error': str(e)})
-                # 返回降级结果
-                return "测试音频识别内容，实际环境中需要正确配置阿里云STT服务"
-            finally:
-                # 清理临时文件
-                if os.path.exists(temp_filename):
-                    os.unlink(temp_filename)
-            
-        except Exception as e:
-            self.logger.stt.error("STT recognition failed", {
-                'error': str(e),
-                'flow': 'RECOGNITION_ERROR'
-            })
-            return ""
-    
+
     async def stream_recognize(self, audio_generator, audio_format: str = 'pcm') -> str:
         """
         真正的流式语音识别（输入流式，输出完整文本）
@@ -361,7 +215,9 @@ class UnifiedSTTService:
                             text = sentence.get('text', '')
                             if text:
                                 # 判断是部分结果还是最终结果
-                                is_final = sentence.get('end_time', 0) > 0
+                                # end_time 可能为 None，需要安全处理
+                                end_time = sentence.get('end_time')
+                                is_final = end_time is not None and end_time > 0
                                 
                                 if is_final:
                                     self.final_result = text
@@ -393,7 +249,7 @@ class UnifiedSTTService:
                     frame_count = 0
                     async for audio_chunk in audio_generator:
                         if audio_chunk:
-                            # 发送音频帧
+                            # 发送音频帧（同步调用，但很快）
                             recognition.send_audio_frame(audio_chunk)
                             frame_count += 1
                             self.logger.stt.debug('Sent audio frame', {
@@ -401,9 +257,12 @@ class UnifiedSTTService:
                                 'size': len(audio_chunk)
                             })
                     
-                    # 所有音频发送完毕，停止识别
-                    recognition.stop()
-                    self.logger.stt.info('STT streaming stopped', {'total_frames': frame_count})
+                    self.logger.stt.info('All audio frames sent', {'total_frames': frame_count})
+                    
+                    # 所有音频发送完毕，停止识别（阻塞调用，需要在线程中执行）
+                    self.logger.stt.info('Calling recognition.stop() (blocking call)...')
+                    await asyncio.to_thread(recognition.stop)
+                    self.logger.stt.info('STT streaming stopped')
                     
                 except Exception as e:
                     recognition_error[0] = str(e)
@@ -413,12 +272,15 @@ class UnifiedSTTService:
             # 启动音频发送任务
             send_task = asyncio.create_task(send_audio_frames())
             
-            # 等待识别完成
+            # 等待识别完成（通过回调触发）
             while not recognition_complete.is_set():
                 await asyncio.sleep(0.1)
             
             # 等待发送任务完成
-            await send_task
+            try:
+                await send_task
+            except Exception as e:
+                self.logger.stt.error('Send task failed', {'error': str(e)})
             
             # 检查是否有错误
             if recognition_error[0]:

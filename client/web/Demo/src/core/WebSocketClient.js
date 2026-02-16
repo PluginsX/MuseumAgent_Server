@@ -182,13 +182,16 @@ export class WebSocketClient {
                 stream_flag: true,
                 stream_seq: 0,
                 require_tts: options.requireTTS || false,
-                content: { voice_mode: 'BINARY' }
+                content: { 
+                    voice_mode: 'BINARY',
+                    audio_format: 'pcm'  // ✅ 明确指定 PCM 格式
+                }
             },
             timestamp: Date.now()
         };
 
         this._send(startMessage);
-        console.log('[WebSocket] 已发送起始帧');
+        console.log('[WebSocket] 已发送起始帧 (PCM 格式)');
 
         // 2. 实时发送二进制音频数据
         const reader = audioStream.getReader();
@@ -228,13 +231,16 @@ export class WebSocketClient {
                 stream_flag: true,
                 stream_seq: -1,
                 require_tts: options.requireTTS || false,
-                content: { voice_mode: 'BINARY' }
+                content: { 
+                    voice_mode: 'BINARY',
+                    audio_format: 'pcm'  // ✅ 明确指定 PCM 格式
+                }
             },
             timestamp: Date.now()
         };
 
         this._send(endMessage);
-        console.log('[WebSocket] 已发送结束帧');
+        console.log('[WebSocket] 已发送结束帧 (PCM 格式)');
 
         // 等待响应
         return responsePromise;

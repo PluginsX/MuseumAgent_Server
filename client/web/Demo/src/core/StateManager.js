@@ -25,8 +25,48 @@ export class StateManager {
             session: {
                 requireTTS: true,
                 autoPlay: true,
-                functionCalling: [],
-                platform: 'WEB'
+                functionCalling: [
+                    {
+                        name: "play_animation",
+                        description: "播放指定的动画效果，让桌面宠物做出相应动作",
+                        parameters: [
+                            { name: "animation_name", type: "string", description: "动画名称，如：wave(挥手)、jump(跳跃)、dance(跳舞)、sleep(睡觉)、happy(开心)" }
+                        ]
+                    },
+                    {
+                        name: "change_expression",
+                        description: "改变桌面宠物的表情",
+                        parameters: [
+                            { name: "expression", type: "string", description: "表情类型，如：smile(微笑)、sad(伤心)、angry(生气)、surprised(惊讶)、love(爱心)" }
+                        ]
+                    },
+                    {
+                        name: "move_to_position",
+                        description: "移动桌面宠物到屏幕指定位置",
+                        parameters: [
+                            { name: "x", type: "number", description: "X坐标（像素）" },
+                            { name: "y", type: "number", description: "Y坐标（像素）" }
+                        ]
+                    },
+                    {
+                        name: "set_mood",
+                        description: "设置桌面宠物的心情状态",
+                        parameters: [
+                            { name: "mood", type: "string", description: "心情状态，如：happy(开心)、normal(正常)、tired(疲惫)、excited(兴奋)" },
+                            { name: "duration", type: "number", description: "持续时间（秒），默认60" }
+                        ]
+                    },
+                    {
+                        name: "speak_text",
+                        description: "让桌面宠物说出指定文字（显示气泡对话框）",
+                        parameters: [
+                            { name: "text", type: "string", description: "要说的文字内容" },
+                            { name: "duration", type: "number", description: "显示时长（秒），默认3" }
+                        ]
+                    }
+                ],
+                platform: 'WEB',
+                functionCallingModified: false // 标记用户是否修改过函数定义
             },
             
             // 消息状态
@@ -195,8 +235,48 @@ export class StateManager {
             session: {
                 requireTTS: true,
                 autoPlay: true,
-                functionCalling: [],
-                platform: 'WEB'
+                functionCalling: [
+                    {
+                        name: "play_animation",
+                        description: "播放指定的动画效果，让桌面宠物做出相应动作",
+                        parameters: [
+                            { name: "animation_name", type: "string", description: "动画名称，如：wave(挥手)、jump(跳跃)、dance(跳舞)、sleep(睡觉)、happy(开心)" }
+                        ]
+                    },
+                    {
+                        name: "change_expression",
+                        description: "改变桌面宠物的表情",
+                        parameters: [
+                            { name: "expression", type: "string", description: "表情类型，如：smile(微笑)、sad(伤心)、angry(生气)、surprised(惊讶)、love(爱心)" }
+                        ]
+                    },
+                    {
+                        name: "move_to_position",
+                        description: "移动桌面宠物到屏幕指定位置",
+                        parameters: [
+                            { name: "x", type: "number", description: "X坐标（像素）" },
+                            { name: "y", type: "number", description: "Y坐标（像素）" }
+                        ]
+                    },
+                    {
+                        name: "set_mood",
+                        description: "设置桌面宠物的心情状态",
+                        parameters: [
+                            { name: "mood", type: "string", description: "心情状态，如：happy(开心)、normal(正常)、tired(疲惫)、excited(兴奋)" },
+                            { name: "duration", type: "number", description: "持续时间（秒），默认60" }
+                        ]
+                    },
+                    {
+                        name: "speak_text",
+                        description: "让桌面宠物说出指定文字（显示气泡对话框）",
+                        parameters: [
+                            { name: "text", type: "string", description: "要说的文字内容" },
+                            { name: "duration", type: "number", description: "显示时长（秒），默认3" }
+                        ]
+                    }
+                ],
+                platform: 'WEB',
+                functionCallingModified: false // 标记用户是否修改过函数定义
             },
             messages: [],
             recording: {

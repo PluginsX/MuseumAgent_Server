@@ -80,7 +80,7 @@ export class MessageService {
 
             // 发送请求
             const sessionConfig = stateManager.getState('session');
-            await this.wsClient.sendTextRequest(text, {
+            const options = {
                 requireTTS: sessionConfig.requireTTS,
                 
                 // 文本流回调
@@ -108,8 +108,8 @@ export class MessageService {
                     eventBus.emit(Events.MESSAGE_TEXT_CHUNK, { id: textMessageId, chunk });
                 },
 
-                // 语音流回调
-                onVoiceChunk: (audioData, seq) => {
+                // 语音流回调（实时流式播放）
+                onVoiceChunk: async (audioData, seq) => {
                     // 第一次收到语音时创建语音气泡
                     if (!voiceMessageId) {
                         voiceMessageId = this._generateMessageId();
@@ -123,8 +123,22 @@ export class MessageService {
                             timestamp: Date.now(),
                             isStreaming: true
                         });
+                        
+                        // 如果启用自动播放，开始流式播放
+                        if (sessionConfig.autoPlay !== false) {
+                            console.log('[MessageService] 开始流式播放:', voiceMessageId);
+                            await audioService.startStreamingMessage(voiceMessageId);
+                        }
                     }
+                    
+                    // 保存音频数据（用于后续手动播放）
                     voiceChunks.push(audioData);
+                    
+                    // 如果启用自动播放，实时播放音频块
+                    if (sessionConfig.autoPlay !== false) {
+                        await audioService.addStreamingChunk(voiceMessageId, audioData);
+                    }
+                    
                     eventBus.emit(Events.MESSAGE_VOICE_CHUNK, { id: voiceMessageId, audioData, seq });
                 },
 
@@ -153,7 +167,7 @@ export class MessageService {
 
                     // 处理语音数据
                     if (voiceMessageId && voiceChunks.length > 0) {
-                        // 合并所有语音数据
+                        // 合并所有语音数据（用于保存和手动播放）
                         const totalLength = voiceChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
                         const combined = new Uint8Array(totalLength);
                         let offset = 0;
@@ -172,19 +186,25 @@ export class MessageService {
                             isStreaming: false
                         });
 
-                        // 自动播放（如果启用）
+                        // 如果启用自动播放，通知流式播放器结束
                         if (sessionConfig.autoPlay !== false) {
-                            try {
-                                await audioService.playPCM(combined.buffer);
-                            } catch (error) {
-                                console.error('[MessageService] 音频播放失败:', error);
-                            }
+                            audioService.endStreamingMessage(voiceMessageId);
                         }
                     }
 
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
-            });
+            };
+
+            // 检查是否需要更新 FunctionCalling
+            if (sessionConfig.functionCallingModified) {
+                options.functionCallingOp = 'REPLACE';
+                options.functionCalling = sessionConfig.functionCalling;
+                // 重置修改标记
+                stateManager.setState('session.functionCallingModified', false);
+            }
+
+            await this.wsClient.sendTextRequest(text, options);
 
         } catch (error) {
             console.error('[MessageService] 发送消息失败:', error);
@@ -223,8 +243,7 @@ export class MessageService {
             // 发送语音请求（流式）
             const sessionConfig = stateManager.getState('session');
             
-            // 异步发送，不阻塞
-            this.wsClient.sendVoiceRequestStream(audioStream, {
+            const voiceOptions = {
                 requireTTS: sessionConfig.requireTTS,
                 
                 // 文本流回调
@@ -250,8 +269,9 @@ export class MessageService {
                     eventBus.emit(Events.MESSAGE_TEXT_CHUNK, { id: textMessageId, chunk });
                 },
 
-                // 语音流回调
-                onVoiceChunk: (audioData, seq) => {
+                // 语音流回调（实时流式播放）
+                onVoiceChunk: async (audioData, seq) => {
+                    // 第一次收到语音时创建语音气泡
                     if (!voiceMessageId) {
                         voiceMessageId = this._generateMessageId();
                         stateManager.addMessage({
@@ -264,8 +284,22 @@ export class MessageService {
                             timestamp: Date.now(),
                             isStreaming: true
                         });
+                        
+                        // 如果启用自动播放，开始流式播放
+                        if (sessionConfig.autoPlay !== false) {
+                            console.log('[MessageService] 开始流式播放:', voiceMessageId);
+                            await audioService.startStreamingMessage(voiceMessageId);
+                        }
                     }
+                    
+                    // 保存音频数据（用于后续手动播放）
                     voiceChunks.push(audioData);
+                    
+                    // 如果启用自动播放，实时播放音频块
+                    if (sessionConfig.autoPlay !== false) {
+                        await audioService.addStreamingChunk(voiceMessageId, audioData);
+                    }
+                    
                     eventBus.emit(Events.MESSAGE_VOICE_CHUNK, { id: voiceMessageId, audioData, seq });
                 },
 
@@ -293,6 +327,7 @@ export class MessageService {
 
                     // 处理语音数据
                     if (voiceMessageId && voiceChunks.length > 0) {
+                        // 合并所有语音数据（用于保存和手动播放）
                         const totalLength = voiceChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
                         const combined = new Uint8Array(totalLength);
                         let offset = 0;
@@ -309,18 +344,26 @@ export class MessageService {
                             isStreaming: false
                         });
 
+                        // 如果启用自动播放，通知流式播放器结束
                         if (sessionConfig.autoPlay !== false) {
-                            try {
-                                await audioService.playPCM(combined.buffer);
-                            } catch (error) {
-                                console.error('[MessageService] 音频播放失败:', error);
-                            }
+                            audioService.endStreamingMessage(voiceMessageId);
                         }
                     }
 
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
-            }).catch(error => {
+            };
+
+            // 检查是否需要更新 FunctionCalling
+            if (sessionConfig.functionCallingModified) {
+                voiceOptions.functionCallingOp = 'REPLACE';
+                voiceOptions.functionCalling = sessionConfig.functionCalling;
+                // 重置修改标记
+                stateManager.setState('session.functionCallingModified', false);
+            }
+
+            // 异步发送，不阻塞
+            this.wsClient.sendVoiceRequestStream(audioStream, voiceOptions).catch(error => {
                 console.error('[MessageService] 语音请求失败:', error);
                 eventBus.emit(Events.MESSAGE_ERROR, error);
             });
@@ -459,9 +502,21 @@ export class MessageService {
                         // 自动播放（如果启用）
                         if (sessionConfig.autoPlay !== false) {
                             try {
+                                // 停止当前正在播放的语音
+                                if (audioService.currentPlayingMessageId) {
+                                    audioService.stopPlayback();
+                                }
+                                
+                                // 设置当前播放的消息ID
+                                audioService.currentPlayingMessageId = voiceMessageId;
+                                
                                 await audioService.playPCM(combined.buffer);
+                                
+                                // 播放完成后清除ID
+                                audioService.currentPlayingMessageId = null;
                             } catch (error) {
                                 console.error('[MessageService] 音频播放失败:', error);
+                                audioService.currentPlayingMessageId = null;
                             }
                         }
                     }

@@ -23,7 +23,7 @@ from src.ws.protocol import (
     session_data_to_protocol,
 )
 from src.ws.connection_manager import ConnectionManager
-from src.ws.request_processor import process_text_request, process_voice_request
+from src.ws.request_processor import process_text_request
 from src.common.enhanced_logger import get_enhanced_logger
 from src.db.client_api import ClientLocalAPI
 from src.session.strict_session_manager import strict_session_manager
@@ -108,7 +108,7 @@ async def _handle_request(
     ws: WebSocket,
     session_id: str,
     payload: Dict,
-    voice_buffer: Dict[str, bytes],
+    voice_buffer: Dict[str, Dict[str, Any]],
     active_voice_request: Dict[str, Optional[str]],
 ) -> bool:
     """处理 REQUEST。返回 False 表示应退出循环（如 SHUTDOWN）"""
@@ -149,29 +149,82 @@ async def _handle_request(
     else:
         require_tts = require_tts or False
 
-    # VOICE BINARY：起始/结束帧，中间为二进制
+    # VOICE BINARY：流式接收语音数据
     if data_type == "VOICE" and content.get("voice_mode") == "BINARY":
         if stream_seq == 0:
+            # 起始帧：初始化流式 STT
+            audio_format_hint = content.get("audio_format", "pcm")  # 默认 PCM
             active_voice_request[session_id] = request_id
-            voice_buffer[request_id] = b""
-        elif stream_seq == -1:
-            active_voice_request.pop(session_id, None)
-            audio = voice_buffer.pop(request_id, b"")
+            voice_buffer[request_id] = {
+                "audio_format": audio_format_hint,
+                "chunks": []  # 存储音频块，用于流式发送给 STT
+            }
             
-            # 🔧 提取音频格式提示（如果客户端提供）
-            audio_format_hint = content.get("audio_format")
+            logger.ws.info("Voice stream started", {
+                "request_id": request_id[:16],
+                "audio_format": audio_format_hint
+            })
+            
+        elif stream_seq == -1:
+            # 结束帧：流式调用 STT，等待完整文本结果
+            active_voice_request.pop(session_id, None)
+            buffer_data = voice_buffer.pop(request_id, {})
+            audio_chunks = buffer_data.get("chunks", [])
+            audio_format_hint = buffer_data.get("audio_format", "pcm")
+            
+            total_size = sum(len(chunk) for chunk in audio_chunks)
+            
+            logger.ws.info("Voice stream ended, starting streaming STT", {
+                "request_id": request_id[:16],
+                "audio_size": total_size,
+                "audio_format": audio_format_hint,
+                "chunk_count": len(audio_chunks)
+            })
             
             try:
-                async for resp_payload in process_voice_request(session_id, request_id, audio, require_tts, audio_format_hint):
-                    msg = build_message("RESPONSE", resp_payload, session_id)
-                    if not await manager.send_json(session_id, msg):
-                        break
+                # 使用流式 STT 处理（输入流式，输出完整文本）
+                from src.services.stt_service import UnifiedSTTService
+                stt_service = UnifiedSTTService()
+                
+                # 创建异步生成器，流式发送音频块
+                async def audio_generator():
+                    for chunk in audio_chunks:
+                        yield chunk
+                
+                # 流式调用 STT，等待完整文本结果
+                recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint)
+                
+                logger.ws.info("Streaming STT completed", {
+                    "request_id": request_id[:16],
+                    "recognized_text": recognized_text[:100] if recognized_text else "(empty)"
+                })
+                
+                # 使用完整文本进行后续处理（SRS + LLM）
+                if not recognized_text or not recognized_text.strip():
+                    # 空识别结果
+                    payload = {
+                        "request_id": request_id,
+                        "text_stream_seq": 0,
+                        "content": {"text": "抱歉，我没有听清楚您说什么。"},
+                    }
+                    await manager.send_json(session_id, build_message("RESPONSE", payload, session_id))
+                    payload_end = {"request_id": request_id, "text_stream_seq": -1, "content": {}}
+                    await manager.send_json(session_id, build_message("RESPONSE", payload_end, session_id))
+                    if require_tts:
+                        await manager.send_json(session_id, build_message("RESPONSE", {"request_id": request_id, "voice_stream_seq": -1, "content": {}}, session_id))
+                else:
+                    # 使用完整文本进行处理（会自动调用 SRS）
+                    async for resp_payload in process_text_request(session_id, request_id, recognized_text.strip(), require_tts):
+                        msg = build_message("RESPONSE", resp_payload, session_id)
+                        if not await manager.send_json(session_id, msg):
+                            break
+                            
             except Exception as e:
-                logger.sys.error("Voice request failed", {"error": str(e)})
-                await ws.send_json(build_error("INTERNAL_ERROR", "语音处理失败", str(e), request_id=request_id, session_id=session_id))
+                logger.sys.error("Streaming STT failed", {"error": str(e)})
+                await ws.send_json(build_error("INTERNAL_ERROR", "语音识别失败", str(e), request_id=request_id, session_id=session_id))
         return True
 
-    # VOICE BASE64
+    # VOICE BASE64（兼容旧协议，但仍使用流式 STT）
     if data_type == "VOICE":
         voice_b64 = content.get("voice", "")
         if not voice_b64:
@@ -183,14 +236,52 @@ async def _handle_request(
             await ws.send_json(build_error("MALFORMED_PAYLOAD", "语音 Base64 解码失败", str(e), request_id=request_id, session_id=session_id))
             return True
         
-        # 🔧 提取音频格式提示（如果客户端提供）
-        audio_format_hint = content.get("audio_format")
+        # 提取音频格式提示
+        audio_format_hint = content.get("audio_format", "pcm")
+        
+        logger.ws.info("Voice BASE64 received, using streaming STT", {
+            "request_id": request_id[:16],
+            "audio_size": len(audio),
+            "audio_format": audio_format_hint
+        })
         
         try:
-            async for resp_payload in process_voice_request(session_id, request_id, audio, require_tts, audio_format_hint):
-                msg = build_message("RESPONSE", resp_payload, session_id)
-                if not await manager.send_json(session_id, msg):
-                    break
+            # 使用流式 STT 处理（即使是一次性接收的数据）
+            from src.services.stt_service import UnifiedSTTService
+            stt_service = UnifiedSTTService()
+            
+            # 创建异步生成器，一次性发送所有数据
+            async def audio_generator():
+                yield audio
+            
+            # 流式调用 STT，等待完整文本结果
+            recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint)
+            
+            logger.ws.info("Streaming STT completed (BASE64)", {
+                "request_id": request_id[:16],
+                "recognized_text": recognized_text[:100] if recognized_text else "(empty)"
+            })
+            
+            # 使用完整文本进行后续处理（SRS + LLM）
+            if not recognized_text or not recognized_text.strip():
+                # 空识别结果
+                payload = {
+                    "request_id": request_id,
+                    "text_stream_seq": 0,
+                    "content": {"text": "抱歉，我没有听清楚您说什么。"},
+                }
+                await manager.send_json(session_id, build_message("RESPONSE", payload, session_id))
+                payload_end = {"request_id": request_id, "text_stream_seq": -1, "content": {}}
+                await manager.send_json(session_id, build_message("RESPONSE", payload_end, session_id))
+                if require_tts:
+                    await manager.send_json(session_id, build_message("RESPONSE", {"request_id": request_id, "voice_stream_seq": -1, "content": {}}, session_id))
+            else:
+                # 使用完整文本进行处理（会自动调用 SRS）
+                async for resp_payload in process_text_request(session_id, request_id, recognized_text.strip(), require_tts):
+                    msg = build_message("RESPONSE", resp_payload, session_id)
+                    if not await manager.send_json(session_id, msg):
+                        break
+                        
         except Exception as e:
             logger.sys.error("Voice request failed", {"error": str(e)})
             await ws.send_json(build_error("INTERNAL_ERROR", "语音处理失败", str(e), request_id=request_id, session_id=session_id))
@@ -265,7 +356,7 @@ async def agent_stream(websocket: WebSocket):
     session_id: Optional[str] = None
     last_heartbeat = time.time()
     last_heartbeat_reply: Dict[str, float] = {}  # 用于心跳防抖
-    voice_buffer: Dict[str, bytes] = {}
+    voice_buffer: Dict[str, Dict[str, Any]] = {}  # 存储 {request_id: {"audio_format": str, "chunks": [bytes]}}
     active_voice_request: Dict[str, Optional[str]] = {}
 
     async def send_json(msg: Dict) -> bool:
@@ -299,8 +390,16 @@ async def agent_stream(websocket: WebSocket):
                 data = raw["bytes"]
                 if isinstance(data, bytes) and session_id:
                     rid = active_voice_request.get(session_id)
-                    if rid:
-                        voice_buffer[rid] = voice_buffer.get(rid, b"") + data
+                    if rid and rid in voice_buffer:
+                        # 将音频块添加到列表中（用于流式 STT）
+                        voice_buffer[rid]["chunks"].append(data)
+                        total_size = sum(len(chunk) for chunk in voice_buffer[rid]["chunks"])
+                        logger.ws.debug("Received audio chunk", {
+                            "request_id": rid[:16],
+                            "chunk_size": len(data),
+                            "total_size": total_size,
+                            "chunk_count": len(voice_buffer[rid]["chunks"])
+                        })
                 continue
 
             text = raw.get("text")

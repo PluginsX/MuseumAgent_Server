@@ -414,6 +414,12 @@ export class SettingsPanel {
         } else {
             // 其他配置存储在 session 下
             stateManager.setState(`session.${key}`, value);
+            
+            // 如果修改了 FunctionCalling，标记为已修改
+            if (key === 'functionCalling') {
+                stateManager.setState('session.functionCallingModified', true);
+                console.log('[SettingsPanel] FunctionCalling已修改，将在下次请求时更新到服务器');
+            }
         }
 
         console.log('[SettingsPanel] 配置已更新并应用');

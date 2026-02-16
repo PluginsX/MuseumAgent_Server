@@ -201,8 +201,9 @@ button[type="submit"]:active {
 }
 
 .chat-header h1 {
-    font-size: 22px;
+    font-size: 25px;
     font-weight: 500;
+    color: #ffffff;
 }
 
 .logout-button {
@@ -454,13 +455,13 @@ button[type="submit"]:active {
 .settings-panel {
     position: fixed;
     top: 0;
-    right: -450px;
-    width: 450px;
+    right: -100vw;
+    width: 100vw;
     height: 100vh;
     background: white;
     box-shadow: -2px 0 10px rgba(0,0,0,0.1);
     z-index: 1000;
-    transition: right 0.3s ease-out;
+    transition: right 0.4s ease-out;
     display: flex;
     flex-direction: column;
 }

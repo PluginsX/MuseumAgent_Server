@@ -6,6 +6,7 @@
 import { createElement, formatTime } from '../utils/dom.js';
 import { escapeHtml } from '../utils/security.js';
 import { audioService } from '../services/AudioService.js';
+import { eventBus, Events } from '../core/EventBus.js';
 
 export class MessageBubble {
     constructor(message) {
@@ -14,6 +15,19 @@ export class MessageBubble {
         this.contentElement = null;
         
         this.render();
+        this.bindEvents();
+    }
+
+    /**
+     * 绑定事件
+     */
+    bindEvents() {
+        // 监听全局播放结束事件，更新播放状态
+        eventBus.on(Events.AUDIO_PLAY_END, () => {
+            if (audioService.currentPlayingMessageId !== this.message.id) {
+                this.updatePlayingState(false);
+            }
+        });
     }
 
     /**
@@ -99,13 +113,11 @@ export class MessageBubble {
         voiceElement.appendChild(icon);
         voiceElement.appendChild(durationElement);
 
-        // 点击播放（仅接收的消息）
-        if (this.message.type === 'received' && this.message.audioData) {
-            voiceElement.addEventListener('click', () => {
-                this.playVoice();
-            });
-            voiceElement.style.cursor = 'pointer';
-        }
+        // 点击播放（所有语音消息都可以播放）
+        voiceElement.addEventListener('click', () => {
+            this.togglePlayVoice();
+        });
+        voiceElement.style.cursor = 'pointer';
 
         return voiceElement;
     }
@@ -129,15 +141,56 @@ export class MessageBubble {
     }
 
     /**
-     * 播放语音
+     * 切换播放/停止语音
      */
-    async playVoice() {
-        if (this.message.audioData) {
-            try {
-                await audioService.playPCM(this.message.audioData);
-            } catch (error) {
-                console.error('[MessageBubble] 播放语音失败:', error);
-            }
+    async togglePlayVoice() {
+        // 检查是否有音频数据
+        if (!this.message.audioData) {
+            console.warn('[MessageBubble] 没有音频数据');
+            return;
+        }
+
+        // 如果当前正在播放这条语音，则停止
+        if (audioService.currentPlayingMessageId === this.message.id) {
+            console.log('[MessageBubble] 停止播放语音:', this.message.id);
+            audioService.stopPlayback();
+            this.updatePlayingState(false);
+            return;
+        }
+
+        // 停止其他正在播放的语音
+        if (audioService.currentPlayingMessageId) {
+            console.log('[MessageBubble] 停止其他正在播放的语音');
+            audioService.stopPlayback();
+            // 通知之前播放的气泡更新状态
+            eventBus.emit(Events.AUDIO_PLAY_END);
+        }
+
+        // 播放当前语音
+        try {
+            console.log('[MessageBubble] 开始播放语音:', this.message.id);
+            audioService.currentPlayingMessageId = this.message.id;
+            this.updatePlayingState(true);
+            
+            await audioService.playPCM(this.message.audioData);
+            
+            // 播放完成
+            audioService.currentPlayingMessageId = null;
+            this.updatePlayingState(false);
+        } catch (error) {
+            console.error('[MessageBubble] 播放语音失败:', error);
+            audioService.currentPlayingMessageId = null;
+            this.updatePlayingState(false);
+        }
+    }
+
+    /**
+     * 更新播放状态显示
+     */
+    updatePlayingState(isPlaying) {
+        const icon = this.contentElement.querySelector('span:first-child');
+        if (icon) {
+            icon.textContent = isPlaying ? '⏸️' : '🎤';
         }
     }
 

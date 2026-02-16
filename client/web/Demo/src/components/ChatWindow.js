@@ -155,61 +155,32 @@ export class ChatWindow {
     }
 
     /**
-     * 切换语音录制
+     * 切换语音录制（话筒开关）
      */
     async toggleVoiceRecording() {
         const isRecording = stateManager.getState('recording.isRecording');
         const vadEnabled = stateManager.getState('recording.vadEnabled');
 
         if (isRecording) {
-            // 停止录音
-            console.log('[ChatWindow] 停止录音');
+            // 用户手动关闭话筒
+            console.log('[ChatWindow] 用户关闭话筒');
             
-            // 计算实际发出的语音时长（秒）
-            const duration = this.audioChunks.length > 0 
-                ? (this.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0) / 2) / 16000 
-                : 0;
-
-            console.log('[ChatWindow] 语音录制结束，数据块数量:', this.audioChunks.length, '时长:', duration.toFixed(2), '秒');
-            
-            // 更新发送的语音消息的时长
+            // 如果有正在发送的语音消息，先结束它
             if (this.currentVoiceMessageId) {
-                stateManager.updateMessage(this.currentVoiceMessageId, {
-                    duration: duration
-                });
+                this.endCurrentVoiceMessage();
             }
             
-            // 结束流式发送
-            if (this.voiceStreamController) {
-                this.voiceStreamController.close();
-                this.voiceStreamController = null;
-            }
-            
+            // 停止录音
             audioService.stopRecording();
             
-            // 清空缓存
-            this.audioChunks = [];
-            this.currentVoiceMessageId = null;
+            console.log('[ChatWindow] 话筒已关闭');
         } else {
-            // 开始录音
+            // 用户手动开启话筒
             try {
-                console.log('[ChatWindow] 开始录音, VAD启用:', vadEnabled);
-                this.audioChunks = [];
+                console.log('[ChatWindow] 用户开启话筒, VAD启用:', vadEnabled);
                 
-                // 创建实时流式传输的ReadableStream
-                const stream = new ReadableStream({
-                    start: (controller) => {
-                        this.voiceStreamController = controller;
-                        console.log('[ChatWindow] 流式传输已准备就绪');
-                    }
-                });
-
-                // 立即开始发送语音请求（流式），并保存消息ID
-                this.currentVoiceMessageId = await messageService.sendVoiceMessageStream(stream);
-
-                // 开始录音，实时推送数据到流
                 if (vadEnabled) {
-                    // 启用VAD：实时采集音频，但由VAD控制何时发送
+                    // 启用VAD：话筒开启，等待VAD检测人声
                     const vadParams = stateManager.getState('recording.vadParams') || {
                         silenceThreshold: 0.01,
                         silenceDuration: 1500,
@@ -219,16 +190,36 @@ export class ChatWindow {
                         postSpeechPadding: 500
                     };
 
-                    await audioService.startRecordingWithVAD(vadParams, (audioData) => {
-                        // VAD决定发送时，实时推送到流
-                        this.audioChunks.push(audioData);
-                        if (this.voiceStreamController) {
-                            this.voiceStreamController.enqueue(new Uint8Array(audioData));
-                            console.log('[ChatWindow] 实时发送音频数据:', audioData.byteLength, '字节');
+                    await audioService.startRecordingWithVAD(
+                        vadParams,
+                        // onSpeechStart: VAD检测到人声，创建新的语音消息
+                        async () => {
+                            console.log('[ChatWindow] VAD检测到人声，创建新的语音消息');
+                            await this.startNewVoiceMessage();
+                        },
+                        // onAudioData: 实时音频数据回调
+                        (audioData) => {
+                            // 只有在有活动消息时才发送数据
+                            if (this.currentVoiceMessageId) {
+                                this.audioChunks.push(audioData);
+                                if (this.voiceStreamController) {
+                                    this.voiceStreamController.enqueue(new Uint8Array(audioData));
+                                    console.log('[ChatWindow] 实时发送音频数据:', audioData.byteLength, '字节');
+                                }
+                            }
+                        },
+                        // onSpeechEnd: VAD检测到静音，结束本次语音消息
+                        () => {
+                            console.log('[ChatWindow] VAD检测到静音，结束本次语音消息');
+                            this.endCurrentVoiceMessage();
+                            // 注意：不关闭话筒，继续监听下一次人声
                         }
-                    });
+                    );
                 } else {
-                    // 不启用VAD：直接实时采集并发送
+                    // 不启用VAD：话筒开启立即创建气泡
+                    await this.startNewVoiceMessage();
+                    
+                    // 开始录音，实时推送数据到流
                     await audioService.startRecording((audioData) => {
                         this.audioChunks.push(audioData);
                         if (this.voiceStreamController) {
@@ -243,6 +234,77 @@ export class ChatWindow {
                 eventBus.emit(Events.UI_SHOW_ERROR, '录音失败: ' + error.message);
             }
         }
+    }
+
+    /**
+     * 开始新的语音消息（创建气泡和流）
+     */
+    async startNewVoiceMessage() {
+        console.log('[ChatWindow] 创建新的语音消息气泡');
+        
+        // 清空音频缓存
+        this.audioChunks = [];
+        
+        // 创建实时流式传输的ReadableStream
+        const stream = new ReadableStream({
+            start: (controller) => {
+                this.voiceStreamController = controller;
+                console.log('[ChatWindow] 流式传输已准备就绪');
+            }
+        });
+
+        // 创建语音消息气泡并开始发送
+        this.currentVoiceMessageId = await messageService.sendVoiceMessageStream(stream);
+    }
+
+    /**
+     * 结束当前语音消息（更新时长和音频数据）
+     */
+    endCurrentVoiceMessage() {
+        if (!this.currentVoiceMessageId) {
+            console.log('[ChatWindow] 没有活动的语音消息，跳过结束操作');
+            return;
+        }
+        
+        console.log('[ChatWindow] 结束语音消息:', this.currentVoiceMessageId);
+        
+        // 计算实际发出的语音时长（秒）
+        const duration = this.audioChunks.length > 0 
+            ? (this.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0) / 2) / 16000 
+            : 0;
+
+        console.log('[ChatWindow] 语音数据块数量:', this.audioChunks.length, '时长:', duration.toFixed(2), '秒');
+        
+        // 合并音频数据用于播放
+        let combinedAudioData = null;
+        if (this.audioChunks.length > 0) {
+            const totalLength = this.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+            const combined = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of this.audioChunks) {
+                combined.set(new Uint8Array(chunk), offset);
+                offset += chunk.byteLength;
+            }
+            combinedAudioData = combined.buffer;
+        }
+        
+        // 更新发送的语音消息的时长和音频数据
+        stateManager.updateMessage(this.currentVoiceMessageId, {
+            duration: duration,
+            audioData: combinedAudioData
+        });
+        
+        // 结束流式发送
+        if (this.voiceStreamController) {
+            this.voiceStreamController.close();
+            this.voiceStreamController = null;
+        }
+        
+        // 清空当前消息状态
+        this.currentVoiceMessageId = null;
+        this.audioChunks = [];
+        
+        console.log('[ChatWindow] 语音消息已结束，准备接收下一次语音');
     }
 
     /**
