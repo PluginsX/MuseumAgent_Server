@@ -11,7 +11,8 @@ import { audioService } from './AudioService.js';
 export class MessageService {
     constructor() {
         this.wsClient = null;
-        this.currentRequestId = null;  // 当前正在处理的请求ID
+        this.currentRequestId = null;  // ✅ 当前正在处理的请求ID（req_xxx）
+        this.currentMessageId = null;  // ✅ 当前消息ID（msg_xxx）
         this.isReceivingResponse = false;  // 是否正在接收响应
         this.audioChunks = [];
     }
@@ -25,23 +26,26 @@ export class MessageService {
             return;
         }
         
-        console.log('[MessageService] 发送打断信号:', this.currentRequestId, '原因:', reason);
+        console.log('[MessageService] 发送打断信号 - 请求ID:', this.currentRequestId, '消息ID:', this.currentMessageId, '原因:', reason);
         
         try {
             // 1. 停止音频播放
             audioService.stopAllPlayback();
             
-            // 2. 发送 INTERRUPT 消息
+            // 2. 发送 INTERRUPT 消息（使用请求ID，不是消息ID）
             await this.wsClient.sendInterrupt(this.currentRequestId, reason);
             
             // 3. 清理客户端状态
             const oldRequestId = this.currentRequestId;
+            const oldMessageId = this.currentMessageId;
             this.isReceivingResponse = false;
             this.currentRequestId = null;
+            this.currentMessageId = null;
             
             // 4. 触发事件
             eventBus.emit(Events.REQUEST_INTERRUPTED, {
                 requestId: oldRequestId,
+                messageId: oldMessageId,
                 reason: reason
             });
             
@@ -125,10 +129,6 @@ export class MessageService {
         });
 
         eventBus.emit(Events.MESSAGE_SENT, { id: messageId, text });
-
-        // ✅ 标记开始接收响应
-        this.currentRequestId = messageId;
-        this.isReceivingResponse = true;
 
         try {
             // 为每种类型的响应创建独立的消息气泡ID
@@ -221,6 +221,7 @@ export class MessageService {
                         console.log('[MessageService] 请求被中断:', textMessageId || voiceMessageId);
                         this.isReceivingResponse = false;
                         this.currentRequestId = null;
+                        this.currentMessageId = null;
                         return;
                     }
                     
@@ -261,6 +262,7 @@ export class MessageService {
                     // ✅ 标记响应接收完成
                     this.isReceivingResponse = false;
                     this.currentRequestId = null;
+                    this.currentMessageId = null;
 
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
@@ -281,12 +283,23 @@ export class MessageService {
                 stateManager.setState('session.enableSRSModified', false);
             }
 
-            await this.wsClient.sendTextRequest(text, options);
+            // ✅ 发送请求并获取实际的请求ID
+            const { requestId, promise: sendPromise } = this.wsClient.sendTextRequest(text, options);
+            
+            // ✅ 标记开始接收响应（使用实际的请求ID）
+            this.currentRequestId = requestId;
+            this.currentMessageId = messageId;
+            this.isReceivingResponse = true;
+            
+            console.log('[MessageService] 开始接收响应 - 请求ID:', requestId, '消息ID:', messageId);
+            
+            await sendPromise;
 
         } catch (error) {
             // ✅ 发生错误时清理状态
             this.isReceivingResponse = false;
             this.currentRequestId = null;
+            this.currentMessageId = null;
             console.error('[MessageService] 发送消息失败:', error);
             eventBus.emit(Events.MESSAGE_ERROR, error);
             throw error;
@@ -327,10 +340,6 @@ export class MessageService {
             });
 
             eventBus.emit(Events.MESSAGE_SENT, { id: messageId, type: 'voice' });
-
-            // ✅ 标记开始接收响应
-            this.currentRequestId = messageId;
-            this.isReceivingResponse = true;
 
             // 发送语音请求（流式）
             const sessionConfig = stateManager.getState('session');
@@ -415,6 +424,7 @@ export class MessageService {
                         console.log('[MessageService] 语音请求被中断:', textMessageId || voiceMessageId);
                         this.isReceivingResponse = false;
                         this.currentRequestId = null;
+                        this.currentMessageId = null;
                         return;
                     }
                     
@@ -453,6 +463,7 @@ export class MessageService {
                     // ✅ 标记响应接收完成
                     this.isReceivingResponse = false;
                     this.currentRequestId = null;
+                    this.currentMessageId = null;
 
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
@@ -474,10 +485,20 @@ export class MessageService {
             }
 
             // ✅ 异步发送语音请求（不阻塞，立即返回 messageId）
-            this.wsClient.sendVoiceRequestStream(audioStream, voiceOptions).catch(error => {
+            const { requestId, promise: sendPromise } = this.wsClient.sendVoiceRequestStream(audioStream, voiceOptions);
+            
+            // ✅ 标记开始接收响应（使用实际的请求ID）
+            this.currentRequestId = requestId;
+            this.currentMessageId = messageId;
+            this.isReceivingResponse = true;
+            
+            console.log('[MessageService] 开始接收语音响应 - 请求ID:', requestId, '消息ID:', messageId);
+            
+            sendPromise.catch(error => {
                 // ✅ 发生错误时清理状态
                 this.isReceivingResponse = false;
                 this.currentRequestId = null;
+                this.currentMessageId = null;
                 console.error('[MessageService] 语音请求失败:', error);
                 eventBus.emit(Events.MESSAGE_ERROR, error);
             });
@@ -489,6 +510,7 @@ export class MessageService {
             // ✅ 发生错误时清理状态
             this.isReceivingResponse = false;
             this.currentRequestId = null;
+            this.currentMessageId = null;
             console.error('[MessageService] 发送语音消息失败:', error);
             eventBus.emit(Events.MESSAGE_ERROR, error);
             throw error;

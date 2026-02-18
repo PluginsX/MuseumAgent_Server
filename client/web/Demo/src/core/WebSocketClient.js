@@ -120,8 +120,9 @@ export class WebSocketClient {
 
     /**
      * 发送文本请求（协议 REQUEST - TEXT）
+     * 返回 { requestId, promise } 对象
      */
-    async sendTextRequest(text, options = {}) {
+    sendTextRequest(text, options = {}) {
         const requestId = this._generateId();
         
         const message = {
@@ -150,7 +151,7 @@ export class WebSocketClient {
             message.payload.function_calling = options.functionCalling || [];
         }
 
-        return this._sendRequest(
+        const promise = this._sendRequest(
             requestId, 
             message, 
             options.onChunk, 
@@ -158,13 +159,17 @@ export class WebSocketClient {
             options.onVoiceChunk,
             options.onFunctionCall
         );
+        
+        // ✅ 返回 requestId 和 promise
+        return { requestId, promise };
     }
 
     /**
      * 发送语音请求（协议 REQUEST - VOICE，流式 BINARY 模式）
      * 正确实现：起始帧 → 实时二进制帧 → 结束帧
+     * 返回 { requestId, promise } 对象
      */
-    async sendVoiceRequestStream(audioStream, options = {}) {
+    sendVoiceRequestStream(audioStream, options = {}) {
         const requestId = this._generateId();
 
         console.log('[WebSocket] 开始流式语音发送, requestId:', requestId);
@@ -177,7 +182,16 @@ export class WebSocketClient {
             options.onVoiceChunk,
             options.onFunctionCall
         );
-
+        
+        // ✅ 立即返回 requestId 和 promise
+        const result = { requestId, promise: this._sendVoiceStream(audioStream, requestId, options, responsePromise) };
+        return result;
+    }
+    
+    /**
+     * 内部方法：发送语音流数据
+     */
+    async _sendVoiceStream(audioStream, requestId, options, responsePromise) {
         // 1. 发送起始帧（stream_seq = 0）
         const startMessage = {
             version: '1.0',

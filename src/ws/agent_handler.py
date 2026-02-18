@@ -429,7 +429,7 @@ async def _handle_heartbeat_reply(ws: WebSocket, session_id: str, last_heartbeat
     await ws.send_json(build_message("HEARTBEAT", {"remaining_seconds": remaining}, session_id))
 
 
-async def _handle_interrupt(ws: WebSocket, session_id: str, payload: Dict) -> None:
+async def _handle_interrupt(session_id: str, payload: Dict) -> None:
     """
     处理打断请求（INTERRUPT）
     
@@ -482,7 +482,7 @@ async def _handle_interrupt(ws: WebSocket, session_id: str, payload: Dict) -> No
     status = "SUCCESS" if interrupted_ids else "FAILED"
     message = f"已中断 {len(interrupted_ids)} 个请求" if interrupted_ids else "无活跃请求可中断"
     
-    await ws.send_json(build_message("INTERRUPT_ACK", {
+    await manager.send_json(session_id, build_message("INTERRUPT_ACK", {
         "interrupted_request_ids": interrupted_ids,
         "status": status,
         "message": message
@@ -623,7 +623,7 @@ async def agent_stream(websocket: WebSocket):
                 if not session_id:
                     await send_json(build_error("SESSION_INVALID", "会话不存在或未注册"))
                     continue
-                await _handle_interrupt(websocket, session_id, payload)
+                await _handle_interrupt(session_id, payload)
 
             elif msg_type == "HEALTH_CHECK":
                 await _handle_health_check(websocket)

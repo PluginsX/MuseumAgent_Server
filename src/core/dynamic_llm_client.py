@@ -255,6 +255,7 @@ class DynamicLLMClient:
         
         function_call_name = None
         function_call_arguments = ""
+        function_call_yielded = False  # 标记函数调用是否已经被yield
         
         try:
             import aiohttp
@@ -297,7 +298,7 @@ class DynamicLLMClient:
                                 if data_str == '[DONE]':
                                     self.logger.llm.info('Received [DONE] from LLM')
                                     # 当收到[DONE]标记时，检查是否有未处理的函数调用
-                                    if function_call_name and function_call_arguments:
+                                    if function_call_name and function_call_arguments and not function_call_yielded:
                                         self.logger.llm.info('Processing function call at [DONE]', {
                                             'function_name': function_call_name,
                                             'arguments': function_call_arguments
@@ -313,6 +314,7 @@ class DynamicLLMClient:
                                                 'name': function_call_name,
                                                 'arguments': arguments_json
                                             }
+                                            function_call_yielded = True
                                         except json.JSONDecodeError as e:
                                             self.logger.llm.warn('Failed to parse function call arguments at the end', {
                                                 'error': str(e),
@@ -355,8 +357,8 @@ class DynamicLLMClient:
                                             self.logger.llm.info('Received function call delta', {
                                                 'function_call': function_call
                                             })
-                                            # 收集函数名称
-                                            if 'name' in function_call:
+                                            # 收集函数名称（只在有值时更新，避免空字符串覆盖）
+                                            if 'name' in function_call and function_call['name']:
                                                 function_call_name = function_call['name']
                                                 self.logger.llm.info('Updated function call name', {
                                                     'function_name': function_call_name
@@ -371,7 +373,7 @@ class DynamicLLMClient:
                                             
                                             # 尝试解析参数，即使可能还没有完全收到
                                             # 但只有当参数可以成功解析时才yield
-                                            if function_call_name and function_call_arguments:
+                                            if function_call_name and function_call_arguments and not function_call_yielded:
                                                 try:
                                                     arguments_json = json.loads(function_call_arguments)
                                                     self.logger.llm.info('Yielding function call', {
@@ -383,6 +385,7 @@ class DynamicLLMClient:
                                                         'name': function_call_name,
                                                         'arguments': arguments_json
                                                     }
+                                                    function_call_yielded = True  # 标记已经yield
                                                 except json.JSONDecodeError as e:
                                                     # 参数还没有完全收到，继续等待
                                                     self.logger.llm.info('Failed to parse function call arguments, continuing to wait', {
