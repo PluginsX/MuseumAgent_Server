@@ -9,7 +9,7 @@ export class WebSocketClient {
             baseUrl: config.baseUrl || 'ws://localhost:8001',
             reconnectInterval: config.reconnectInterval || 5000,
             maxReconnectAttempts: config.maxReconnectAttempts || 5,
-            heartbeatTimeout: config.heartbeatTimeout || 60000
+            heartbeatTimeout: config.heartbeatTimeout || 120000  // 120秒（从60秒增加）
         };
         
         this.ws = null;
@@ -18,6 +18,7 @@ export class WebSocketClient {
         this.heartbeatTimer = null;
         this.messageHandlers = new Map();
         this.pendingRequests = new Map();
+        this.onSessionExpired = null; // 会话过期回调
     }
 
     /**
@@ -62,7 +63,7 @@ export class WebSocketClient {
     /**
      * 注册会话（协议 REGISTER）
      */
-    async register(authData, platform = 'WEB', requireTTS = false, functionCalling = []) {
+    async register(authData, platform = 'WEB', requireTTS = false, enableSRS = true, functionCalling = []) {
         // 等待连接完全建立
         if (this.ws.readyState !== WebSocket.OPEN) {
             console.log('[WebSocket] 等待连接建立...');
@@ -89,6 +90,7 @@ export class WebSocketClient {
                 auth: authData,
                 platform: platform,
                 require_tts: requireTTS,
+                enable_srs: enableSRS,
                 function_calling: functionCalling
             },
             timestamp: Date.now()
@@ -136,6 +138,11 @@ export class WebSocketClient {
             },
             timestamp: Date.now()
         };
+
+        // 添加 EnableSRS 配置（如果有）
+        if (options.enableSRS !== undefined) {
+            message.payload.enable_srs = options.enableSRS;
+        }
 
         // 添加 Function Calling 配置（如果有）
         if (options.functionCallingOp) {
@@ -190,17 +197,24 @@ export class WebSocketClient {
             timestamp: Date.now()
         };
 
+        // 添加 EnableSRS 配置（如果有）
+        if (options.enableSRS !== undefined) {
+            startMessage.payload.enable_srs = options.enableSRS;
+        }
+
         this._send(startMessage);
-        console.log('[WebSocket] 已发送起始帧 (PCM 格式)');
+        console.log('[WebSocket] 已发送起始帧 (PCM 格式), requestId:', requestId);
 
         // 2. 实时发送二进制音频数据
         const reader = audioStream.getReader();
         let chunkCount = 0;
+        let streamError = null;
+        
         try {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
-                    console.log('[WebSocket] 音频流读取完成，共发送', chunkCount, '个数据块');
+                    console.log('[WebSocket] 音频流读取完成，共发送', chunkCount, '个数据块, requestId:', requestId);
                     break;
                 }
                 
@@ -208,42 +222,104 @@ export class WebSocketClient {
                 if (this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(value);
                     chunkCount++;
-                    console.log('[WebSocket] 发送音频数据块', chunkCount, ':', value.byteLength, '字节');
+                    if (chunkCount % 10 === 0) {  // 每10个块输出一次日志
+                        console.log('[WebSocket] 已发送', chunkCount, '个音频数据块, requestId:', requestId);
+                    }
                 } else {
-                    console.error('[WebSocket] 连接已断开，无法发送音频数据');
+                    console.error('[WebSocket] 连接已断开，无法发送音频数据, requestId:', requestId);
+                    streamError = new Error('WebSocket连接已断开');
                     break;
                 }
             }
         } catch (error) {
-            console.error('[WebSocket] 读取音频流失败:', error);
+            console.error('[WebSocket] 读取音频流失败, requestId:', requestId, 'error:', error);
+            streamError = error;
         } finally {
-            reader.releaseLock();
+            try {
+                reader.releaseLock();
+                console.log('[WebSocket] 音频流 reader 已释放, requestId:', requestId);
+            } catch (e) {
+                console.warn('[WebSocket] 释放 reader 失败:', e.message);
+            }
         }
 
-        // 3. 发送结束帧（stream_seq = -1）
-        const endMessage = {
+        // ✅ 只有在没有错误且连接正常时才发送结束帧
+        if (!streamError && this.ws.readyState === WebSocket.OPEN) {
+            // 3. 发送结束帧（stream_seq = -1）
+            const endMessage = {
+                version: '1.0',
+                msg_type: 'REQUEST',
+                session_id: this.sessionId,
+                payload: {
+                    request_id: requestId,
+                    data_type: 'VOICE',
+                    stream_flag: true,
+                    stream_seq: -1,
+                    require_tts: options.requireTTS || false,
+                    content: { 
+                        voice_mode: 'BINARY',
+                        audio_format: 'pcm'  // ✅ 明确指定 PCM 格式
+                    }
+                },
+                timestamp: Date.now()
+            };
+
+            this._send(endMessage);
+            console.log('[WebSocket] 已发送结束帧 (PCM 格式), requestId:', requestId);
+        } else {
+            console.warn('[WebSocket] 跳过发送结束帧，原因:', streamError ? streamError.message : 'WebSocket未连接', 'requestId:', requestId);
+            // ✅ 清理请求处理器
+            if (this.pendingRequests.has(requestId)) {
+                const request = this.pendingRequests.get(requestId);
+                if (request.timeoutId) {
+                    clearTimeout(request.timeoutId);
+                }
+                this.pendingRequests.delete(requestId);
+                console.log('[WebSocket] 已清理未完成的请求处理器, requestId:', requestId);
+            }
+            throw streamError || new Error('WebSocket连接已断开');
+        }
+
+        // 等待响应
+        return responsePromise;
+    }
+
+    /**
+     * 发送打断请求（协议 INTERRUPT）
+     */
+    async sendInterrupt(requestId, reason = 'USER_NEW_INPUT') {
+        const message = {
             version: '1.0',
-            msg_type: 'REQUEST',
+            msg_type: 'INTERRUPT',
             session_id: this.sessionId,
             payload: {
-                request_id: requestId,
-                data_type: 'VOICE',
-                stream_flag: true,
-                stream_seq: -1,
-                require_tts: options.requireTTS || false,
-                content: { 
-                    voice_mode: 'BINARY',
-                    audio_format: 'pcm'  // ✅ 明确指定 PCM 格式
-                }
+                interrupt_request_id: requestId,
+                reason: reason
             },
             timestamp: Date.now()
         };
 
-        this._send(endMessage);
-        console.log('[WebSocket] 已发送结束帧 (PCM 格式)');
+        console.log('[WebSocket] 发送打断请求:', requestId, '原因:', reason);
 
-        // 等待响应
-        return responsePromise;
+        return new Promise((resolve, reject) => {
+            // 设置一次性处理器
+            const handler = (data) => {
+                this.messageHandlers.delete('INTERRUPT_ACK');
+                console.log('[WebSocket] 收到打断确认:', data.payload);
+                resolve(data.payload);
+            };
+
+            this.messageHandlers.set('INTERRUPT_ACK', handler);
+            this._send(message);
+
+            // 超时处理
+            setTimeout(() => {
+                if (this.messageHandlers.has('INTERRUPT_ACK')) {
+                    this.messageHandlers.delete('INTERRUPT_ACK');
+                    reject(new Error('打断请求超时'));
+                }
+            }, 5000);
+        });
     }
 
     /**
@@ -323,6 +399,15 @@ export class WebSocketClient {
                 return;
             }
 
+            // ✅ 处理打断确认
+            if (data.msg_type === 'INTERRUPT_ACK') {
+                const handler = this.messageHandlers.get('INTERRUPT_ACK');
+                if (handler) {
+                    handler(data);
+                }
+                return;
+            }
+
             // 处理其他消息类型
             const handler = this.messageHandlers.get(data.msg_type);
             if (handler) {
@@ -336,7 +421,7 @@ export class WebSocketClient {
     }
 
     /**
-     * 处理 RESPONSE（正确区分文本流和语音流）
+     * 处理 RESPONSE（优化版：正确处理流式响应）
      */
     _handleResponse(data) {
         const payload = data.payload;
@@ -344,7 +429,30 @@ export class WebSocketClient {
         
         const request = this.pendingRequests.get(requestId);
         if (!request) {
-            console.warn('[WebSocket] 未找到对应的请求:', requestId);
+            // ✅ 降低日志级别，这是正常现象（请求已完成）
+            console.debug('[WebSocket] 请求已完成或不存在:', requestId);
+            return;
+        }
+
+        // ✅ 检查是否被中断
+        if (payload.interrupted) {
+            console.log('[WebSocket] 请求被中断:', requestId, '原因:', payload.interrupt_reason);
+            
+            // 清除超时定时器
+            if (request.timeoutId) {
+                clearTimeout(request.timeoutId);
+            }
+            
+            // 调用完成回调（标记为中断）
+            if (request.onComplete) {
+                request.onComplete({
+                    ...data,
+                    interrupted: true,
+                    interrupt_reason: payload.interrupt_reason
+                });
+            }
+            
+            this.pendingRequests.delete(requestId);
             return;
         }
 
@@ -370,23 +478,46 @@ export class WebSocketClient {
             }
         }
 
-        // 检查流是否结束
+        // ✅ 检查流是否结束（更严格的判断）
         const textEnded = payload.text_stream_seq === -1;
         const voiceEnded = payload.voice_stream_seq === -1;
 
         if (!request.textEnded && textEnded) {
             request.textEnded = true;
+            console.log('[WebSocket] 文本流结束:', requestId);
         }
 
         if (!request.voiceEnded && voiceEnded) {
             request.voiceEnded = true;
+            console.log('[WebSocket] 语音流结束:', requestId);
         }
 
-        // 当所有流都结束时，调用 onComplete
-        const allEnded = (request.textEnded || payload.text_stream_seq === undefined) &&
-                         (request.voiceEnded || payload.voice_stream_seq === undefined);
+        // ✅ 只有当所有预期的流都结束时，才删除请求
+        // 第一次收到响应时，记录该请求包含哪些流
+        if (!request.hasCheckedStreams) {
+            request.hasTextStream = payload.text_stream_seq !== undefined;
+            request.hasVoiceStream = payload.voice_stream_seq !== undefined;
+            request.hasCheckedStreams = true;
+            console.log('[WebSocket] 检测到流类型:', {
+                requestId: requestId,
+                hasText: request.hasTextStream,
+                hasVoice: request.hasVoiceStream
+            });
+        }
+        
+        const textComplete = !request.hasTextStream || request.textEnded;
+        const voiceComplete = !request.hasVoiceStream || request.voiceEnded;
+        
+        const allEnded = textComplete && voiceComplete;
 
         if (allEnded) {
+            console.log('[WebSocket] 请求完成:', requestId);
+            
+            // ✅ 清除超时定时器
+            if (request.timeoutId) {
+                clearTimeout(request.timeoutId);
+            }
+            
             if (request.onComplete) {
                 request.onComplete(data);
             }
@@ -398,6 +529,8 @@ export class WebSocketClient {
      * 处理心跳（协议 HEARTBEAT）
      */
     _handleHeartbeat(data) {
+        console.log('[WebSocket] 收到心跳，剩余时间:', data.payload?.remaining_seconds, '秒');
+        
         // 重置心跳超时计时器
         this._resetHeartbeatMonitor();
 
@@ -411,6 +544,7 @@ export class WebSocketClient {
         };
 
         this._send(reply);
+        console.log('[WebSocket] 已发送心跳回复');
     }
 
     /**
@@ -420,9 +554,13 @@ export class WebSocketClient {
         const payload = data.payload;
         console.error('[WebSocket] 服务器错误:', payload);
 
-        // 如果是会话无效，清除会话ID
+        // 如果是会话无效，触发会话过期事件
         if (payload.error_code === 'SESSION_INVALID') {
             this.sessionId = null;
+            // 触发会话过期回调（如果有注册）
+            if (this.onSessionExpired) {
+                this.onSessionExpired(payload);
+            }
         }
 
         // 如果有对应的请求，拒绝 Promise
@@ -436,10 +574,12 @@ export class WebSocketClient {
     }
 
     /**
-     * 发送请求并等待响应
+     * 发送请求并等待响应（优化版：增加超时保护）
      */
     _sendRequest(requestId, message, onChunk, onComplete, onVoiceChunk, onFunctionCall) {
         return new Promise((resolve, reject) => {
+            console.log('[WebSocket] 发送请求:', requestId);
+            
             // 保存请求上下文
             this.pendingRequests.set(requestId, {
                 onTextChunk: onChunk,
@@ -451,26 +591,35 @@ export class WebSocketClient {
                 },
                 reject: reject,
                 textEnded: false,
-                voiceEnded: false
+                voiceEnded: false,
+                hasCheckedStreams: false,  // ✅ 标记是否已检查流类型
+                hasTextStream: false,
+                hasVoiceStream: false
             });
 
             this._send(message);
 
-            // 超时处理
-            setTimeout(() => {
+            // ✅ 超时处理（120秒）
+            const timeoutId = setTimeout(() => {
                 if (this.pendingRequests.has(requestId)) {
+                    console.error('[WebSocket] 请求超时:', requestId);
                     this.pendingRequests.delete(requestId);
                     reject(new Error('请求超时'));
                 }
-            }, 60000);
+            }, 120000);
+            
+            // 保存超时ID
+            this.pendingRequests.get(requestId).timeoutId = timeoutId;
         });
     }
 
     /**
-     * 等待响应
+     * 等待响应（优化版：增加超时保护）
      */
     _waitForResponse(requestId, onChunk, onComplete, onVoiceChunk, onFunctionCall) {
         return new Promise((resolve, reject) => {
+            console.log('[WebSocket] 注册请求处理器:', requestId);
+            
             this.pendingRequests.set(requestId, {
                 onTextChunk: onChunk,
                 onVoiceChunk: onVoiceChunk,
@@ -481,15 +630,23 @@ export class WebSocketClient {
                 },
                 reject: reject,
                 textEnded: false,
-                voiceEnded: false
+                voiceEnded: false,
+                hasCheckedStreams: false,  // ✅ 标记是否已检查流类型
+                hasTextStream: false,
+                hasVoiceStream: false
             });
 
-            setTimeout(() => {
+            // ✅ 增加超时保护（120秒，足够长）
+            const timeoutId = setTimeout(() => {
                 if (this.pendingRequests.has(requestId)) {
+                    console.error('[WebSocket] 请求超时:', requestId);
                     this.pendingRequests.delete(requestId);
                     reject(new Error('请求超时'));
                 }
-            }, 60000);
+            }, 120000);  // 120秒超时
+            
+            // 保存超时ID，以便在请求完成时清除
+            this.pendingRequests.get(requestId).timeoutId = timeoutId;
         });
     }
 
@@ -498,6 +655,7 @@ export class WebSocketClient {
      */
     _startHeartbeatMonitor() {
         this._stopHeartbeatMonitor();
+        console.log('[WebSocket] 启动心跳监控，超时时间:', this.config.heartbeatTimeout / 1000, '秒');
         this.heartbeatTimer = setTimeout(() => {
             console.warn('[WebSocket] 心跳超时，连接可能已断开');
             this._handleClose({ code: 1006, reason: '心跳超时' });
@@ -527,16 +685,22 @@ export class WebSocketClient {
     _handleClose(event) {
         this._stopHeartbeatMonitor();
 
-        // 如果不是正常关闭，尝试重连
-        if (event.code !== 1000 && this.reconnectAttempts < this.config.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            console.log(`[WebSocket] 尝试重连 (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
+        // ✅ 心跳超时或异常断开，不自动重连，而是触发会话过期
+        if (event.code !== 1000) {
+            console.error('[WebSocket] 连接异常关闭，code:', event.code, 'reason:', event.reason);
             
-            setTimeout(() => {
-                this.connect().catch(error => {
-                    console.error('[WebSocket] 重连失败:', error);
+            // ✅ 清空会话ID
+            this.sessionId = null;
+            
+            // ✅ 触发会话过期回调，让用户重新登录
+            if (this.onSessionExpired) {
+                this.onSessionExpired({
+                    error_code: 'CONNECTION_LOST',
+                    error_msg: '连接已断开，请重新登录',
+                    error_detail: `code: ${event.code}, reason: ${event.reason}`,
+                    retryable: false
                 });
-            }, this.config.reconnectInterval);
+            }
         }
     }
 

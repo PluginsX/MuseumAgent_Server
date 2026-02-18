@@ -194,7 +194,20 @@ export class ChatWindow {
                         vadParams,
                         // onSpeechStart: VAD检测到人声，创建新的语音消息
                         async () => {
-                            console.log('[ChatWindow] VAD检测到人声，创建新的语音消息');
+                            console.log('[ChatWindow] VAD检测到人声，立即打断当前AI语音并创建新的语音消息');
+                            
+                            // ✅ 如果有旧的语音消息还在发送，先结束它
+                            if (this.currentVoiceMessageId) {
+                                console.log('[ChatWindow] 检测到旧的语音消息未结束，先结束它:', this.currentVoiceMessageId);
+                                this.endCurrentVoiceMessage();
+                                // 等待一小段时间确保流完全关闭
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                            }
+                            
+                            // ✅ 先打断当前正在播放的AI语音
+                            await messageService.interruptCurrentRequest('USER_VOICE_INPUT');
+                            
+                            // 然后创建新的语音消息
                             await this.startNewVoiceMessage();
                         },
                         // onAudioData: 实时音频数据回调
@@ -217,14 +230,21 @@ export class ChatWindow {
                     );
                 } else {
                     // 不启用VAD：话筒开启立即创建气泡
+                    console.log('[ChatWindow] 话筒开启，立即打断当前AI语音并创建新的语音消息');
+                    // ✅ 先打断当前正在播放的AI语音
+                    await messageService.interruptCurrentRequest('USER_VOICE_INPUT');
+                    
+                    // ✅ 先创建新的语音消息和流
                     await this.startNewVoiceMessage();
                     
-                    // 开始录音，实时推送数据到流
+                    // ✅ 然后开始录音，实时推送数据到流
                     await audioService.startRecording((audioData) => {
                         this.audioChunks.push(audioData);
                         if (this.voiceStreamController) {
                             this.voiceStreamController.enqueue(new Uint8Array(audioData));
                             console.log('[ChatWindow] 实时发送音频数据:', audioData.byteLength, '字节');
+                        } else {
+                            console.warn('[ChatWindow] 流控制器未就绪');
                         }
                     });
                 }
@@ -242,19 +262,33 @@ export class ChatWindow {
     async startNewVoiceMessage() {
         console.log('[ChatWindow] 创建新的语音消息气泡');
         
-        // 清空音频缓存
+        // ✅ 清空音频缓存
         this.audioChunks = [];
         
-        // 创建实时流式传输的ReadableStream
+        // ✅ 创建实时流式传输的ReadableStream
         const stream = new ReadableStream({
             start: (controller) => {
                 this.voiceStreamController = controller;
-                console.log('[ChatWindow] 流式传输已准备就绪');
+                console.log('[ChatWindow] 流式传输已准备就绪，controller:', controller);
+            },
+            cancel: (reason) => {
+                console.log('[ChatWindow] 流被取消，原因:', reason);
+                this.voiceStreamController = null;
             }
         });
 
-        // 创建语音消息气泡并开始发送
-        this.currentVoiceMessageId = await messageService.sendVoiceMessageStream(stream);
+        // ✅ 创建语音消息气泡并开始发送
+        try {
+            this.currentVoiceMessageId = await messageService.sendVoiceMessageStream(stream);
+            console.log('[ChatWindow] 语音消息已创建，ID:', this.currentVoiceMessageId);
+        } catch (error) {
+            console.error('[ChatWindow] 创建语音消息失败:', error);
+            // 清理状态
+            this.voiceStreamController = null;
+            this.currentVoiceMessageId = null;
+            this.audioChunks = [];
+            throw error;
+        }
     }
 
     /**
@@ -294,13 +328,18 @@ export class ChatWindow {
             audioData: combinedAudioData
         });
         
-        // 结束流式发送
+        // ✅ 结束流式发送
         if (this.voiceStreamController) {
-            this.voiceStreamController.close();
+            try {
+                this.voiceStreamController.close();
+                console.log('[ChatWindow] 流式传输已关闭');
+            } catch (error) {
+                console.warn('[ChatWindow] 关闭流式传输失败（可能已关闭）:', error.message);
+            }
             this.voiceStreamController = null;
         }
         
-        // 清空当前消息状态
+        // ✅ 清空当前消息状态（但不清空 audioChunks，因为 VAD 可能还在缓存）
         this.currentVoiceMessageId = null;
         this.audioChunks = [];
         
@@ -349,9 +388,34 @@ export class ChatWindow {
      * 销毁
      */
     destroy() {
+        console.log('[ChatWindow] 销毁组件，清理所有资源');
+        
+        // ✅ 停止录音
+        if (stateManager.getState('recording.isRecording')) {
+            console.log('[ChatWindow] 停止录音');
+            audioService.stopRecording();
+        }
+        
+        // ✅ 关闭当前语音消息流
+        if (this.voiceStreamController) {
+            try {
+                this.voiceStreamController.close();
+            } catch (error) {
+                console.warn('[ChatWindow] 关闭流失败:', error.message);
+            }
+            this.voiceStreamController = null;
+        }
+        
+        // ✅ 清空状态
+        this.currentVoiceMessageId = null;
+        this.audioChunks = [];
+        
+        // 清理消息气泡
         this.messageBubbles.forEach(bubble => bubble.destroy());
         this.messageBubbles.clear();
         this.container.innerHTML = '';
+        
+        console.log('[ChatWindow] 组件已销毁');
     }
 }
 

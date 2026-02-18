@@ -90,12 +90,16 @@ class App {
 
         // 登出
         eventBus.on(Events.AUTH_LOGOUT, () => {
+            // ✅ 清理当前视图
+            this.cleanupCurrentView();
             this.showLoginView();
         });
 
         // 会话过期
         eventBus.on(Events.SESSION_EXPIRED, () => {
             showNotification('会话已过期，请重新登录', 'error');
+            // ✅ 清理当前视图
+            this.cleanupCurrentView();
             authService.logout();
         });
 
@@ -116,10 +120,30 @@ class App {
     }
 
     /**
+     * 清理当前视图
+     */
+    cleanupCurrentView() {
+        console.log('[App] 清理当前视图');
+        
+        // ✅ 如果当前视图是 ChatWindow，调用其 destroy 方法
+        if (this.currentView && typeof this.currentView.destroy === 'function') {
+            console.log('[App] 调用视图的 destroy 方法');
+            this.currentView.destroy();
+        }
+        
+        this.currentView = null;
+        console.log('[App] 当前视图已清理');
+    }
+
+    /**
      * 显示登录视图
      */
     showLoginView() {
         console.log('[App] 显示登录视图');
+        
+        // ✅ 先清理当前视图
+        this.cleanupCurrentView();
+        
         this.container.innerHTML = '';
         this.container.style.display = 'flex';
         this.container.style.alignItems = 'center';

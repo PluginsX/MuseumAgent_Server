@@ -1,0 +1,64 @@
+# 博物馆智能体服务器配置示例
+# 复制此文件为 config.yaml 并根据需要修改
+
+# 会话管理配置（优化后的配置，适合生产环境）
+session_management:
+  # 会话总超时时间（分钟）- 会话创建后的最大存活时间
+  # 任何业务请求或心跳都会重置此时间
+  session_timeout_minutes: 120  # 2小时，足够长时间使用
+  
+  # 无活动超时时间（分钟）- 无任何请求后的超时时间
+  # 注意：此配置已废弃，现在只使用 session_timeout_minutes
+  inactivity_timeout_minutes: 60
+  
+  # 心跳超时时间（分钟）- 未收到心跳回复后的超时时间
+  # 注意：此配置已废弃，现在使用 last_activity 判断连接状态
+  heartbeat_timeout_minutes: 10
+  
+  # 清理间隔（秒）- 多久执行一次会话清理
+  cleanup_interval_seconds: 120  # 2分钟，减少清理频率
+  
+  # 深度验证间隔（秒）- 多久执行一次深度会话验证
+  deep_validation_interval_seconds: 600  # 10分钟
+  
+  # 是否启用自动清理
+  enable_auto_cleanup: true
+  
+  # 是否启用心跳监控
+  enable_heartbeat_monitoring: true
+  
+  # 日志级别
+  log_level: INFO
+
+# 语义检索系统配置
+semantic_retrieval:
+  base_url: "http://localhost:12315/api/v1"
+  api_key: ""
+  timeout: 300
+  search_params:
+    top_k: 3
+    threshold: 0.5
+
+# LLM 配置
+llm:
+  provider: "dashscope"  # dashscope, openai, etc.
+  api_key: ""
+  model: "qwen-plus"
+  temperature: 0.7
+  max_tokens: 2000
+
+# STT 配置
+stt:
+  provider: "dashscope"
+  api_key: ""
+  model: "paraformer-realtime-v2"
+  sample_rate: 16000
+
+# TTS 配置
+tts:
+  provider: "dashscope"
+  api_key: ""
+  model: "cosyvoice-v1"
+  voice: "longxiaochun"
+  sample_rate: 16000
+

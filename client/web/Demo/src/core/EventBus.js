@@ -106,6 +106,9 @@ export const Events = {
     MESSAGE_COMPLETE: 'message:complete',
     MESSAGE_ERROR: 'message:error',
     
+    // 打断事件
+    REQUEST_INTERRUPTED: 'request:interrupted',
+    
     // 函数调用事件
     FUNCTION_CALL: 'function:call',
     

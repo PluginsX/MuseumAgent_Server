@@ -24,6 +24,7 @@ export class StateManager {
             // 会话配置
             session: {
                 requireTTS: true,
+                enableSRS: true,
                 autoPlay: true,
                 functionCalling: [
                     {
@@ -66,7 +67,8 @@ export class StateManager {
                     }
                 ],
                 platform: 'WEB',
-                functionCallingModified: false // 标记用户是否修改过函数定义
+                functionCallingModified: false, // 标记用户是否修改过函数定义
+                enableSRSModified: false // 标记用户是否修改过EnableSRS
             },
             
             // 消息状态
@@ -78,12 +80,12 @@ export class StateManager {
                 vadEnabled: true,
                 duration: 0,
                 vadParams: {
-                    silenceThreshold: 0.01,
-                    silenceDuration: 1500,
-                    speechThreshold: 0.05,
-                    minSpeechDuration: 300,
-                    preSpeechPadding: 300,
-                    postSpeechPadding: 500
+                    silenceThreshold: 0.01,      // 静音阈值：保持不变，用于判断是否停止说话
+                    silenceDuration: 800,         // 静音持续时长：1500ms → 800ms（更快结束）
+                    speechThreshold: 0.02,        // 语音阈值：0.05 → 0.02（更敏感，更快开始）
+                    minSpeechDuration: 200,       // 最小语音时长：300ms → 200ms（减少误判延迟）
+                    preSpeechPadding: 150,        // 语音前填充：300ms → 150ms（减少预填充，更快响应）
+                    postSpeechPadding: 300        // 语音后填充：500ms → 300ms（更快结束）
                 }
             },
             
@@ -234,6 +236,7 @@ export class StateManager {
             },
             session: {
                 requireTTS: true,
+                enableSRS: true,
                 autoPlay: true,
                 functionCalling: [
                     {
@@ -276,7 +279,8 @@ export class StateManager {
                     }
                 ],
                 platform: 'WEB',
-                functionCallingModified: false // 标记用户是否修改过函数定义
+                functionCallingModified: false, // 标记用户是否修改过函数定义
+                enableSRSModified: false // 标记用户是否修改过EnableSRS
             },
             messages: [],
             recording: {
@@ -284,12 +288,12 @@ export class StateManager {
                 vadEnabled: true,
                 duration: 0,
                 vadParams: {
-                    silenceThreshold: 0.01,
-                    silenceDuration: 1500,
-                    speechThreshold: 0.05,
-                    minSpeechDuration: 300,
-                    preSpeechPadding: 300,
-                    postSpeechPadding: 500
+                    silenceThreshold: 0.01,      // 静音阈值：保持不变，用于判断是否停止说话
+                    silenceDuration: 800,         // 静音持续时长：1500ms → 800ms（更快结束）
+                    speechThreshold: 0.02,        // 语音阈值：0.05 → 0.02（更敏感，更快开始）
+                    minSpeechDuration: 200,       // 最小语音时长：300ms → 200ms（减少误判延迟）
+                    preSpeechPadding: 150,        // 语音前填充：300ms → 150ms（减少预填充，更快响应）
+                    postSpeechPadding: 300        // 语音后填充：500ms → 300ms（更快结束）
                 }
             },
             audio: {

@@ -3,6 +3,7 @@
 动态LLM客户端
 支持会话感知的指令集动态提示词生成
 """
+import asyncio
 from typing import List, Dict, Any, AsyncGenerator
 import json
 import os
@@ -224,12 +225,13 @@ class DynamicLLMClient:
                 "format": "openai_standard"
             }
 
-    async def _chat_completions_with_functions_stream(self, payload: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def _chat_completions_with_functions_stream(self, payload: Dict[str, Any], cancel_event: 'asyncio.Event' = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        流式调用支持函数调用的Chat Completions API
+        流式调用支持函数调用的Chat Completions API（支持取消）
         
         Args:
             payload: 包含functions参数的请求负载
+            cancel_event: 取消事件（可选），用于中断流式生成
             
         Yields:
             包含type和content的字典，type可以是'text'或'function_call'
@@ -272,6 +274,14 @@ class DynamicLLMClient:
                     self.logger.llm.info('Starting to read response content')
                     line_count = 0
                     async for line in resp.content:
+                        # ✅ 检查取消信号（高频检查，每次读取数据块时）
+                        if cancel_event and cancel_event.is_set():
+                            self.logger.llm.info('LLM stream cancelled by user', {
+                                'line_count': line_count
+                            })
+                            # 主动关闭连接，停止接收数据
+                            resp.close()
+                            return
                         line_count += 1
                         if line:
                             line_str = line.decode('utf-8').strip()

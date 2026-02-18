@@ -4,7 +4,10 @@ REQUEST 业务处理器
 
 职责：根据 REQUEST 调用 CommandGenerator、STT、TTS，产出协议 RESPONSE 流。
 与协议层解耦：接收文本/语音，产出 (request_id, text_stream_seq, voice_stream_seq, function_call, content) 流。
+
+支持打断机制：通过 asyncio.Event 实现协作式取消。
 """
+import asyncio
 import base64
 import json
 import re
@@ -131,6 +134,36 @@ async def process_text_request(
     
     Yield 协议 RESPONSE payload（不含外层 msg 壳）
     """
+    # 调用支持取消的版本，但不传入 cancel_event（保持向后兼容）
+    async for payload in process_text_request_with_cancel(session_id, request_id, text, require_tts, None):
+        yield payload
+
+
+async def process_text_request_with_cancel(
+    session_id: str,
+    request_id: str,
+    text: str,
+    require_tts: bool,
+    cancel_event: Optional[asyncio.Event] = None,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    处理文本请求：流式 LLM -> 可选流式 TTS（支持取消）
+    
+    优化策略：
+    1. 文本立即流式发送给客户端（保持低延迟）
+    2. TTS使用句子级缓冲，按完整句子合成（保证语音连贯）
+    3. 支持通过 cancel_event 取消处理
+    
+    Args:
+        session_id: 会话ID
+        request_id: 请求ID
+        text: 用户输入文本
+        require_tts: 是否需要TTS
+        cancel_event: 取消事件（可选）
+    
+    Yield:
+        协议 RESPONSE payload（不含外层 msg 壳）
+    """
     logger = get_enhanced_logger()
     text_seq = 0
     voice_seq = 0
@@ -195,6 +228,11 @@ async def process_text_request(
             })
             
             async for audio_chunk in tts_service.stream_synthesize(sentence):
+                # ✅ 检查取消信号
+                if cancel_event and cancel_event.is_set():
+                    logger.tts.info("TTS cancelled", {"request_id": request_id[:16]})
+                    return
+                
                 b64 = base64.b64encode(audio_chunk).decode("utf-8")
                 async for p in send_voice(b64, voice_seq):
                     yield p
@@ -204,6 +242,20 @@ async def process_text_request(
 
     try:
         async for chunk in generator.stream_generate(user_input=text, session_id=session_id):
+            # ✅ 检查取消信号
+            if cancel_event and cancel_event.is_set():
+                logger.ws.info("Request cancelled during LLM generation", {"request_id": request_id[:16]})
+                # 发送中断标记的最后一帧
+                yield {
+                    "request_id": request_id,
+                    "text_stream_seq": -1,
+                    "voice_stream_seq": -1 if require_tts else None,
+                    "interrupted": True,
+                    "interrupt_reason": "USER_NEW_INPUT",
+                    "content": {}
+                }
+                return
+            
             if isinstance(chunk, dict):
                 t = chunk.get("type")
                 if t == "text":
@@ -248,6 +300,19 @@ async def process_text_request(
                     for sentence in complete_sentences:
                         async for p in synthesize_and_send(sentence):
                             yield p
+        
+        # ✅ 最后检查取消信号
+        if cancel_event and cancel_event.is_set():
+            logger.ws.info("Request cancelled before completion", {"request_id": request_id[:16]})
+            yield {
+                "request_id": request_id,
+                "text_stream_seq": -1,
+                "voice_stream_seq": -1 if require_tts else None,
+                "interrupted": True,
+                "interrupt_reason": "USER_NEW_INPUT",
+                "content": {}
+            }
+            return
         
         # 3. 流结束时，刷新缓冲器中剩余的文本
         if require_tts and sentence_buffer:

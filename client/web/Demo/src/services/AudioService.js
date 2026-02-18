@@ -499,6 +499,40 @@ export class AudioService {
     }
 
     /**
+     * 停止所有音频播放（用于打断机制）
+     */
+    stopAllPlayback() {
+        console.log('[AudioService] 停止所有音频播放');
+        
+        // 停止流式播放器
+        if (this.streamingPlayer) {
+            this.streamingPlayer.stop();
+        }
+        
+        // 停止当前播放
+        if (this.currentSource) {
+            this.currentSource.stop();
+            this.currentSource = null;
+        }
+        
+        // 清空播放队列
+        this.playbackQueue = [];
+        this.isPlaying = false;
+        this.currentPlayingMessageId = null;
+        
+        // 暂停 AudioContext（可选，节省资源）
+        if (this.audioContext && this.audioContext.state === 'running') {
+            // 不暂停，保持运行状态以便快速恢复
+            // this.audioContext.suspend();
+        }
+        
+        stateManager.setState('audio.isPlaying', false);
+        eventBus.emit(Events.AUDIO_PLAY_END);
+        
+        console.log('[AudioService] 所有音频播放已停止');
+    }
+
+    /**
      * 停止播放
      */
     stopPlayback() {
@@ -584,7 +618,7 @@ export class AudioService {
  * 设计原则：
  * 1. 单例模式：全局唯一实例，客户端启动时初始化
  * 2. 始终待命：随时准备接收和播放音频
- * 3. 多消息支持：可以同时管理多个消息的播放
+ * 3. 严格单播：同一时间只能播放一个消息，新消息自动打断旧消息
  */
 class StreamingAudioPlayer {
     constructor(audioContext) {
@@ -604,6 +638,9 @@ class StreamingAudioPlayer {
         this.nextStartTime = 0;
         this.startTime = 0;
         
+        // ✅ 活跃的音频源（用于停止）
+        this.activeSources = [];
+        
         console.log('[StreamingAudioPlayer] 播放器已初始化，随时待命');
     }
     
@@ -611,7 +648,7 @@ class StreamingAudioPlayer {
      * 开始播放新消息
      */
     startMessage(messageId) {
-        // 如果正在播放其他消息，先停止
+        // ✅ 如果正在播放其他消息，先彻底停止
         if (this.currentMessageId && this.currentMessageId !== messageId) {
             console.log('[StreamingAudioPlayer] 停止当前播放:', this.currentMessageId);
             this.stop();
@@ -623,6 +660,7 @@ class StreamingAudioPlayer {
         this.audioQueue = [];
         this.isProcessing = false;
         this.nextStartTime = 0;
+        this.activeSources = [];  // ✅ 清空活跃源列表
         
         console.log('[StreamingAudioPlayer] 开始播放新消息:', messageId);
     }
@@ -698,6 +736,17 @@ class StreamingAudioPlayer {
                 source.buffer = audioBuffer;
                 source.connect(this.audioContext.destination);
                 
+                // ✅ 添加到活跃源列表
+                this.activeSources.push(source);
+                
+                // ✅ 播放结束后从列表中移除
+                source.onended = () => {
+                    const index = this.activeSources.indexOf(source);
+                    if (index > -1) {
+                        this.activeSources.splice(index, 1);
+                    }
+                };
+                
                 // 计算播放时间（无缝衔接）
                 const now = this.audioContext.currentTime;
                 const startTime = Math.max(now, this.nextStartTime);
@@ -733,17 +782,34 @@ class StreamingAudioPlayer {
     }
     
     /**
-     * 停止播放
+     * 停止播放（彻底停止所有音频源）
      */
     stop() {
         if (this.isStopped) return;
         
+        console.log('[StreamingAudioPlayer] 停止播放，活跃源数量:', this.activeSources.length);
+        
+        // ✅ 停止所有活跃的音频源
+        for (const source of this.activeSources) {
+            try {
+                source.stop();
+                source.disconnect();
+            } catch (error) {
+                // 忽略已经停止的源
+                console.debug('[StreamingAudioPlayer] 停止音频源时出错（可能已停止）:', error.message);
+            }
+        }
+        
+        // ✅ 清空活跃源列表
+        this.activeSources = [];
+        
+        // 设置停止标志
         this.isStopped = true;
         this.isPlaying = false;
         this.audioQueue = [];
         this.currentMessageId = null;
         
-        console.log('[StreamingAudioPlayer] 停止播放');
+        console.log('[StreamingAudioPlayer] 所有音频源已停止');
     }
     
     /**

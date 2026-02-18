@@ -11,8 +11,45 @@ import { audioService } from './AudioService.js';
 export class MessageService {
     constructor() {
         this.wsClient = null;
-        this.currentRequestId = null;
+        this.currentRequestId = null;  // 当前正在处理的请求ID
+        this.isReceivingResponse = false;  // 是否正在接收响应
         this.audioChunks = [];
+    }
+
+    /**
+     * 发送打断信号
+     */
+    async interruptCurrentRequest(reason = 'USER_NEW_INPUT') {
+        if (!this.currentRequestId || !this.isReceivingResponse) {
+            console.log('[MessageService] 无活跃请求需要打断');
+            return;
+        }
+        
+        console.log('[MessageService] 发送打断信号:', this.currentRequestId, '原因:', reason);
+        
+        try {
+            // 1. 停止音频播放
+            audioService.stopAllPlayback();
+            
+            // 2. 发送 INTERRUPT 消息
+            await this.wsClient.sendInterrupt(this.currentRequestId, reason);
+            
+            // 3. 清理客户端状态
+            const oldRequestId = this.currentRequestId;
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
+            
+            // 4. 触发事件
+            eventBus.emit(Events.REQUEST_INTERRUPTED, {
+                requestId: oldRequestId,
+                reason: reason
+            });
+            
+            console.log('[MessageService] 打断信号已发送');
+            
+        } catch (error) {
+            console.error('[MessageService] 打断失败:', error);
+        }
     }
 
     /**
@@ -25,6 +62,14 @@ export class MessageService {
                 baseUrl: serverUrl
             });
 
+            // 注册会话过期回调
+            this.wsClient.onSessionExpired = (payload) => {
+                console.error('[MessageService] 会话已过期:', payload);
+                stateManager.setState('connection.isConnected', false);
+                stateManager.setState('auth.sessionId', null);
+                eventBus.emit(Events.SESSION_EXPIRED);
+            };
+
             // 连接
             await this.wsClient.connect();
             stateManager.setState('connection.isConnected', true);
@@ -36,6 +81,7 @@ export class MessageService {
                 authData,
                 sessionConfig.platform,
                 sessionConfig.requireTTS,
+                sessionConfig.enableSRS !== false ? sessionConfig.enableSRS : true,
                 sessionConfig.functionCalling
             );
 
@@ -60,6 +106,14 @@ export class MessageService {
             throw new Error('未连接到服务器');
         }
 
+        // ✅ 如果正在接收响应，先打断
+        if (this.isReceivingResponse) {
+            console.log('[MessageService] 检测到新输入，打断当前响应');
+            await this.interruptCurrentRequest('USER_NEW_INPUT');
+            // 等待一小段时间确保打断完成
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
         // 添加发送的消息到状态
         const messageId = this._generateMessageId();
         stateManager.addMessage({
@@ -71,6 +125,10 @@ export class MessageService {
         });
 
         eventBus.emit(Events.MESSAGE_SENT, { id: messageId, text });
+
+        // ✅ 标记开始接收响应
+        this.currentRequestId = messageId;
+        this.isReceivingResponse = true;
 
         try {
             // 为每种类型的响应创建独立的消息气泡ID
@@ -158,6 +216,14 @@ export class MessageService {
                 
                 // 完成回调
                 onComplete: async (data) => {
+                    // ✅ 检查是否被中断
+                    if (data.interrupted) {
+                        console.log('[MessageService] 请求被中断:', textMessageId || voiceMessageId);
+                        this.isReceivingResponse = false;
+                        this.currentRequestId = null;
+                        return;
+                    }
+                    
                     // 标记文本流结束
                     if (textMessageId) {
                         stateManager.updateMessage(textMessageId, {
@@ -192,6 +258,10 @@ export class MessageService {
                         }
                     }
 
+                    // ✅ 标记响应接收完成
+                    this.isReceivingResponse = false;
+                    this.currentRequestId = null;
+
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
             };
@@ -204,9 +274,19 @@ export class MessageService {
                 stateManager.setState('session.functionCallingModified', false);
             }
 
+            // 检查是否需要更新 EnableSRS
+            if (sessionConfig.enableSRSModified) {
+                options.enableSRS = sessionConfig.enableSRS;
+                // 重置修改标记
+                stateManager.setState('session.enableSRSModified', false);
+            }
+
             await this.wsClient.sendTextRequest(text, options);
 
         } catch (error) {
+            // ✅ 发生错误时清理状态
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
             console.error('[MessageService] 发送消息失败:', error);
             eventBus.emit(Events.MESSAGE_ERROR, error);
             throw error;
@@ -219,6 +299,14 @@ export class MessageService {
     async sendVoiceMessageStream(audioStream) {
         if (!this.wsClient || !this.wsClient.isConnected()) {
             throw new Error('未连接到服务器');
+        }
+
+        // ✅ 如果正在接收响应，先打断
+        if (this.isReceivingResponse) {
+            console.log('[MessageService] 检测到新语音输入，打断当前响应');
+            await this.interruptCurrentRequest('USER_NEW_INPUT');
+            // 等待一小段时间确保打断完成
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
 
         try {
@@ -239,6 +327,10 @@ export class MessageService {
             });
 
             eventBus.emit(Events.MESSAGE_SENT, { id: messageId, type: 'voice' });
+
+            // ✅ 标记开始接收响应
+            this.currentRequestId = messageId;
+            this.isReceivingResponse = true;
 
             // 发送语音请求（流式）
             const sessionConfig = stateManager.getState('session');
@@ -318,6 +410,14 @@ export class MessageService {
                 
                 // 完成回调
                 onComplete: async (data) => {
+                    // ✅ 检查是否被中断
+                    if (data.interrupted) {
+                        console.log('[MessageService] 语音请求被中断:', textMessageId || voiceMessageId);
+                        this.isReceivingResponse = false;
+                        this.currentRequestId = null;
+                        return;
+                    }
+                    
                     // 标记文本流结束
                     if (textMessageId) {
                         stateManager.updateMessage(textMessageId, {
@@ -350,6 +450,10 @@ export class MessageService {
                         }
                     }
 
+                    // ✅ 标记响应接收完成
+                    this.isReceivingResponse = false;
+                    this.currentRequestId = null;
+
                     eventBus.emit(Events.MESSAGE_COMPLETE, { textMessageId, voiceMessageId });
                 }
             };
@@ -362,16 +466,29 @@ export class MessageService {
                 stateManager.setState('session.functionCallingModified', false);
             }
 
-            // 异步发送，不阻塞
+            // 检查是否需要更新 EnableSRS
+            if (sessionConfig.enableSRSModified) {
+                voiceOptions.enableSRS = sessionConfig.enableSRS;
+                // 重置修改标记
+                stateManager.setState('session.enableSRSModified', false);
+            }
+
+            // ✅ 异步发送语音请求（不阻塞，立即返回 messageId）
             this.wsClient.sendVoiceRequestStream(audioStream, voiceOptions).catch(error => {
+                // ✅ 发生错误时清理状态
+                this.isReceivingResponse = false;
+                this.currentRequestId = null;
                 console.error('[MessageService] 语音请求失败:', error);
                 eventBus.emit(Events.MESSAGE_ERROR, error);
             });
 
-            // 立即返回消息ID，用于后续更新时长
+            // ✅ 立即返回消息ID，不等待流读取完成
             return messageId;
 
         } catch (error) {
+            // ✅ 发生错误时清理状态
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
             console.error('[MessageService] 发送语音消息失败:', error);
             eventBus.emit(Events.MESSAGE_ERROR, error);
             throw error;

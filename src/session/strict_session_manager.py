@@ -40,9 +40,11 @@ class EnhancedClientSession:
         return datetime.now() - self.last_activity > timedelta(minutes=timeout_minutes)
     
     def is_disconnected(self, heartbeat_timeout: timedelta = None) -> bool:
-        """检查会话是否断开连接"""
+        """检查会话是否断开连接（使用最后活动时间，而非心跳时间）"""
         timeout = heartbeat_timeout or timedelta(minutes=2)  # 默认2分钟心跳超时
-        return datetime.now() - self.last_heartbeat > timeout
+        # ✅ 关键修复：使用 last_activity 而非 last_heartbeat
+        # 任何业务请求都会更新 last_activity，避免误判
+        return datetime.now() - self.last_activity > timeout
     
     def is_active(self) -> bool:
         """检查会话是否活跃"""
@@ -51,14 +53,19 @@ class EnhancedClientSession:
                 not self.is_disconnected())
     
     def update_heartbeat(self):
-        """更新心跳时间"""
-        self.last_heartbeat = datetime.now()
-        # 延长会话有效期
-        self.expires_at = datetime.now() + timedelta(minutes=15)
+        """更新心跳时间（同时更新活动时间）"""
+        now = datetime.now()
+        self.last_heartbeat = now
+        self.last_activity = now  # ✅ 心跳也算活动
+        # 延长会话有效期到120分钟（与配置保持一致）
+        self.expires_at = now + timedelta(minutes=120)
     
     def update_activity(self):
-        """更新活动时间"""
-        self.last_activity = datetime.now()
+        """更新活动时间（业务请求时调用）"""
+        now = datetime.now()
+        self.last_activity = now
+        # ✅ 业务活动也延长会话有效期
+        self.expires_at = now + timedelta(minutes=120)
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -101,13 +108,13 @@ class StrictSessionManager:
         self.logger.sess.info('Session manager configuration loaded', self.config)
     def _load_config(self):
         """加载会话管理配置"""
-        # 默认配置
+        # 默认配置（优化后的配置，更宽松且合理）
         default_config = {
-            'session_timeout_minutes': 15,
-            'inactivity_timeout_minutes': 5,
-            'heartbeat_timeout_minutes': 2,
-            'cleanup_interval_seconds': 30,
-            'deep_validation_interval_seconds': 300,
+            'session_timeout_minutes': 120,  # 120分钟总超时（2小时，足够长）
+            'inactivity_timeout_minutes': 60,  # 60分钟无活动超时（1小时）
+            'heartbeat_timeout_minutes': 10,  # 10分钟活动超时（从5分钟增加，更宽容）
+            'cleanup_interval_seconds': 120,  # 120秒清理间隔（2分钟，减少清理频率）
+            'deep_validation_interval_seconds': 600,  # 10分钟深度验证
             'enable_auto_cleanup': True,
             'enable_heartbeat_monitoring': True,
             'log_level': 'INFO'
@@ -159,50 +166,25 @@ class StrictSessionManager:
                 time.sleep(10)
     
     def _perform_strict_cleanup(self):
-        """执行严格的会话清理"""
+        """执行严格的会话清理（优化版：只清理真正过期的会话）"""
         with self._lock:
             now = datetime.now()
             cleanup_actions = []
             
-            self.logger.sess.info('Starting strict session state check', 
+            self.logger.sess.debug('Starting session cleanup check', 
                           {'total_sessions': len(self.sessions)})
             
             for session_id, session in list(self.sessions.items()):
-                session_info = {
-                    'session_id': session_id,
-                    'is_expired': session.is_expired(),
-                    'is_inactive': session.is_inactive(self.inactivity_timeout.total_seconds()/60),
-                    'is_disconnected': session.is_disconnected(),
-                    'time_since_heartbeat': (now - session.last_heartbeat).total_seconds()/60,
-                    'time_since_activity': (now - session.last_activity).total_seconds()/60
-                }
+                # ✅ 关键优化：只清理真正过期的会话
+                # 不再使用 is_disconnected() 和 is_inactive()，避免误判
                 
-                self.logger.sess.debug(f'Checking session {session_id[:8]}...', session_info)
-                
-                # 优先级清理：
-                # 1. 已过期的会话
+                # 1. 检查会话是否已过期（expires_at）
                 if session.is_expired():
                     cleanup_actions.append(('expired', session_id, session))
                     self.logger.sess.info('Cleaning up expired session', 
-                                  {'session_id': session_id[:8], 'expired_at': session.expires_at.isoformat()})
-                    continue
-                
-                # 2. 断开连接的会话（心跳超时）
-                if session.is_disconnected(self.heartbeat_timeout):
-                    cleanup_actions.append(('disconnected', session_id, session))
-                    self.logger.sess.info('Cleaning up disconnected session', 
-                                  {'session_id': session_id[:8],
-                                   'disconnected_time': (now - session.last_heartbeat).total_seconds()/60,
-                                   'timeout_setting': self.heartbeat_timeout.total_seconds()/60})
-                    continue
-                
-                # 3. 长期不活跃的会话
-                if session.is_inactive(self.inactivity_timeout.total_seconds()/60):
-                    cleanup_actions.append(('inactive', session_id, session))
-                    self.logger.sess.info('Cleaning up inactive session', 
-                                  {'session_id': session_id[:8],
-                                   'inactive_time': (now - session.last_activity).total_seconds()/60,
-                                   'timeout_setting': self.inactivity_timeout.total_seconds()/60})
+                                  {'session_id': session_id[:8], 
+                                   'expired_at': session.expires_at.isoformat(),
+                                   'time_since_activity': (now - session.last_activity).total_seconds()/60})
                     continue
             
             # 执行清理
@@ -217,7 +199,7 @@ class StrictSessionManager:
                               {'cleaned_count': len(cleanup_actions),
                                'remaining_total': len(self.sessions)})
             else:
-                self.logger.sess.info('No sessions needed cleaning in this round')
+                self.logger.sess.debug('No sessions needed cleaning in this round')
     
     def _perform_deep_validation(self):
         """深度验证会话有效性"""
@@ -288,7 +270,7 @@ class StrictSessionManager:
             return session
     
     def validate_session(self, session_id: str) -> Optional[EnhancedClientSession]:
-        """严格会话验证"""
+        """严格会话验证（优化版：简化验证逻辑）"""
         with self._lock:
             session = self.sessions.get(session_id)
             
@@ -297,27 +279,21 @@ class StrictSessionManager:
                               {'session_id': session_id[:8]})
                 return None
             
-            # 检查会话状态
-            validation_checks = {
-                'exists': True,
-                'registered': session.is_registered,
-                'not_expired': not session.is_expired(),
-                'connected': not session.is_disconnected(self.heartbeat_timeout),
-                'active': not session.is_inactive(self.inactivity_timeout.total_seconds()/60)
-            }
-            
-            self.logger.sess.debug(f'Session validation {session_id[:8]}', validation_checks)
-            
-            # 如果会话无效，返回None但不删除（让清理线程处理）
-            if not all(validation_checks.values()):
+            # ✅ 简化验证：只检查是否注册和是否过期
+            # 不再检查 connected 和 active，避免误判
+            if not session.is_registered or session.is_expired():
                 self.logger.sess.warn('Invalid session detected', 
-                              {'session_id': session_id[:8], 'checks': validation_checks})
+                              {'session_id': session_id[:8],
+                               'registered': session.is_registered,
+                               'expired': session.is_expired()})
                 return None
             
-            # 更新活动时间
+            # 更新活动时间（这会自动延长会话有效期）
             session.update_activity()
-            self.logger.sess.info('Session validation passed', 
-                          {'session_id': session_id[:8]})
+            
+            self.logger.sess.debug('Session validation passed', 
+                          {'session_id': session_id[:8],
+                           'remaining_seconds': int((session.expires_at - datetime.now()).total_seconds())})
             
             return session
     
@@ -328,29 +304,39 @@ class StrictSessionManager:
             return session
     
     def heartbeat(self, session_id: str) -> bool:
-        """心跳更新（带防抖和日志降级）"""
+        """心跳更新（优化版：简化逻辑，增强日志）"""
         with self._lock:
             session = self.sessions.get(session_id)
-            if session and session.is_registered and not session.is_expired():
-                now = datetime.now()
-                
-                # 防抖：如果距离上次心跳不到1秒，静默更新（不记录日志）
-                time_since_last_heartbeat = (now - session.last_heartbeat).total_seconds()
-                
-                session.update_heartbeat()
-                session.update_activity()
-                
-                # 只在心跳间隔大于1秒时记录日志，避免日志风暴
-                if time_since_last_heartbeat >= 1.0:
-                    self.logger.sess.debug('Heartbeat updated', 
-                                  {'session_id': session_id[:8], 
-                                   'interval': f'{time_since_last_heartbeat:.1f}s'})
-                
-                return True
+            if not session:
+                self.logger.sess.warn('Heartbeat update failed - session not found', 
+                              {'session_id': session_id[:8]})
+                return False
             
-            self.logger.sess.warn('Heartbeat update failed', 
-                          {'session_id': session_id[:8], 'reason': '会话不存在或已过期'})
-            return False
+            if not session.is_registered:
+                self.logger.sess.warn('Heartbeat update failed - session not registered', 
+                              {'session_id': session_id[:8]})
+                return False
+            
+            if session.is_expired():
+                self.logger.sess.warn('Heartbeat update failed - session expired', 
+                              {'session_id': session_id[:8],
+                               'expired_at': session.expires_at.isoformat()})
+                return False
+            
+            now = datetime.now()
+            time_since_last_heartbeat = (now - session.last_heartbeat).total_seconds()
+            
+            # 更新心跳（这会同时更新活动时间和延长会话）
+            session.update_heartbeat()
+            
+            # 记录心跳更新（降低日志级别，避免日志风暴）
+            if time_since_last_heartbeat >= 10.0:  # 只记录间隔大于10秒的心跳
+                self.logger.sess.debug('Heartbeat updated', 
+                              {'session_id': session_id[:8], 
+                               'interval': f'{time_since_last_heartbeat:.1f}s',
+                               'new_expires_at': session.expires_at.isoformat()})
+            
+            return True
     
     def register_session_with_functions(self, session_id: str, client_metadata: Dict[str, Any], 
                                       functions: List[Dict[str, Any]]) -> EnhancedClientSession:
@@ -391,10 +377,11 @@ class StrictSessionManager:
         self,
         session_id: str,
         require_tts: Optional[bool] = None,
+        enable_srs: Optional[bool] = None,
         function_calling_op: Optional[str] = None,
         function_calling: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
-        """按协议更新会话属性：require_tts、function_calling（REPLACE/ADD/UPDATE/DELETE）"""
+        """按协议更新会话属性：require_tts、enable_srs、function_calling（REPLACE/ADD/UPDATE/DELETE）"""
         if not function_calling:
             function_calling = []
         with self._lock:
@@ -403,6 +390,8 @@ class StrictSessionManager:
                 return False
             if require_tts is not None:
                 session.client_metadata["require_tts"] = require_tts
+            if enable_srs is not None:
+                session.client_metadata["enable_srs"] = enable_srs
             if function_calling_op and function_calling is not None:
                 fc = session.client_metadata.get("functions", [])
                 names = {f.get("name") for f in fc if isinstance(f, dict) and f.get("name")}
@@ -437,6 +426,7 @@ class StrictSessionManager:
             return {
                 "platform": session.client_metadata.get("platform", session.client_metadata.get("client_type", "WEB")),
                 "require_tts": session.client_metadata.get("require_tts", False),
+                "enable_srs": session.client_metadata.get("enable_srs", True),
                 "function_calling": session.client_metadata.get("functions", []),
                 "create_time": int(session.created_at.timestamp() * 1000),
                 "remaining_seconds": int(remaining),

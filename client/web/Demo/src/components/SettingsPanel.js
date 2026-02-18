@@ -98,6 +98,15 @@ export class SettingsPanel {
         );
         section.appendChild(requireTTSGroup);
 
+        // EnableSRS
+        const enableSRSGroup = this.createCheckboxGroup(
+            'EnableSRS',
+            'enableSRS',
+            sessionConfig.enableSRS !== false,
+            '是否启用增强检索（SRS语义检索系统）'
+        );
+        section.appendChild(enableSRSGroup);
+
         // AutoPlay
         const autoPlayGroup = this.createCheckboxGroup(
             'AutoPlay',
@@ -145,12 +154,12 @@ export class SettingsPanel {
 
         // VAD详细参数
         const vadParams = recordingConfig.vadParams || {
-            silenceThreshold: 0.01,
-            silenceDuration: 1500,
-            speechThreshold: 0.05,
-            minSpeechDuration: 300,
-            preSpeechPadding: 300,
-            postSpeechPadding: 500
+            silenceThreshold: 0.01,      // 静音阈值：保持不变，用于判断是否停止说话
+            silenceDuration: 800,         // 静音持续时长：1500ms → 800ms（更快结束）
+            speechThreshold: 0.02,        // 语音阈值：0.05 → 0.02（更敏感，更快开始）
+            minSpeechDuration: 200,       // 最小语音时长：300ms → 200ms（减少误判延迟）
+            preSpeechPadding: 150,        // 语音前填充：300ms → 150ms（减少预填充，更快响应）
+            postSpeechPadding: 300        // 语音后填充：500ms → 300ms（更快结束）
         };
 
         const vadParamsGroup = createElement('div', {
@@ -415,10 +424,14 @@ export class SettingsPanel {
             // 其他配置存储在 session 下
             stateManager.setState(`session.${key}`, value);
             
-            // 如果修改了 FunctionCalling，标记为已修改
+            // 如果修改了 FunctionCalling 或 EnableSRS，标记为已修改
             if (key === 'functionCalling') {
                 stateManager.setState('session.functionCallingModified', true);
                 console.log('[SettingsPanel] FunctionCalling已修改，将在下次请求时更新到服务器');
+            }
+            if (key === 'enableSRS') {
+                stateManager.setState('session.enableSRSModified', true);
+                console.log('[SettingsPanel] EnableSRS已修改，将在下次请求时更新到服务器');
             }
         }
 

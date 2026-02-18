@@ -68,12 +68,12 @@
     "jwt_expire_seconds": 3600
   },
   "session_management": {
-    "session_timeout_minutes": 120,
+    "session_timeout_minutes": 15,
     "inactivity_timeout_minutes": 5,
     "heartbeat_timeout_minutes": 2,
     "cleanup_interval_seconds": 30,
     "deep_validation_interval_seconds": 300,
-    "enable_auto_cleanup": true,
+    "enable_auto_cleanup": false,
     "enable_heartbeat_monitoring": true,
     "log_level": "INFO"
   },
