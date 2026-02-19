@@ -3,7 +3,7 @@
  * 基于 MuseumAgentSDK 客户端库开发
  */
 
-import { MuseumAgentClient, Events } from '../lib/MuseumAgentSDK.js';
+import { MuseumAgentClient, Events } from '../lib/index.js';
 import { LoginForm } from './components/LoginForm.js';
 import { ChatWindow } from './components/ChatWindow.js';
 import { createElement, $, showNotification } from './utils/dom.js';

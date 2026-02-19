@@ -430,7 +430,12 @@ export class ChatWindow {
         this.inputArea.style.height = 'auto';
 
         try {
-            await this.client.sendText(text);
+            // ✅ 传递当前配置参数
+            await this.client.sendText(text, {
+                requireTTS: this.client.config.requireTTS,
+                enableSRS: this.client.config.enableSRS,
+                functionCalling: this.client.config.functionCalling.length > 0 ? this.client.config.functionCalling : undefined
+            });
         } catch (error) {
             console.error('[ChatWindow] 发送消息失败:', error);
         }
@@ -444,7 +449,11 @@ export class ChatWindow {
             if (this.client.isRecording) {
                 await this.client.stopRecording();
             } else {
-                await this.client.startRecording();
+                // ✅ 传递当前配置参数
+                await this.client.startRecording({
+                    vadEnabled: this.client.vadEnabled,
+                    vadParams: this.client.config.vadParams
+                });
             }
         } catch (error) {
             console.error('[ChatWindow] 录音失败:', error);
