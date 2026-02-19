@@ -163,6 +163,7 @@ export class MessageBubble {
         });
 
         const functionCall = this.message.content;
+        console.log('[MessageBubble] 渲染函数调用:', functionCall);
         
         // 函数图标
         const icon = createElement('span', {
@@ -171,19 +172,61 @@ export class MessageBubble {
         });
         funcElement.appendChild(icon);
         
+        // 处理不同格式的函数调用数据
+        let functionName = 'unknown_function';
+        let functionParams = {};
+        
+        // 情况1: 标准格式 {name: 'functionName', arguments: {param1: value1, param2: value2}}
+        // 或 {name: 'functionName', parameters: {param1: value1, param2: value2}}（服务器返回的格式）
+        if (functionCall.name) {
+            functionName = functionCall.name;
+            // 优先使用 parameters 字段（服务器返回的格式）
+            if (functionCall.parameters && typeof functionCall.parameters === 'object') {
+                functionParams = functionCall.parameters;
+                console.log('[MessageBubble] 使用 parameters 字段:', functionParams);
+            }
+            // 其次使用 arguments 字段（标准格式）
+            else if (functionCall.arguments && typeof functionCall.arguments === 'object') {
+                functionParams = functionCall.arguments;
+                console.log('[MessageBubble] 使用 arguments 字段:', functionParams);
+            }
+        }
+        // 情况2: 可能的其他格式，如 {function: 'functionName', params: [...]} 或 {name: 'functionName(param)'} 
+        else if (functionCall.function) {
+            functionName = functionCall.function;
+            if (functionCall.params) {
+                functionParams = functionCall.params;
+            }
+        }
+        // 情况3: 处理字符串格式的函数调用，如 "play_animation(JUMP)"
+        else if (typeof functionCall === 'string') {
+            // 尝试从字符串中解析函数名和参数
+            const match = functionCall.match(/^(\w+)\((.*)\)$/);
+            if (match) {
+                functionName = match[1];
+                const paramsStr = match[2].trim();
+                if (paramsStr) {
+                    // 简单处理参数，假设是单个参数
+                    functionParams = { animation: paramsStr };
+                }
+            } else {
+                functionName = functionCall;
+            }
+        }
+        
         // 函数名称
         const nameElement = createElement('span', {
             className: 'function-name',
-            textContent: functionCall.name
+            textContent: functionName
         });
         funcElement.appendChild(nameElement);
         
         // 添加左括号
         funcElement.appendChild(document.createTextNode('('));
         
-        // 如果有参数，显示参数
-        if (functionCall.arguments && Object.keys(functionCall.arguments).length > 0) {
-            const entries = Object.entries(functionCall.arguments);
+        // 显示参数
+        if (Object.keys(functionParams).length > 0) {
+            const entries = Object.entries(functionParams);
             
             entries.forEach(([key, value], index) => {
                 // 参数键
@@ -196,10 +239,20 @@ export class MessageBubble {
                 // 等号
                 funcElement.appendChild(document.createTextNode('='));
                 
-                // 参数值
+                // 参数值 - 确保完整显示
+                let displayValue = value;
+                if (typeof value === 'string') {
+                    // 字符串值添加引号
+                    displayValue = `"${value}"`;
+                } else if (value === null) {
+                    displayValue = 'null';
+                } else if (value === undefined) {
+                    displayValue = 'undefined';
+                }
+                
                 const paramValue = createElement('span', {
                     className: 'param-value',
-                    textContent: JSON.stringify(value)
+                    textContent: displayValue
                 });
                 funcElement.appendChild(paramValue);
                 
@@ -209,9 +262,23 @@ export class MessageBubble {
                 }
             });
         }
+        // 特殊处理：如果函数调用看起来应该有参数但没有解析到，尝试从函数名中提取
+        else if (functionName.includes('(') && functionName.includes(')')) {
+            const match = functionName.match(/^(\w+)\((.*)\)$/);
+            if (match) {
+                functionName = match[1];
+                const paramsStr = match[2].trim();
+                if (paramsStr) {
+                    funcElement.removeChild(funcElement.lastChild); // 移除之前添加的左括号
+                    funcElement.appendChild(document.createTextNode(`(${paramsStr})`));
+                }
+            }
+        }
         
-        // 添加右括号
-        funcElement.appendChild(document.createTextNode(')'));
+        // 如果没有参数，添加右括号
+        if (!funcElement.lastChild || funcElement.lastChild.textContent !== ')') {
+            funcElement.appendChild(document.createTextNode(')'));
+        }
 
         return funcElement;
     }

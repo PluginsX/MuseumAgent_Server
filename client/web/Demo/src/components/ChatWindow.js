@@ -266,6 +266,7 @@ export class ChatWindow {
             console.log('[ChatWindow] 收到函数调用:', functionCall);
             console.log('[ChatWindow] 函数调用类型:', typeof functionCall);
             console.log('[ChatWindow] 函数调用 keys:', Object.keys(functionCall));
+            console.log('[ChatWindow] 函数调用完整结构:', JSON.stringify(functionCall, null, 2));
             
             // 函数调用总是创建新的独立气泡
             const message = {

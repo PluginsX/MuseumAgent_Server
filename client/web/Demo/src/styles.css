@@ -859,6 +859,9 @@ button[type="submit"]:active {
     font-size: 14px;
     line-height: 1.4;
     flex-wrap: wrap;
+    word-break: break-all;
+    white-space: normal;
+    width: 100%;
 }
 
 .message-function .function-icon {
