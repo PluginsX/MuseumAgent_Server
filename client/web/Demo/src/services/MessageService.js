@@ -29,30 +29,54 @@ export class MessageService {
         console.log('[MessageService] 发送打断信号 - 请求ID:', this.currentRequestId, '消息ID:', this.currentMessageId, '原因:', reason);
         
         try {
-            // 1. 停止音频播放
+            // 1. 立即停止音频播放（不等待服务端确认）
             audioService.stopAllPlayback();
             
-            // 2. 发送 INTERRUPT 消息（使用请求ID，不是消息ID）
-            await this.wsClient.sendInterrupt(this.currentRequestId, reason);
-            
-            // 3. 清理客户端状态
+            // 2. 立即清理客户端状态（乐观更新）
             const oldRequestId = this.currentRequestId;
             const oldMessageId = this.currentMessageId;
             this.isReceivingResponse = false;
             this.currentRequestId = null;
             this.currentMessageId = null;
             
-            // 4. 触发事件
-            eventBus.emit(Events.REQUEST_INTERRUPTED, {
-                requestId: oldRequestId,
-                messageId: oldMessageId,
-                reason: reason
-            });
+            // 3. 发送 INTERRUPT 消息（异步，不阻塞）
+            // ✅ 使用 Promise.race 避免竞态条件
+            const interruptPromise = this.wsClient.sendInterrupt(oldRequestId, reason);
             
-            console.log('[MessageService] 打断信号已发送');
+            // 不等待结果，直接继续（乐观更新）
+            interruptPromise
+                .then((ackPayload) => {
+                    console.log('[MessageService] 打断确认收到:', ackPayload);
+                    // 触发成功事件
+                    eventBus.emit(Events.REQUEST_INTERRUPTED, {
+                        requestId: oldRequestId,
+                        messageId: oldMessageId,
+                        reason: reason,
+                        success: true,
+                        ackPayload: ackPayload
+                    });
+                })
+                .catch((error) => {
+                    // ✅ 降低日志级别，超时是正常的（因为我们不等待）
+                    console.debug('[MessageService] 打断确认超时（已本地处理）:', error.message);
+                    // 即使超时，也触发事件（因为本地已处理）
+                    eventBus.emit(Events.REQUEST_INTERRUPTED, {
+                        requestId: oldRequestId,
+                        messageId: oldMessageId,
+                        reason: reason,
+                        success: false,
+                        error: error.message
+                    });
+                });
+            
+            console.log('[MessageService] 打断信号已发送（本地状态已清理）');
             
         } catch (error) {
             console.error('[MessageService] 打断失败:', error);
+            // 即使失败，也要清理状态
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
+            this.currentMessageId = null;
         }
     }
 
@@ -110,12 +134,17 @@ export class MessageService {
             throw new Error('未连接到服务器');
         }
 
-        // ✅ 如果正在接收响应，先打断
+        // ✅ 如果正在接收响应，立即清理状态（服务端会自动打断）
         if (this.isReceivingResponse) {
-            console.log('[MessageService] 检测到新输入，打断当前响应');
-            await this.interruptCurrentRequest('USER_NEW_INPUT');
-            // 等待一小段时间确保打断完成
-            await new Promise(resolve => setTimeout(resolve, 100));
+            console.log('[MessageService] 检测到新输入，清理旧状态（服务端自动打断）');
+            
+            // 立即清理客户端状态
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
+            this.currentMessageId = null;
+            
+            // 停止音频播放
+            audioService.stopAllPlayback();
         }
 
         // 添加发送的消息到状态
@@ -314,12 +343,17 @@ export class MessageService {
             throw new Error('未连接到服务器');
         }
 
-        // ✅ 如果正在接收响应，先打断
+        // ✅ 如果正在接收响应，立即清理状态（服务端会自动打断）
         if (this.isReceivingResponse) {
-            console.log('[MessageService] 检测到新语音输入，打断当前响应');
-            await this.interruptCurrentRequest('USER_NEW_INPUT');
-            // 等待一小段时间确保打断完成
-            await new Promise(resolve => setTimeout(resolve, 100));
+            console.log('[MessageService] 检测到新语音输入，清理旧状态（服务端自动打断）');
+            
+            // 立即清理客户端状态
+            this.isReceivingResponse = false;
+            this.currentRequestId = null;
+            this.currentMessageId = null;
+            
+            // 停止音频播放
+            audioService.stopAllPlayback();
         }
 
         try {

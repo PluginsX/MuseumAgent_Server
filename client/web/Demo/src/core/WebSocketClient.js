@@ -19,6 +19,7 @@ export class WebSocketClient {
         this.messageHandlers = new Map();
         this.pendingRequests = new Map();
         this.onSessionExpired = null; // 会话过期回调
+        this.latestRequestId = null; // ✅ 跟踪最新的请求ID（用于客户端打断）
     }
 
     /**
@@ -125,6 +126,10 @@ export class WebSocketClient {
     sendTextRequest(text, options = {}) {
         const requestId = this._generateId();
         
+        // ✅ 更新最新请求ID（用于客户端打断）
+        this.latestRequestId = requestId;
+        console.log('[WebSocket] 更新最新请求ID:', requestId);
+        
         const message = {
             version: '1.0',
             msg_type: 'REQUEST',
@@ -172,6 +177,8 @@ export class WebSocketClient {
     sendVoiceRequestStream(audioStream, options = {}) {
         const requestId = this._generateId();
 
+        // ✅ 更新最新请求ID（用于客户端打断）
+        this.latestRequestId = requestId;
         console.log('[WebSocket] 开始流式语音发送, requestId:', requestId);
 
         // 先注册响应处理器
@@ -316,8 +323,15 @@ export class WebSocketClient {
         console.log('[WebSocket] 发送打断请求:', requestId, '原因:', reason);
 
         return new Promise((resolve, reject) => {
+            let timeoutId = null;
+            
             // 设置一次性处理器
             const handler = (data) => {
+                // ✅ 清除超时定时器
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
                 this.messageHandlers.delete('INTERRUPT_ACK');
                 console.log('[WebSocket] 收到打断确认:', data.payload);
                 resolve(data.payload);
@@ -326,13 +340,14 @@ export class WebSocketClient {
             this.messageHandlers.set('INTERRUPT_ACK', handler);
             this._send(message);
 
-            // 超时处理
-            setTimeout(() => {
+            // ✅ 增加超时时间到15秒（从5秒增加）
+            timeoutId = setTimeout(() => {
                 if (this.messageHandlers.has('INTERRUPT_ACK')) {
                     this.messageHandlers.delete('INTERRUPT_ACK');
+                    console.debug('[WebSocket] 打断请求超时（这是正常的，因为使用了乐观更新）');
                     reject(new Error('打断请求超时'));
                 }
-            }, 5000);
+            }, 15000);
         });
     }
 
@@ -393,11 +408,24 @@ export class WebSocketClient {
     _handleMessage(event) {
         try {
             const data = JSON.parse(event.data);
-            console.log('[WebSocket] 收到消息:', data.msg_type);
+            console.log('[WebSocket] 收到消息:', data.msg_type, data.payload?.request_id ? `(req: ${data.payload.request_id.substring(0, 16)}...)` : '');
 
             // 处理心跳
             if (data.msg_type === 'HEARTBEAT') {
                 this._handleHeartbeat(data);
+                return;
+            }
+
+            // ✅ 优先处理打断确认（避免被其他消息阻塞）
+            if (data.msg_type === 'INTERRUPT_ACK') {
+                const handler = this.messageHandlers.get('INTERRUPT_ACK');
+                if (handler) {
+                    console.log('[WebSocket] 处理打断确认');
+                    handler(data);
+                } else {
+                    // ✅ 降低日志级别，这是正常的（乐观更新导致处理器可能已被超时删除）
+                    console.debug('[WebSocket] 收到打断确认但处理器已清理（乐观更新，正常现象）');
+                }
                 return;
             }
 
@@ -410,15 +438,6 @@ export class WebSocketClient {
             // 处理错误
             if (data.msg_type === 'ERROR') {
                 this._handleError(data);
-                return;
-            }
-
-            // ✅ 处理打断确认
-            if (data.msg_type === 'INTERRUPT_ACK') {
-                const handler = this.messageHandlers.get('INTERRUPT_ACK');
-                if (handler) {
-                    handler(data);
-                }
                 return;
             }
 
@@ -435,11 +454,34 @@ export class WebSocketClient {
     }
 
     /**
-     * 处理 RESPONSE（优化版：正确处理流式响应）
+     * 处理 RESPONSE（优化版：正确处理流式响应 + 客户端打断）
      */
     _handleResponse(data) {
         const payload = data.payload;
         const requestId = payload.request_id;
+        
+        // ✅ 客户端打断：如果这不是最新的请求，直接丢弃响应
+        if (requestId !== this.latestRequestId) {
+            console.log('[WebSocket] 丢弃旧请求的响应:', requestId, '(最新:', this.latestRequestId, ')');
+            
+            // 清理旧请求的处理器
+            const request = this.pendingRequests.get(requestId);
+            if (request) {
+                if (request.timeoutId) {
+                    clearTimeout(request.timeoutId);
+                }
+                // 调用完成回调，标记为被打断
+                if (request.onComplete) {
+                    request.onComplete({
+                        ...data,
+                        interrupted: true,
+                        interrupt_reason: 'CLIENT_SIDE_INTERRUPT'
+                    });
+                }
+                this.pendingRequests.delete(requestId);
+            }
+            return;
+        }
         
         const request = this.pendingRequests.get(requestId);
         if (!request) {

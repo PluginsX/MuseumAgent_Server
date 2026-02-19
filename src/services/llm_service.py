@@ -10,6 +10,7 @@ from datetime import datetime
 
 from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
+from src.services.interrupt_manager import get_interrupt_manager
 
 
 class LLMService:
@@ -18,6 +19,7 @@ class LLMService:
     def __init__(self):
         """初始化LLM服务"""
         self.logger = get_enhanced_logger()
+        self.interrupt_manager = get_interrupt_manager()
         self.config = get_global_config()
         self.llm_config = self.config.get("llm", {})
         
@@ -68,6 +70,10 @@ class LLMService:
                                    {'model': payload['model'], 'messages_count': len(payload['messages'])})
             
             async with aiohttp.ClientSession() as session:
+                # ✅ 注册到中断管理器
+                if session_id:
+                    self.interrupt_manager.register_llm(session_id, session)
+                
                 async with session.post(
                     f"{self.base_url}/chat/completions",
                     json=payload,
@@ -111,7 +117,7 @@ class LLMService:
                 "data": None
             }
     
-    async def chat_completion_stream(self, request: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def chat_completion_stream(self, request: Dict[str, Any], session_id: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式聊天补全接口（OpenAI兼容）
         

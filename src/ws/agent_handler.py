@@ -28,26 +28,25 @@ from src.common.enhanced_logger import get_enhanced_logger
 from src.db.client_api import ClientLocalAPI
 from src.session.strict_session_manager import strict_session_manager
 from src.services.registry import service_registry
+from src.services.interrupt_manager import get_interrupt_manager
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 manager = ConnectionManager()
 logger = get_enhanced_logger()
+interrupt_manager = get_interrupt_manager()
 
 # 配置（优化心跳间隔）
 HEARTBEAT_INTERVAL = 60  # 60秒发送一次心跳（从30秒增加）
 SESSION_TIMEOUT_SECONDS = 3600
 SESSION_WARN_THRESHOLD = 300  # 5 分钟
 
-# ✅ 活跃请求管理（用于打断机制）
-active_requests: Dict[str, Dict[str, Any]] = {}
-# 结构：{
-#   "req_xxx": {
-#       "session_id": "sess_xxx",
-#       "cancel_event": asyncio.Event(),
-#       "start_time": timestamp,
-#       "type": "TEXT" | "VOICE"
-#   }
-# }
+# ✅ 活跃任务管理（用于打断机制 - 直接取消 asyncio.Task）
+active_tasks: Dict[str, asyncio.Task] = {}
+# 结构：{session_id: task}
+
+# ✅ 追踪每个会话的当前请求ID和TTS状态（用于发送正确的结束帧）
+active_request_info: Dict[str, Dict[str, Any]] = {}
+# 结构：{session_id: {"request_id": str, "require_tts": bool}}
 
 
 def _get_client_ip(ws: WebSocket) -> Optional[str]:
@@ -164,220 +163,223 @@ async def _handle_request(
     else:
         require_tts = require_tts or False
 
-    # ✅ 创建取消事件并注册活跃请求
-    cancel_event = asyncio.Event()
-    active_requests[request_id] = {
-        "session_id": session_id,
-        "cancel_event": cancel_event,
-        "start_time": time.time(),
-        "type": data_type
+    # ✅ 新请求到达：立即中断该会话的所有旧任务
+    should_interrupt_old = False
+    if data_type == "TEXT":
+        should_interrupt_old = True
+    elif data_type == "VOICE":
+        if stream_flag and stream_seq == 0:
+            should_interrupt_old = True
+        elif not stream_flag:
+            should_interrupt_old = True
+    
+    # ✅ 调用统一中断管理器，中断所有流程
+    if should_interrupt_old:
+        # 获取旧请求信息
+        old_request_info = active_request_info.get(session_id, {})
+        old_request_id = old_request_info.get("request_id", "unknown")
+        old_require_tts = old_request_info.get("require_tts", False)
+        
+        logger.ws.info("New request arrived, interrupting old processes", {
+            "session_id": session_id[:16],
+            "old_request_id": old_request_id[:16] if old_request_id != "unknown" else "unknown",
+            "new_request_id": request_id[:16]
+        })
+        
+        # 1. ✅ 关闭所有连接（STT/SRS/LLM/TTS）
+        interrupt_results = await interrupt_manager.interrupt_all(session_id)
+        
+        # 2. ✅ 立即发送终包（连接已关闭，旧任务无法再发送数据）
+        if old_request_id != "unknown":
+            try:
+                # 发送文本流结束帧
+                await manager.send_json(session_id, build_message("RESPONSE", {
+                    "request_id": old_request_id,
+                    "text_stream_seq": -1,
+                    "content": {}
+                }, session_id))
+                
+                # 如果旧请求需要TTS，发送语音流结束帧
+                if old_require_tts:
+                    await manager.send_json(session_id, build_message("RESPONSE", {
+                        "request_id": old_request_id,
+                        "voice_stream_seq": -1,
+                        "content": {}
+                    }, session_id))
+                
+                logger.ws.info("Sent end frames for interrupted request", {
+                    "session_id": session_id[:16],
+                    "old_request_id": old_request_id[:16],
+                    "interrupt_results": interrupt_results
+                })
+            except Exception as e:
+                logger.ws.error("Failed to send end frames", {"error": str(e)})
+        
+        # 3. ✅ 取消旧的 asyncio 任务（让它自然退出）
+        if session_id in active_tasks:
+            old_task = active_tasks[session_id]
+            if not old_task.done():
+                old_task.cancel()
+                logger.ws.info("Cancelled old asyncio task", {
+                    "session_id": session_id[:16]
+                })
+    
+    # ✅ 记录当前请求信息（用于打断时发送正确的结束帧）
+    active_request_info[session_id] = {
+        "request_id": request_id,
+        "require_tts": require_tts
     }
     
-    try:
-        # VOICE BINARY：流式接收语音数据
-        if data_type == "VOICE" and content.get("voice_mode") == "BINARY":
-            if stream_seq == 0:
-                # 起始帧：初始化流式 STT
-                audio_format_hint = content.get("audio_format", "pcm")  # 默认 PCM
-                active_voice_request[session_id] = request_id
-                voice_buffer[request_id] = {
-                    "audio_format": audio_format_hint,
-                    "chunks": []  # 存储音频块，用于流式发送给 STT
-                }
+    # ✅ 创建处理任务（后台运行，不阻塞主循环）
+    async def process_request():
+        try:
+            # 注册会话到中断管理器
+            interrupt_manager.register_session(session_id, request_id)
+            
+            # VOICE BINARY
+            if data_type == "VOICE" and content.get("voice_mode") == "BINARY":
+                if stream_seq == 0:
+                    audio_format_hint = content.get("audio_format", "pcm")
+                    active_voice_request[session_id] = request_id
+                    voice_buffer[request_id] = {
+                        "audio_format": audio_format_hint,
+                        "chunks": []
+                    }
+                    logger.ws.info("Voice stream started", {"request_id": request_id[:16]})
+                    
+                elif stream_seq == -1:
+                    active_voice_request.pop(session_id, None)
+                    buffer_data = voice_buffer.pop(request_id, {})
+                    audio_chunks = buffer_data.get("chunks", [])
+                    audio_format_hint = buffer_data.get("audio_format", "pcm")
+                    
+                    logger.ws.info("Voice stream ended", {"request_id": request_id[:16]})
+                    
+                    try:
+                        from src.services.stt_service import UnifiedSTTService
+                        stt_service = UnifiedSTTService()
+                        
+                        async def audio_generator():
+                            for chunk in audio_chunks:
+                                yield chunk
+                        
+                        recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint, session_id=session_id)
+                        
+                        if not recognized_text or not recognized_text.strip():
+                            await manager.send_json(session_id, build_message("RESPONSE", {
+                                "request_id": request_id,
+                                "text_stream_seq": 0,
+                                "content": {"text": "抱歉，我没有听清楚您说什么。"}
+                            }, session_id))
+                            await manager.send_json(session_id, build_message("RESPONSE", {
+                                "request_id": request_id,
+                                "text_stream_seq": -1,
+                                "content": {}
+                            }, session_id))
+                            if require_tts:
+                                await manager.send_json(session_id, build_message("RESPONSE", {
+                                    "request_id": request_id,
+                                    "voice_stream_seq": -1,
+                                    "content": {}
+                                }, session_id))
+                        else:
+                            async for resp_payload in process_text_request(session_id, request_id, recognized_text.strip(), require_tts):
+                                if not await manager.send_json(session_id, build_message("RESPONSE", resp_payload, session_id)):
+                                    break
+                    except Exception as e:
+                        logger.sys.error("STT failed", {"error": str(e)})
+                        await ws.send_json(build_error("INTERNAL_ERROR", "语音识别失败", str(e), request_id=request_id, session_id=session_id))
+                return
+
+            # VOICE BASE64
+            if data_type == "VOICE":
+                voice_b64 = content.get("voice", "")
+                if not voice_b64:
+                    await ws.send_json(build_error("MALFORMED_PAYLOAD", "VOICE+BASE64 需 content.voice", request_id=request_id, session_id=session_id))
+                    return
+                try:
+                    audio = base64.b64decode(voice_b64)
+                except Exception as e:
+                    await ws.send_json(build_error("MALFORMED_PAYLOAD", "语音 Base64 解码失败", str(e), request_id=request_id, session_id=session_id))
+                    return
                 
-                logger.ws.info("Voice stream started", {
-                    "request_id": request_id[:16],
-                    "audio_format": audio_format_hint
-                })
-                
-            elif stream_seq == -1:
-                # 结束帧：流式调用 STT，等待完整文本结果
-                active_voice_request.pop(session_id, None)
-                buffer_data = voice_buffer.pop(request_id, {})
-                audio_chunks = buffer_data.get("chunks", [])
-                audio_format_hint = buffer_data.get("audio_format", "pcm")
-                
-                total_size = sum(len(chunk) for chunk in audio_chunks)
-                
-                logger.ws.info("Voice stream ended, starting streaming STT", {
-                    "request_id": request_id[:16],
-                    "audio_size": total_size,
-                    "audio_format": audio_format_hint,
-                    "chunk_count": len(audio_chunks)
-                })
+                audio_format_hint = content.get("audio_format", "pcm")
                 
                 try:
-                    # 使用流式 STT 处理（输入流式，输出完整文本）
                     from src.services.stt_service import UnifiedSTTService
                     stt_service = UnifiedSTTService()
                     
-                    # 创建异步生成器，流式发送音频块
                     async def audio_generator():
-                        for chunk in audio_chunks:
-                            # ✅ 检查取消信号
-                            if cancel_event.is_set():
-                                logger.ws.info("STT cancelled", {"request_id": request_id[:16]})
-                                break
-                            yield chunk
+                        yield audio
                     
-                    # 流式调用 STT，等待完整文本结果
-                    recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint)
+                    recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint, session_id=session_id)
                     
-                    # ✅ 检查是否在 STT 过程中被取消
-                    if cancel_event.is_set():
-                        logger.ws.info("Request cancelled after STT", {"request_id": request_id[:16]})
+                    if not recognized_text or not recognized_text.strip():
+                        await manager.send_json(session_id, build_message("RESPONSE", {
+                            "request_id": request_id,
+                            "text_stream_seq": 0,
+                            "content": {"text": "抱歉，我没有听清楚您说什么。"}
+                        }, session_id))
                         await manager.send_json(session_id, build_message("RESPONSE", {
                             "request_id": request_id,
                             "text_stream_seq": -1,
-                            "voice_stream_seq": -1 if require_tts else None,
-                            "interrupted": True,
-                            "interrupt_reason": "USER_NEW_INPUT",
                             "content": {}
                         }, session_id))
-                        return True
-                    
-                    logger.ws.info("Streaming STT completed", {
-                        "request_id": request_id[:16],
-                        "recognized_text": recognized_text[:100] if recognized_text else "(empty)"
-                    })
-                    
-                    # 使用完整文本进行后续处理（SRS + LLM）
-                    if not recognized_text or not recognized_text.strip():
-                        # 空识别结果
-                        payload = {
-                            "request_id": request_id,
-                            "text_stream_seq": 0,
-                            "content": {"text": "抱歉，我没有听清楚您说什么。"},
-                        }
-                        await manager.send_json(session_id, build_message("RESPONSE", payload, session_id))
-                        payload_end = {"request_id": request_id, "text_stream_seq": -1, "content": {}}
-                        await manager.send_json(session_id, build_message("RESPONSE", payload_end, session_id))
                         if require_tts:
-                            await manager.send_json(session_id, build_message("RESPONSE", {"request_id": request_id, "voice_stream_seq": -1, "content": {}}, session_id))
+                            await manager.send_json(session_id, build_message("RESPONSE", {
+                                "request_id": request_id,
+                                "voice_stream_seq": -1,
+                                "content": {}
+                            }, session_id))
                     else:
-                        # ✅ 使用支持取消的文本处理
-                        async for resp_payload in process_text_request_with_cancel(session_id, request_id, recognized_text.strip(), require_tts, cancel_event):
-                            msg = build_message("RESPONSE", resp_payload, session_id)
-                            if not await manager.send_json(session_id, msg):
+                        async for resp_payload in process_text_request(session_id, request_id, recognized_text.strip(), require_tts):
+                            if not await manager.send_json(session_id, build_message("RESPONSE", resp_payload, session_id)):
                                 break
-                            # 如果响应被标记为中断，提前退出
-                            if resp_payload.get("interrupted"):
-                                break
-                                
                 except Exception as e:
-                    logger.sys.error("Streaming STT failed", {"error": str(e)})
-                    await ws.send_json(build_error("INTERNAL_ERROR", "语音识别失败", str(e), request_id=request_id, session_id=session_id))
-            return True
+                    logger.sys.error("Voice request failed", {"error": str(e)})
+                    await ws.send_json(build_error("INTERNAL_ERROR", "语音处理失败", str(e), request_id=request_id, session_id=session_id))
+                return
 
-        # VOICE BASE64（兼容旧协议，但仍使用流式 STT）
-        if data_type == "VOICE":
-            voice_b64 = content.get("voice", "")
-            if not voice_b64:
-                await ws.send_json(build_error("MALFORMED_PAYLOAD", "VOICE+BASE64 需 content.voice", request_id=request_id, session_id=session_id))
-                return True
-            try:
-                audio = base64.b64decode(voice_b64)
-            except Exception as e:
-                await ws.send_json(build_error("MALFORMED_PAYLOAD", "语音 Base64 解码失败", str(e), request_id=request_id, session_id=session_id))
-                return True
-            
-            # 提取音频格式提示
-            audio_format_hint = content.get("audio_format", "pcm")
-            
-            logger.ws.info("Voice BASE64 received, using streaming STT", {
-                "request_id": request_id[:16],
-                "audio_size": len(audio),
-                "audio_format": audio_format_hint
+            # TEXT
+            text = content.get("text", "")
+            if data_type == "TEXT" and not text and not payload.get("require_tts") and not payload.get("function_calling_op"):
+                await ws.send_json(build_error("MALFORMED_PAYLOAD", "TEXT 类型需 content.text", request_id=request_id, session_id=session_id))
+                return
+
+            if text:
+                try:
+                    async for resp_payload in process_text_request(session_id, request_id, text, require_tts):
+                        if not await manager.send_json(session_id, build_message("RESPONSE", resp_payload, session_id)):
+                            break
+                except Exception as e:
+                    logger.sys.error("Text request failed", {"error": str(e)})
+                    await ws.send_json(build_error("INTERNAL_ERROR", "文本处理失败", str(e), request_id=request_id, session_id=session_id))
+        except asyncio.CancelledError:
+            logger.ws.info("Request task cancelled (end frames already sent by interrupt handler)", {
+                "request_id": request_id[:16], 
+                "session_id": session_id[:16]
             })
-            
-            try:
-                # 使用流式 STT 处理（即使是一次性接收的数据）
-                from src.services.stt_service import UnifiedSTTService
-                stt_service = UnifiedSTTService()
-                
-                # 创建异步生成器，一次性发送所有数据
-                async def audio_generator():
-                    # ✅ 检查取消信号
-                    if not cancel_event.is_set():
-                        yield audio
-                
-                # 流式调用 STT，等待完整文本结果
-                recognized_text = await stt_service.stream_recognize(audio_generator(), audio_format_hint)
-                
-                # ✅ 检查是否在 STT 过程中被取消
-                if cancel_event.is_set():
-                    logger.ws.info("Request cancelled after STT", {"request_id": request_id[:16]})
-                    await manager.send_json(session_id, build_message("RESPONSE", {
-                        "request_id": request_id,
-                        "text_stream_seq": -1,
-                        "voice_stream_seq": -1 if require_tts else None,
-                        "interrupted": True,
-                        "interrupt_reason": "USER_NEW_INPUT",
-                        "content": {}
-                    }, session_id))
-                    return True
-                
-                logger.ws.info("Streaming STT completed (BASE64)", {
-                    "request_id": request_id[:16],
-                    "recognized_text": recognized_text[:100] if recognized_text else "(empty)"
-                })
-                
-                # 使用完整文本进行后续处理（SRS + LLM）
-                if not recognized_text or not recognized_text.strip():
-                    # 空识别结果
-                    payload = {
-                        "request_id": request_id,
-                        "text_stream_seq": 0,
-                        "content": {"text": "抱歉，我没有听清楚您说什么。"},
-                    }
-                    await manager.send_json(session_id, build_message("RESPONSE", payload, session_id))
-                    payload_end = {"request_id": request_id, "text_stream_seq": -1, "content": {}}
-                    await manager.send_json(session_id, build_message("RESPONSE", payload_end, session_id))
-                    if require_tts:
-                        await manager.send_json(session_id, build_message("RESPONSE", {"request_id": request_id, "voice_stream_seq": -1, "content": {}}, session_id))
-                else:
-                    # ✅ 使用支持取消的文本处理
-                    async for resp_payload in process_text_request_with_cancel(session_id, request_id, recognized_text.strip(), require_tts, cancel_event):
-                        msg = build_message("RESPONSE", resp_payload, session_id)
-                        if not await manager.send_json(session_id, msg):
-                            break
-                        # 如果响应被标记为中断，提前退出
-                        if resp_payload.get("interrupted"):
-                            break
-                        
-            except Exception as e:
-                logger.sys.error("Voice request failed", {"error": str(e)})
-                await ws.send_json(build_error("INTERNAL_ERROR", "语音处理失败", str(e), request_id=request_id, session_id=session_id))
-            return True
-
-        # TEXT（含仅更新属性的空 text）
-        text = content.get("text", "")
-        if data_type == "TEXT" and not text and not payload.get("require_tts") and not payload.get("function_calling_op"):
-            await ws.send_json(build_error("MALFORMED_PAYLOAD", "TEXT 类型需 content.text", request_id=request_id, session_id=session_id))
-            return True
-
-        if text:
-            try:
-                # ✅ 使用支持取消的文本处理
-                async for resp_payload in process_text_request_with_cancel(session_id, request_id, text, require_tts, cancel_event):
-                    msg = build_message("RESPONSE", resp_payload, session_id)
-                    if not await manager.send_json(session_id, msg):
-                        break
-                    # 如果响应被标记为中断，提前退出
-                    if resp_payload.get("interrupted"):
-                        break
-            except Exception as e:
-                logger.sys.error("Text request failed", {"error": str(e)})
-                await ws.send_json(build_error("INTERNAL_ERROR", "文本处理失败", str(e), request_id=request_id, session_id=session_id))
-        return True
+            # ✅ 不再发送终包，因为打断处理器已经发送过了
+            # 避免重复发送导致客户端混乱
+        except Exception as e:
+            logger.sys.error("Request processing failed", {"error": str(e)})
+        finally:
+            # 清理任务引用
+            if active_tasks.get(session_id) == asyncio.current_task():
+                active_tasks.pop(session_id, None)
+            # 清理请求信息
+            if active_request_info.get(session_id, {}).get("request_id") == request_id:
+                active_request_info.pop(session_id, None)
+            # 清理中断管理器中的会话
+            interrupt_manager.cleanup_session(session_id)
+            logger.ws.debug("Request task cleaned up", {"request_id": request_id[:16], "session_id": session_id[:16]})
     
-    finally:
-        # ✅ 清理活跃请求
-        active_requests.pop(request_id, None)
-        logger.ws.debug("Request completed and cleaned up", {
-            "request_id": request_id[:16],
-            "session_id": session_id[:16]
-        })
+    # ✅ 创建任务并注册（不等待，让任务在后台运行）
+    task = asyncio.create_task(process_request())
+    active_tasks[session_id] = task
+    
+    # ✅ 立即返回 True，不阻塞主循环，让主循环可以立即接收下一条消息
+    return True
 
 
 async def _handle_session_query(ws: WebSocket, session_id: str, payload: Dict) -> None:
@@ -427,66 +429,6 @@ async def _handle_heartbeat_reply(ws: WebSocket, session_id: str, last_heartbeat
     })
     
     await ws.send_json(build_message("HEARTBEAT", {"remaining_seconds": remaining}, session_id))
-
-
-async def _handle_interrupt(session_id: str, payload: Dict) -> None:
-    """
-    处理打断请求（INTERRUPT）
-    
-    功能：
-    1. 中断指定请求或该会话的所有请求
-    2. 设置取消信号（asyncio.Event）
-    3. 返回 INTERRUPT_ACK 确认
-    """
-    interrupt_request_id = payload.get("interrupt_request_id")
-    reason = payload.get("reason", "USER_NEW_INPUT")
-    
-    interrupted_ids = []
-    
-    if interrupt_request_id:
-        # 中断指定请求
-        if interrupt_request_id in active_requests:
-            req_info = active_requests[interrupt_request_id]
-            if req_info["session_id"] == session_id:
-                req_info["cancel_event"].set()
-                interrupted_ids.append(interrupt_request_id)
-                logger.ws.info("Request interrupted", {
-                    "request_id": interrupt_request_id[:16],
-                    "reason": reason,
-                    "session_id": session_id[:16]
-                })
-            else:
-                logger.ws.warn("Request belongs to different session", {
-                    "request_id": interrupt_request_id[:16],
-                    "expected_session": session_id[:16],
-                    "actual_session": req_info["session_id"][:16]
-                })
-        else:
-            logger.ws.warn("Request not found or already completed", {
-                "request_id": interrupt_request_id[:16],
-                "session_id": session_id[:16]
-            })
-    else:
-        # 中断该会话的所有请求
-        for req_id, req_info in list(active_requests.items()):
-            if req_info["session_id"] == session_id:
-                req_info["cancel_event"].set()
-                interrupted_ids.append(req_id)
-        logger.ws.info("All session requests interrupted", {
-            "session_id": session_id[:16],
-            "count": len(interrupted_ids),
-            "reason": reason
-        })
-    
-    # 发送确认
-    status = "SUCCESS" if interrupted_ids else "FAILED"
-    message = f"已中断 {len(interrupted_ids)} 个请求" if interrupted_ids else "无活跃请求可中断"
-    
-    await manager.send_json(session_id, build_message("INTERRUPT_ACK", {
-        "interrupted_request_ids": interrupted_ids,
-        "status": status,
-        "message": message
-    }, session_id))
 
 
 async def _handle_health_check(ws: WebSocket) -> None:
@@ -618,12 +560,6 @@ async def agent_stream(websocket: WebSocket):
             elif msg_type == "HEARTBEAT_REPLY":
                 if session_id:
                     await _handle_heartbeat_reply(websocket, session_id, last_heartbeat_reply)
-
-            elif msg_type == "INTERRUPT":
-                if not session_id:
-                    await send_json(build_error("SESSION_INVALID", "会话不存在或未注册"))
-                    continue
-                await _handle_interrupt(session_id, payload)
 
             elif msg_type == "HEALTH_CHECK":
                 await _handle_health_check(websocket)

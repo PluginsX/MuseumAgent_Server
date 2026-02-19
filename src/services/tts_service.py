@@ -15,6 +15,7 @@ from dashscope.audio.tts_v2 import SpeechSynthesizer
 
 from src.common.enhanced_logger import get_enhanced_logger, Module
 from src.common.config_utils import get_global_config
+from src.services.interrupt_manager import get_interrupt_manager
 
 
 class UnifiedTTSService:
@@ -23,6 +24,7 @@ class UnifiedTTSService:
     def __init__(self):
         """初始化TTS服务"""
         self.logger = get_enhanced_logger()
+        self.interrupt_manager = get_interrupt_manager()
         # 延迟加载配置，直到实际使用时
         self._config = None
         self._tts_config = None
@@ -158,12 +160,13 @@ class UnifiedTTSService:
             })
             return None
     
-    async def stream_synthesize(self, text: str) -> AsyncGenerator[bytes, None]:
+    async def stream_synthesize(self, text: str, session_id: str = None, cancel_event: Optional[asyncio.Event] = None) -> AsyncGenerator[bytes, None]:
         """
-        真正的流式语音合成（使用 DashScope callback 机制）
+        真正的流式语音合成（使用 DashScope callback 机制，支持取消）
         
         Args:
             text: 要合成的文本
+            cancel_event: 取消事件（可选）
         
         Yields:
             音频数据块（bytes）- 实时从 TTS 服务接收
@@ -190,6 +193,7 @@ class UnifiedTTSService:
             audio_queue = queue.Queue()
             synthesis_complete = threading.Event()
             synthesis_error = [None]  # 使用列表以便在闭包中修改
+            synthesizer_ref = [None]  # 用于存储 synthesizer 实例，以便取消时关闭
             
             # 定义 callback 类来接收实时音频流
             class StreamingCallback(ResultCallback):
@@ -244,6 +248,11 @@ class UnifiedTTSService:
                 format=audio_format,
                 callback=callback
             )
+            synthesizer_ref[0] = synthesizer
+            
+            # ✅ 注册到中断管理器
+            if session_id:
+                self.interrupt_manager.register_tts(session_id, synthesizer)
             
             # 在后台线程启动合成（非阻塞）
             def run_synthesis():
@@ -258,19 +267,41 @@ class UnifiedTTSService:
             synthesis_thread.start()
             
             # 实时从队列中取出音频数据并 yield
-            while True:
-                # 非阻塞检查队列
-                try:
-                    chunk = audio_queue.get(timeout=0.1)
-                    if chunk is None:  # 结束标记
-                        break
-                    yield chunk
-                    self.logger.tts.debug('Yielded audio chunk', {'size': len(chunk)})
-                except queue.Empty:
-                    # 检查是否已完成或出错
-                    if synthesis_complete.is_set():
-                        break
-                    await asyncio.sleep(0.01)  # 短暂等待
+            try:
+                while True:
+                    # ✅ 检查取消信号
+                    if cancel_event and cancel_event.is_set():
+                        self.logger.tts.info('TTS cancelled by user')
+                        # 尝试关闭 synthesizer（如果支持）
+                        try:
+                            if synthesizer_ref[0]:
+                                # DashScope SDK 可能没有显式的 close 方法，但我们可以停止读取
+                                pass
+                        except Exception as e:
+                            self.logger.tts.debug('Error closing synthesizer', {'error': str(e)})
+                        return  # 立即退出
+                    
+                    # 非阻塞检查队列
+                    try:
+                        chunk = audio_queue.get(timeout=0.1)
+                        if chunk is None:  # 结束标记
+                            break
+                        
+                        # ✅ 再次检查取消信号（在 yield 之前）
+                        if cancel_event and cancel_event.is_set():
+                            self.logger.tts.info('TTS cancelled before yielding chunk')
+                            return
+                        
+                        yield chunk
+                        self.logger.tts.debug('Yielded audio chunk', {'size': len(chunk)})
+                    except queue.Empty:
+                        # 检查是否已完成或出错
+                        if synthesis_complete.is_set():
+                            break
+                        await asyncio.sleep(0.01)  # 短暂等待
+            finally:
+                # 清理：确保线程结束
+                synthesis_complete.set()
             
             # 检查是否有错误
             if synthesis_error[0]:

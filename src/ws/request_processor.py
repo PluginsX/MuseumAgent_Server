@@ -227,7 +227,8 @@ async def process_text_request_with_cancel(
                 "length": len(sentence)
             })
             
-            async for audio_chunk in tts_service.stream_synthesize(sentence):
+            # ✅ 传递 session_id 和 cancel_event 到 TTS
+            async for audio_chunk in tts_service.stream_synthesize(sentence, session_id=session_id, cancel_event=cancel_event):
                 # ✅ 检查取消信号
                 if cancel_event and cancel_event.is_set():
                     logger.tts.info("TTS cancelled", {"request_id": request_id[:16]})
@@ -241,8 +242,13 @@ async def process_text_request_with_cancel(
             logger.tts.error("TTS stream failed", {"error": str(e), "text": sentence[:50]})
 
     try:
-        async for chunk in generator.stream_generate(user_input=text, session_id=session_id):
-            # ✅ 检查取消信号
+        # ✅ 传递 cancel_event 到 LLM 生成器
+        async for chunk in generator.stream_generate(
+            user_input=text, 
+            session_id=session_id, 
+            cancel_event=cancel_event
+        ):
+            # ✅ 检查取消信号（双重保险）
             if cancel_event and cancel_event.is_set():
                 logger.ws.info("Request cancelled during LLM generation", {"request_id": request_id[:16]})
                 # 发送中断标记的最后一帧

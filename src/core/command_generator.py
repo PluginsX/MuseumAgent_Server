@@ -39,11 +39,11 @@ class CommandGenerator:
         """
         return self.response_parser.parse_llm_response(llm_response)
     
-    def _perform_rag_retrieval(self, user_input: str, top_k: int = None) -> Dict[str, Any]:
+    def _perform_rag_retrieval(self, user_input: str, top_k: int = None, session_id: str = None) -> Dict[str, Any]:
         """
         执行RAG检索（委托给RAGProcessor）
         """
-        return self.rag_processor.perform_retrieval(user_input, top_k)
+        return self.rag_processor.perform_retrieval(user_input, top_k, session_id=session_id)
     
     def _build_rag_instruction(self, rag_context: Dict[str, Any]) -> str:
         """
@@ -87,7 +87,7 @@ class CommandGenerator:
         rag_context = None
         if enable_srs:
             print(f"[Coordinator] 步骤1: 执行 RAG 检索（EnableSRS=True）")
-            rag_context = self._perform_rag_retrieval(user_input)
+            rag_context = self._perform_rag_retrieval(user_input, session_id=session_id)
             rag_context["timestamp"] = datetime.now().isoformat()
         else:
             print(f"[Coordinator] 步骤1: 跳过 RAG 检索（EnableSRS=False）")
@@ -217,7 +217,7 @@ class CommandGenerator:
         print(f"[DEBUG] 发送到 LLM 的请求负载:")
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         
-        async for chunk in self.llm_client._chat_completions_with_functions_stream(payload, cancel_event):
+        async for chunk in self.llm_client._chat_completions_with_functions_stream(payload, cancel_event, session_id=session_id):
             # ✅ 检查取消信号
             if cancel_event and cancel_event.is_set():
                 print(f"[Coordinator] LLM 生成被取消")

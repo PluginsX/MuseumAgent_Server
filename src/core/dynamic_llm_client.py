@@ -8,6 +8,7 @@ from typing import List, Dict, Any, AsyncGenerator
 import json
 import os
 import requests
+from src.services.interrupt_manager import get_interrupt_manager
 from datetime import datetime
 
 from ..common.config_utils import get_global_config
@@ -225,7 +226,7 @@ class DynamicLLMClient:
                 "format": "openai_standard"
             }
 
-    async def _chat_completions_with_functions_stream(self, payload: Dict[str, Any], cancel_event: 'asyncio.Event' = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def _chat_completions_with_functions_stream(self, payload: Dict[str, Any], cancel_event: 'asyncio.Event' = None, session_id: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式调用支持函数调用的Chat Completions API（支持取消）
         
@@ -260,6 +261,11 @@ class DynamicLLMClient:
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
+                # ✅ 注册到中断管理器
+                if session_id:
+                    interrupt_manager = get_interrupt_manager()
+                    interrupt_manager.register_llm(session_id, session)
+                
                 self.logger.llm.info('Created aiohttp session')
                 async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
                     self.logger.llm.info('Received response from LLM API', {
@@ -280,8 +286,11 @@ class DynamicLLMClient:
                             self.logger.llm.info('LLM stream cancelled by user', {
                                 'line_count': line_count
                             })
-                            # 主动关闭连接，停止接收数据
-                            resp.close()
+                            # ✅ 主动关闭连接，停止接收数据
+                            try:
+                                resp.close()
+                            except Exception as e:
+                                self.logger.llm.debug('Error closing response', {'error': str(e)})
                             return
                         line_count += 1
                         if line:

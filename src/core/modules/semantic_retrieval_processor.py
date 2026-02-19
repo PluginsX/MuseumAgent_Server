@@ -11,6 +11,7 @@ from semantic_retrieval_client import SemanticRetrievalClient
 from semantic_retrieval_client.exceptions import APIError
 from ...common.config_utils import get_global_config
 from ...common.enhanced_logger import get_enhanced_logger
+from ...services.interrupt_manager import get_interrupt_manager
 
 
 class SemanticRetrievalProcessor:
@@ -20,6 +21,7 @@ class SemanticRetrievalProcessor:
         """初始化语义检索处理器"""
         # 获取日志记录器
         self.logger = get_enhanced_logger()
+        self.interrupt_manager = get_interrupt_manager()
         
         try:
             config = get_global_config()
@@ -68,7 +70,7 @@ class SemanticRetrievalProcessor:
             # 后备配置
             pass
     
-    def perform_retrieval(self, query: str, top_k: int = None) -> Dict[str, Any]:
+    def perform_retrieval(self, query: str, top_k: int = None, session_id: str = None) -> Dict[str, Any]:
         """
         执行语义检索
         
@@ -87,6 +89,10 @@ class SemanticRetrievalProcessor:
         
         try:
             self.logger.rag.info(f"Starting semantic retrieval, query: {query[:50]}...")
+            
+            # ✅ 注册到中断管理器（SRS客户端内部使用HTTP会话）
+            # 注意：semantic_retrieval_client 可能不暴露内部的 session
+            # 我们需要在客户端层面处理中断
             
             # 执行搜索 - 通过远程语义检索系统
             search_result = self.client.search(

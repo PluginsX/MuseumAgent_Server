@@ -59,28 +59,28 @@ def main():
     try:
         from src.db.seed import seed_admin
         seed_admin()
-        print("   ✓ 数据库初始化成功")
+        print("   [OK] 数据库初始化成功")
     except Exception as e:
-        print(f"   ✗ 数据库初始化失败: {e}")
+        print(f"   [ERROR] 数据库初始化失败: {e}")
     
     # 初始化API网关
     print("3. 初始化API网关...")
     try:
         gateway = APIGateway(auto_init=False)  # 先不自动初始化
         gateway.initialize()  # 在配置加载完成后手动初始化
-        print("   ✓ API网关初始化成功")
+        print("   [OK] API网关初始化成功")
     except Exception as e:
-        print(f"   ✗ API网关初始化失败: {e}")
+        print(f"   [ERROR] API网关初始化失败: {e}")
         return
     
     # 检查系统健康状态
     print("3. 检查系统健康状态...")
     try:
         health_status = get_health_status()
-        print(f"   ✓ 熔断器状态: {len(health_status['circuit_breakers'])} 个")
-        print(f"   ✓ 错误统计: {health_status['error_stats']['total_errors']} 个错误")
+        print(f"   [OK] 熔断器状态: {len(health_status['circuit_breakers'])} 个")
+        print(f"   [OK] 错误统计: {health_status['error_stats']['total_errors']} 个错误")
     except Exception as e:
-        print(f"   ✗ 健康状态检查失败: {e}")
+        print(f"   [ERROR] 健康状态检查失败: {e}")
     
     # 显示架构信息
     print("\n4. 系统架构信息:")
@@ -109,14 +109,14 @@ def main():
     
     # 显示特性
     print("\n6. 支持的功能特性:")
-    print("   ✓ 文本对话 (支持Function Calling)")
-    print("   ✓ 预录制语音消息处理")
-    print("   ✓ 实时语音通话 (流式STT/TTS)")
-    print("   ✓ 语音播报功能")
-    print("   ✓ 高性能缓存机制")
-    print("   ✓ 熔断与降级机制")
-    print("   ✓ 统一错误处理")
-    print("   ✓ 配置热更新")
+    print("   [OK] 文本对话 (支持Function Calling)")
+    print("   [OK] 预录制语音消息处理")
+    print("   [OK] 实时语音通话 (流式STT/TTS)")
+    print("   [OK] 语音播报功能")
+    print("   [OK] 高性能缓存机制")
+    print("   [OK] 熔断与降级机制")
+    print("   [OK] 统一错误处理")
+    print("   [OK] 配置热更新")
     
     print("\n" + "=" * 60)
     print("博物馆智能体服务器已准备就绪!")

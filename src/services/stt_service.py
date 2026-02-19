@@ -34,6 +34,7 @@ class SimpleRecognitionCallback(RecognitionCallback):
 
 from src.common.enhanced_logger import get_enhanced_logger, Module
 from src.common.config_utils import get_global_config
+from src.services.interrupt_manager import get_interrupt_manager
 
 
 class UnifiedSTTService:
@@ -42,6 +43,7 @@ class UnifiedSTTService:
     def __init__(self):
         """初始化STT服务"""
         self.logger = get_enhanced_logger()
+        self.interrupt_manager = get_interrupt_manager()
         # 延迟加载配置，直到实际使用时
         self._config = None
         self._stt_config = None
@@ -155,7 +157,7 @@ class UnifiedSTTService:
         return wav_header + pcm_data
     
 
-    async def stream_recognize(self, audio_generator, audio_format: str = 'pcm') -> str:
+    async def stream_recognize(self, audio_generator, audio_format: str = 'pcm', session_id: str = None) -> str:
         """
         真正的流式语音识别（输入流式，输出完整文本）
         
@@ -242,6 +244,10 @@ class UnifiedSTTService:
             # 启动流式识别
             recognition.start()
             self.logger.stt.info('STT streaming started')
+            
+            # ✅ 注册到中断管理器
+            if session_id:
+                self.interrupt_manager.register_stt(session_id, recognition)
             
             # 在后台线程发送音频数据
             async def send_audio_frames():
