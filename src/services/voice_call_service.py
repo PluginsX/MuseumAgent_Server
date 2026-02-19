@@ -140,7 +140,7 @@ class VoiceCallService:
             }
             
             self.logger.voice.info('Voice call ended', 
-                          {'call_id': call_id, 'session_id': session_id})
+                          {'call_id': call_id, 'session_id': call_context["session_id"]})
             return result
             
         except Exception as e:

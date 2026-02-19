@@ -1,33 +1,20 @@
 /**
  * 消息气泡组件
- * 显示单条消息（文本、语音、函数调用）
+ * 基于 MuseumAgentSDK 客户端库开发
  */
 
 import { createElement, formatTime } from '../utils/dom.js';
-import { escapeHtml } from '../utils/security.js';
-import { audioService } from '../services/AudioService.js';
-import { eventBus, Events } from '../core/EventBus.js';
+import globalAudioPlayer from '../utils/audioPlayer.js';
 
 export class MessageBubble {
     constructor(message) {
         this.message = message;
         this.element = null;
         this.contentElement = null;
+        this.isPlaying = false;
+        this.audioData = null; // 存储音频数据
         
         this.render();
-        this.bindEvents();
-    }
-
-    /**
-     * 绑定事件
-     */
-    bindEvents() {
-        // 监听全局播放结束事件，更新播放状态
-        eventBus.on(Events.AUDIO_PLAY_END, () => {
-            if (audioService.currentPlayingMessageId !== this.message.id) {
-                this.updatePlayingState(false);
-            }
-        });
     }
 
     /**
@@ -36,15 +23,18 @@ export class MessageBubble {
     render() {
         const isSent = this.message.type === 'sent';
         
+        // 根据消息类型添加不同的类名，实现视觉区分
+        const typeClass = `message-${this.message.contentType}`;
+        
         this.element = createElement('div', {
-            className: `message-bubble ${isSent ? 'sent' : 'received'}`
+            className: `message-bubble ${isSent ? 'sent' : 'received'} ${typeClass}`
         });
 
         const bubbleContent = createElement('div', {
             className: 'bubble-content'
         });
 
-        // 根据内容类型渲染
+        // 根据内容类型渲染不同的气泡样式
         if (this.message.contentType === 'text') {
             this.contentElement = this.renderTextContent();
         } else if (this.message.contentType === 'voice') {
@@ -96,30 +86,72 @@ export class MessageBubble {
             className: 'message-voice'
         });
 
-        const icon = createElement('span', {
-            textContent: '🎤'
-        });
-
-        // 格式化时长显示
-        const duration = this.message.duration || 0;
-        const minutes = Math.floor(duration / 60);
-        const seconds = Math.floor(duration % 60);
-        const durationText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-        const durationElement = createElement('span', {
-            textContent: durationText
-        });
-
-        voiceElement.appendChild(icon);
-        voiceElement.appendChild(durationElement);
-
-        // 点击播放（所有语音消息都可以播放）
+        // 添加点击播放功能
+        voiceElement.style.cursor = 'pointer';
         voiceElement.addEventListener('click', () => {
             this.togglePlayVoice();
         });
-        voiceElement.style.cursor = 'pointer';
+
+        // 格式化时长显示为 MM:SS 格式
+        const duration = this.message.duration || 0;
+        const minutes = Math.floor(duration / 60);
+        const seconds = Math.floor(duration % 60);
+        const durationText = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+        const durationElement = createElement('span', {
+            className: 'voice-duration',
+            textContent: durationText
+        });
+
+        voiceElement.appendChild(durationElement);
 
         return voiceElement;
+    }
+
+    /**
+     * 切换语音播放
+     */
+    async togglePlayVoice() {
+        if (!this.audioData) {
+            console.warn('[MessageBubble] 没有音频数据可播放');
+            return;
+        }
+
+        try {
+            await globalAudioPlayer.play(this.audioData, this, () => {
+                // 播放结束回调
+                this.setPlayingState(false);
+            });
+            
+            // 更新播放状态
+            this.setPlayingState(globalAudioPlayer.isPlayingBubble(this));
+        } catch (error) {
+            console.error('[MessageBubble] 播放失败:', error);
+            this.setPlayingState(false);
+        }
+    }
+
+    /**
+     * 设置播放状态
+     */
+    setPlayingState(playing) {
+        this.isPlaying = playing;
+        
+        if (this.message.contentType === 'voice') {
+            // 添加/移除播放中的样式
+            if (playing) {
+                this.contentElement.classList.add('playing');
+            } else {
+                this.contentElement.classList.remove('playing');
+            }
+        }
+    }
+
+    /**
+     * 设置音频数据
+     */
+    setAudioData(audioData) {
+        this.audioData = audioData;
     }
 
     /**
@@ -131,67 +163,57 @@ export class MessageBubble {
         });
 
         const functionCall = this.message.content;
-        const params = Object.entries(functionCall.parameters || {})
-            .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-            .join(', ');
-
-        funcElement.textContent = `${functionCall.name}(${params})`;
+        
+        // 函数图标
+        const icon = createElement('span', {
+            className: 'function-icon',
+            textContent: '⚙️ '
+        });
+        funcElement.appendChild(icon);
+        
+        // 函数名称
+        const nameElement = createElement('span', {
+            className: 'function-name',
+            textContent: functionCall.name
+        });
+        funcElement.appendChild(nameElement);
+        
+        // 添加左括号
+        funcElement.appendChild(document.createTextNode('('));
+        
+        // 如果有参数，显示参数
+        if (functionCall.arguments && Object.keys(functionCall.arguments).length > 0) {
+            const entries = Object.entries(functionCall.arguments);
+            
+            entries.forEach(([key, value], index) => {
+                // 参数键
+                const paramKey = createElement('span', {
+                    className: 'param-key',
+                    textContent: key
+                });
+                funcElement.appendChild(paramKey);
+                
+                // 等号
+                funcElement.appendChild(document.createTextNode('='));
+                
+                // 参数值
+                const paramValue = createElement('span', {
+                    className: 'param-value',
+                    textContent: JSON.stringify(value)
+                });
+                funcElement.appendChild(paramValue);
+                
+                // 如果不是最后一个参数，添加逗号和空格
+                if (index < entries.length - 1) {
+                    funcElement.appendChild(document.createTextNode(', '));
+                }
+            });
+        }
+        
+        // 添加右括号
+        funcElement.appendChild(document.createTextNode(')'));
 
         return funcElement;
-    }
-
-    /**
-     * 切换播放/停止语音
-     */
-    async togglePlayVoice() {
-        // 检查是否有音频数据
-        if (!this.message.audioData) {
-            console.warn('[MessageBubble] 没有音频数据');
-            return;
-        }
-
-        // 如果当前正在播放这条语音，则停止
-        if (audioService.currentPlayingMessageId === this.message.id) {
-            console.log('[MessageBubble] 停止播放语音:', this.message.id);
-            audioService.stopPlayback();
-            this.updatePlayingState(false);
-            return;
-        }
-
-        // 停止其他正在播放的语音
-        if (audioService.currentPlayingMessageId) {
-            console.log('[MessageBubble] 停止其他正在播放的语音');
-            audioService.stopPlayback();
-            // 通知之前播放的气泡更新状态
-            eventBus.emit(Events.AUDIO_PLAY_END);
-        }
-
-        // 播放当前语音
-        try {
-            console.log('[MessageBubble] 开始播放语音:', this.message.id);
-            audioService.currentPlayingMessageId = this.message.id;
-            this.updatePlayingState(true);
-            
-            await audioService.playPCM(this.message.audioData);
-            
-            // 播放完成
-            audioService.currentPlayingMessageId = null;
-            this.updatePlayingState(false);
-        } catch (error) {
-            console.error('[MessageBubble] 播放语音失败:', error);
-            audioService.currentPlayingMessageId = null;
-            this.updatePlayingState(false);
-        }
-    }
-
-    /**
-     * 更新播放状态显示
-     */
-    updatePlayingState(isPlaying) {
-        const icon = this.contentElement.querySelector('span:first-child');
-        if (icon) {
-            icon.textContent = isPlaying ? '⏸️' : '🎤';
-        }
     }
 
     /**
@@ -218,13 +240,21 @@ export class MessageBubble {
             }
         } else if (this.message.contentType === 'voice') {
             // 更新语音时长显示
-            const durationElement = this.contentElement.querySelector('span:last-child');
+            const durationElement = this.contentElement.querySelector('.voice-duration');
             if (durationElement && this.message.duration !== undefined) {
                 const duration = this.message.duration || 0;
                 const minutes = Math.floor(duration / 60);
                 const seconds = Math.floor(duration % 60);
-                const durationText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                const durationText = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
                 durationElement.textContent = durationText;
+                
+                // 调试日志
+                // console.log('[MessageBubble] 更新语音时长显示:', durationText);
+            } else {
+                console.warn('[MessageBubble] 无法更新语音时长:', {
+                    hasDurationElement: !!durationElement,
+                    duration: this.message.duration
+                });
             }
         }
     }
@@ -238,4 +268,3 @@ export class MessageBubble {
         }
     }
 }
-

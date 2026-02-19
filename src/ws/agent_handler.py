@@ -557,6 +557,27 @@ async def agent_stream(websocket: WebSocket):
                     continue
                 await _handle_session_query(websocket, session_id, payload)
 
+            elif msg_type == "INTERRUPT":
+                if not session_id:
+                    await send_json(build_error("SESSION_INVALID", "会话不存在"))
+                    continue
+                
+                interrupt_request_id = payload.get("interrupt_request_id")
+                reason = payload.get("reason", "USER_INTERRUPT")
+                
+                logger.ws.info("Received interrupt request", {
+                    "session_id": session_id[:16],
+                    "interrupt_request_id": interrupt_request_id[:16] if interrupt_request_id else "unknown",
+                    "reason": reason
+                })
+                
+                # 发送确认（客户端期望收到 INTERRUPT_ACK）
+                await send_json(build_message("INTERRUPT_ACK", {
+                    "status": "SUCCESS",
+                    "message": "打断请求已处理",
+                    "interrupt_request_id": interrupt_request_id
+                }, session_id))
+
             elif msg_type == "HEARTBEAT_REPLY":
                 if session_id:
                     await _handle_heartbeat_reply(websocket, session_id, last_heartbeat_reply)

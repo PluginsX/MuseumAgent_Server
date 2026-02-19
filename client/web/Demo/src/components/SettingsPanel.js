@@ -1,15 +1,130 @@
 /**
  * 设置面板组件
- * 客户端配置管理
+ * 基于 MuseumAgentSDK 客户端库开发
+ * 保持原有界面和功能不变
  */
 
-import { stateManager } from '../core/StateManager.js';
 import { createElement } from '../utils/dom.js';
 
 export class SettingsPanel {
-    constructor() {
+    constructor(client) {
+        this.client = client;
         this.element = null;
         this.isOpen = false;
+        
+        // 桌面智能宠物预设函数定义
+        const defaultFunctionCalling = [
+            {
+                name: "move_to_position",
+                description: "移动宠物到屏幕指定位置",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        x: {
+                            type: "number",
+                            description: "X坐标（像素）"
+                        },
+                        y: {
+                            type: "number",
+                            description: "Y坐标（像素）"
+                        },
+                        duration: {
+                            type: "number",
+                            description: "移动持续时间（毫秒）"
+                        }
+                    },
+                    required: ["x", "y"]
+                }
+            },
+            {
+                name: "play_animation",
+                description: "播放宠物动画",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        animation: {
+                            type: "string",
+                            enum: ["idle", "walk", "run", "jump", "sit", "sleep", "happy", "sad", "angry"],
+                            description: "动画类型"
+                        },
+                        loop: {
+                            type: "boolean",
+                            description: "是否循环播放"
+                        }
+                    },
+                    required: ["animation"]
+                }
+            },
+            {
+                name: "show_emotion",
+                description: "显示宠物情绪表情",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        emotion: {
+                            type: "string",
+                            enum: ["happy", "sad", "angry", "surprised", "confused", "love"],
+                            description: "情绪类型"
+                        },
+                        duration: {
+                            type: "number",
+                            description: "持续时间（毫秒）"
+                        }
+                    },
+                    required: ["emotion"]
+                }
+            },
+            {
+                name: "speak_text",
+                description: "让宠物说话（显示气泡文字）",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        text: {
+                            type: "string",
+                            description: "要说的文字内容"
+                        },
+                        duration: {
+                            type: "number",
+                            description: "显示持续时间（毫秒）"
+                        }
+                    },
+                    required: ["text"]
+                }
+            },
+            {
+                name: "change_size",
+                description: "改变宠物大小",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        scale: {
+                            type: "number",
+                            description: "缩放比例（0.5-2.0）"
+                        }
+                    },
+                    required: ["scale"]
+                }
+            }
+        ];
+
+        // 本地配置状态（与客户端库同步）
+        this.config = {
+            platform: client.config.platform || 'WEB',
+            requireTTS: client.config.requireTTS !== false,
+            enableSRS: client.config.enableSRS !== false,
+            autoPlay: client.config.autoPlay !== false,
+            vadEnabled: client.vadEnabled !== false,
+            functionCalling: client.config.functionCalling.length > 0 ? client.config.functionCalling : defaultFunctionCalling,
+            vadParams: client.config.vadParams || {
+                silenceThreshold: 0.005,
+                silenceDuration: 500,
+                speechThreshold: 0.015,
+                minSpeechDuration: 150,
+                preSpeechPadding: 100,
+                postSpeechPadding: 200
+            }
+        };
     }
 
     /**
@@ -73,13 +188,11 @@ export class SettingsPanel {
         });
         section.appendChild(sectionTitle);
 
-        const sessionConfig = stateManager.getState('session');
-
         // Platform
         const platformGroup = this.createSelectGroup(
             'Platform',
             'platform',
-            sessionConfig.platform || 'WEB',
+            this.config.platform,
             [
                 { value: 'WEB', label: 'Web浏览器' },
                 { value: 'APP', label: '移动应用' },
@@ -93,7 +206,7 @@ export class SettingsPanel {
         const requireTTSGroup = this.createCheckboxGroup(
             'RequireTTS',
             'requireTTS',
-            sessionConfig.requireTTS !== false,
+            this.config.requireTTS,
             '是否要求服务器用语音回复'
         );
         section.appendChild(requireTTSGroup);
@@ -102,7 +215,7 @@ export class SettingsPanel {
         const enableSRSGroup = this.createCheckboxGroup(
             'EnableSRS',
             'enableSRS',
-            sessionConfig.enableSRS !== false,
+            this.config.enableSRS,
             '是否启用增强检索（SRS语义检索系统）'
         );
         section.appendChild(enableSRSGroup);
@@ -111,7 +224,7 @@ export class SettingsPanel {
         const autoPlayGroup = this.createCheckboxGroup(
             'AutoPlay',
             'autoPlay',
-            sessionConfig.autoPlay !== false,
+            this.config.autoPlay,
             '收到语音消息是否自动播放'
         );
         section.appendChild(autoPlayGroup);
@@ -120,7 +233,7 @@ export class SettingsPanel {
         const functionCallingGroup = this.createTextareaGroup(
             'FunctionCalling',
             'functionCalling',
-            JSON.stringify(sessionConfig.functionCalling || [], null, 2),
+            JSON.stringify(this.config.functionCalling, null, 2),
             '函数定义（JSON格式）'
         );
         section.appendChild(functionCallingGroup);
@@ -141,27 +254,16 @@ export class SettingsPanel {
         });
         section.appendChild(sectionTitle);
 
-        const recordingConfig = stateManager.getState('recording');
-
         // EnableVAD
         const enableVADGroup = this.createCheckboxGroup(
             'EnableVAD',
             'vadEnabled',
-            recordingConfig.vadEnabled !== false,
+            this.config.vadEnabled,
             '是否启用语音活动检测'
         );
         section.appendChild(enableVADGroup);
 
         // VAD详细参数
-        const vadParams = recordingConfig.vadParams || {
-            silenceThreshold: 0.01,      // 静音阈值：保持不变，用于判断是否停止说话
-            silenceDuration: 800,         // 静音持续时长：1500ms → 800ms（更快结束）
-            speechThreshold: 0.02,        // 语音阈值：0.05 → 0.02（更敏感，更快开始）
-            minSpeechDuration: 200,       // 最小语音时长：300ms → 200ms（减少误判延迟）
-            preSpeechPadding: 150,        // 语音前填充：300ms → 150ms（减少预填充，更快响应）
-            postSpeechPadding: 300        // 语音后填充：500ms → 300ms（更快结束）
-        };
-
         const vadParamsGroup = createElement('div', {
             className: 'vad-params-group'
         });
@@ -170,7 +272,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Silence Threshold',
             'vadParams.silenceThreshold',
-            vadParams.silenceThreshold,
+            this.config.vadParams.silenceThreshold,
             '静音阈值（0-1）',
             0,
             1,
@@ -181,7 +283,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Silence Duration (ms)',
             'vadParams.silenceDuration',
-            vadParams.silenceDuration,
+            this.config.vadParams.silenceDuration,
             '静音持续时长（毫秒）',
             100,
             5000,
@@ -192,7 +294,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Speech Threshold',
             'vadParams.speechThreshold',
-            vadParams.speechThreshold,
+            this.config.vadParams.speechThreshold,
             '语音阈值（0-1）',
             0,
             1,
@@ -203,7 +305,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Min Speech Duration (ms)',
             'vadParams.minSpeechDuration',
-            vadParams.minSpeechDuration,
+            this.config.vadParams.minSpeechDuration,
             '最小语音持续时长（毫秒）',
             100,
             3000,
@@ -214,7 +316,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Pre-Speech Padding (ms)',
             'vadParams.preSpeechPadding',
-            vadParams.preSpeechPadding,
+            this.config.vadParams.preSpeechPadding,
             '语音前填充（毫秒）',
             0,
             1000,
@@ -225,7 +327,7 @@ export class SettingsPanel {
         vadParamsGroup.appendChild(this.createNumberGroup(
             'Post-Speech Padding (ms)',
             'vadParams.postSpeechPadding',
-            vadParams.postSpeechPadding,
+            this.config.vadParams.postSpeechPadding,
             '语音后填充（毫秒）',
             0,
             2000,
@@ -404,7 +506,7 @@ export class SettingsPanel {
     }
 
     /**
-     * 更新配置（即时应用）
+     * 更新配置（即时应用到客户端库）
      */
     updateConfig(key, value) {
         console.log('[SettingsPanel] 更新配置:', key, value);
@@ -412,30 +514,32 @@ export class SettingsPanel {
         // 处理嵌套键（如 vadParams.silenceThreshold）
         if (key.includes('.')) {
             const [parent, child] = key.split('.');
-            const currentParent = stateManager.getState(`recording.${parent}`) || {};
-            stateManager.setState(`recording.${parent}`, {
-                ...currentParent,
-                [child]: value
-            });
-        } else if (key.startsWith('vad')) {
-            // VAD相关配置存储在 recording 下
-            stateManager.setState(`recording.${key}`, value);
-        } else {
-            // 其他配置存储在 session 下
-            stateManager.setState(`session.${key}`, value);
+            this.config[parent][child] = value;
             
-            // 如果修改了 FunctionCalling 或 EnableSRS，标记为已修改
-            if (key === 'functionCalling') {
-                stateManager.setState('session.functionCallingModified', true);
-                console.log('[SettingsPanel] FunctionCalling已修改，将在下次请求时更新到服务器');
+            // 更新客户端库配置
+            if (parent === 'vadParams') {
+                this.client.config.vadParams[child] = value;
             }
-            if (key === 'enableSRS') {
-                stateManager.setState('session.enableSRSModified', true);
-                console.log('[SettingsPanel] EnableSRS已修改，将在下次请求时更新到服务器');
+        } else {
+            this.config[key] = value;
+            
+            // 更新客户端库配置
+            if (key === 'requireTTS') {
+                this.client.config.requireTTS = value;
+            } else if (key === 'enableSRS') {
+                this.client.config.enableSRS = value;
+            } else if (key === 'autoPlay') {
+                this.client.config.autoPlay = value;
+            } else if (key === 'vadEnabled') {
+                this.client.vadEnabled = value;
+            } else if (key === 'functionCalling') {
+                this.client.config.functionCalling = value;
+            } else if (key === 'platform') {
+                this.client.config.platform = value;
             }
         }
 
-        console.log('[SettingsPanel] 配置已更新并应用');
+        console.log('[SettingsPanel] 配置已更新并应用到客户端库');
     }
 
     /**
@@ -477,4 +581,3 @@ export class SettingsPanel {
         }
     }
 }
-

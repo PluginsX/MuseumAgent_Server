@@ -1,20 +1,19 @@
 /**
- * 应用入口
- * 管理应用生命周期和路由
+ * MuseumAgent Demo - 应用入口
+ * 基于 MuseumAgentSDK 客户端库开发
  */
 
-import { eventBus, Events } from './core/EventBus.js';
-import { stateManager } from './core/StateManager.js';
-import { authService } from './services/AuthService.js';
-import { messageService } from './services/MessageService.js';
+import { MuseumAgentClient, Events } from '../lib/MuseumAgentSDK.js';
 import { LoginForm } from './components/LoginForm.js';
 import { ChatWindow } from './components/ChatWindow.js';
 import { createElement, $, showNotification } from './utils/dom.js';
+import { encryptData, decryptData } from './utils/security.js';
 
 class App {
     constructor() {
         this.container = null;
         this.currentView = null;
+        this.client = null;
         
         this.init();
     }
@@ -28,111 +27,15 @@ class App {
         // 创建容器
         this.container = $('#app');
         if (!this.container) {
-            console.log('[App] 创建 #app 容器');
             this.container = createElement('div', { id: 'app' });
             document.body.appendChild(this.container);
         }
-        console.log('[App] 容器已准备:', this.container);
 
-        // 设置样式
-        this.setupStyles();
-
-        // 绑定全局事件
-        this.bindGlobalEvents();
-
-        // 尝试恢复会话
-        const authData = await authService.restoreSession();
-        if (authData) {
-            console.log('[App] 发现已保存的会话，尝试恢复...');
-            try {
-                const serverUrl = authService.getServerUrl();
-                await this.showChatView(serverUrl, authData);
-                showNotification('会话已恢复', 'success');
-            } catch (error) {
-                console.error('[App] 恢复会话失败:', error);
-                this.showLoginView();
-            }
-        } else {
-            console.log('[App] 没有已保存的会话，显示登录界面');
-            this.showLoginView();
-        }
+        // 直接显示登录页面（不尝试恢复会话）
+        // 因为 WebSocket 会话是临时的，关闭浏览器后会话就失效了
+        this.showLoginView();
 
         console.log('[App] 应用初始化完成');
-    }
-
-    /**
-     * 设置全局样式
-     */
-    setupStyles() {
-        // CSS 已通过外部文件引入，这里不需要额外设置
-        console.log('[App] 样式已加载');
-    }
-
-    /**
-     * 绑定全局事件
-     */
-    bindGlobalEvents() {
-        // 登录成功
-        eventBus.on(Events.AUTH_LOGIN_SUCCESS, async (data) => {
-            console.log('[App] 收到登录成功事件:', data);
-            const serverUrl = authService.getServerUrl();
-            const authData = await authService.restoreSession();
-            
-            console.log('[App] serverUrl:', serverUrl);
-            console.log('[App] authData:', authData);
-            
-            if (authData && serverUrl) {
-                await this.showChatView(serverUrl, authData);
-            } else {
-                console.error('[App] 缺少必要的登录信息');
-            }
-        });
-
-        // 登出
-        eventBus.on(Events.AUTH_LOGOUT, () => {
-            // ✅ 清理当前视图
-            this.cleanupCurrentView();
-            this.showLoginView();
-        });
-
-        // 会话过期
-        eventBus.on(Events.SESSION_EXPIRED, () => {
-            showNotification('会话已过期，请重新登录', 'error');
-            // ✅ 清理当前视图
-            this.cleanupCurrentView();
-            authService.logout();
-        });
-
-        // 连接错误
-        eventBus.on(Events.CONNECTION_ERROR, (error) => {
-            showNotification('连接错误: ' + error.message, 'error');
-        });
-
-        // 显示错误
-        eventBus.on(Events.UI_SHOW_ERROR, (message) => {
-            showNotification(message, 'error');
-        });
-
-        // 显示成功
-        eventBus.on(Events.UI_SHOW_SUCCESS, (message) => {
-            showNotification(message, 'success');
-        });
-    }
-
-    /**
-     * 清理当前视图
-     */
-    cleanupCurrentView() {
-        console.log('[App] 清理当前视图');
-        
-        // ✅ 如果当前视图是 ChatWindow，调用其 destroy 方法
-        if (this.currentView && typeof this.currentView.destroy === 'function') {
-            console.log('[App] 调用视图的 destroy 方法');
-            this.currentView.destroy();
-        }
-        
-        this.currentView = null;
-        console.log('[App] 当前视图已清理');
     }
 
     /**
@@ -141,38 +44,146 @@ class App {
     showLoginView() {
         console.log('[App] 显示登录视图');
         
-        // ✅ 先清理当前视图
         this.cleanupCurrentView();
         
         this.container.innerHTML = '';
         this.container.style.display = 'flex';
         this.container.style.alignItems = 'center';
         this.container.style.justifyContent = 'center';
-        this.currentView = new LoginForm(this.container);
-        console.log('[App] 登录视图已创建');
+        
+        this.currentView = new LoginForm(this.container, async (serverUrl, authData) => {
+            // 登录回调
+            try {
+                await this.connectAndShowChat(serverUrl, authData);
+                showNotification('登录成功', 'success');
+            } catch (error) {
+                console.error('[App] 登录失败:', error);
+                showNotification('登录失败: ' + error.message, 'error');
+            }
+        });
+    }
+
+    /**
+     * 连接并显示聊天界面
+     */
+    async connectAndShowChat(serverUrl, authData) {
+        console.log('[App] 连接服务器...');
+        
+        // 桌面智能宠物预设函数定义
+        const petFunctions = [
+            {
+                name: "move_to_position",
+                description: "移动宠物到屏幕指定位置",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        x: { type: "number", description: "X坐标（像素）" },
+                        y: { type: "number", description: "Y坐标（像素）" },
+                        duration: { type: "number", description: "移动持续时间（毫秒）" }
+                    },
+                    required: ["x", "y"]
+                }
+            },
+            {
+                name: "play_animation",
+                description: "播放宠物动画",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        animation: {
+                            type: "string",
+                            enum: ["idle", "walk", "run", "jump", "sit", "sleep", "happy", "sad", "angry"],
+                            description: "动画类型"
+                        },
+                        loop: { type: "boolean", description: "是否循环播放" }
+                    },
+                    required: ["animation"]
+                }
+            },
+            {
+                name: "show_emotion",
+                description: "显示宠物情绪表情",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        emotion: {
+                            type: "string",
+                            enum: ["happy", "sad", "angry", "surprised", "confused", "love"],
+                            description: "情绪类型"
+                        },
+                        duration: { type: "number", description: "持续时间（毫秒）" }
+                    },
+                    required: ["emotion"]
+                }
+            },
+            {
+                name: "speak_text",
+                description: "让宠物说话（显示气泡文字）",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        text: { type: "string", description: "要说的文字内容" },
+                        duration: { type: "number", description: "显示持续时间（毫秒）" }
+                    },
+                    required: ["text"]
+                }
+            },
+            {
+                name: "change_size",
+                description: "改变宠物大小",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        scale: { type: "number", description: "缩放比例（0.5-2.0）" }
+                    },
+                    required: ["scale"]
+                }
+            }
+        ];
+
+        // 创建客户端（使用灵敏的VAD参数）
+        this.client = new MuseumAgentClient({
+            serverUrl: serverUrl,
+            requireTTS: true,
+            enableSRS: true,
+            autoPlay: false,  // 默认关闭自动播放，用户可以在设置中开启
+            vadEnabled: true,
+            functionCalling: petFunctions,
+            vadParams: {
+                silenceThreshold: 0.005,      // 更低的静音阈值，更灵敏
+                silenceDuration: 500,          // 更短的静音持续时间，快速响应
+                speechThreshold: 0.015,        // 更低的语音阈值，更容易触发
+                minSpeechDuration: 150,        // 更短的最小语音时长
+                preSpeechPadding: 100,         // 更短的前置填充
+                postSpeechPadding: 200         // 更短的后置填充
+            }
+        });
+
+        // 监听会话过期
+        this.client.on(Events.SESSION_EXPIRED, () => {
+            showNotification('会话已过期，请重新登录', 'error');
+            this.logout();
+        });
+
+        // 监听连接错误
+        this.client.on(Events.CONNECTION_ERROR, (error) => {
+            showNotification('连接错误: ' + error.message, 'error');
+        });
+
+        // 连接
+        await this.client.connect(authData);
+        
+        // 显示聊天界面
+        this.showChatView();
     }
 
     /**
      * 显示聊天视图
      */
-    async showChatView(serverUrl, authData) {
-        console.log('[App] 显示聊天视图, serverUrl:', serverUrl, 'authData:', authData);
+    showChatView() {
+        console.log('[App] 显示聊天视图');
         
-        // 初始化消息服务（先连接）
-        try {
-            console.log('[App] 初始化消息服务...');
-            await messageService.init(serverUrl, authData);
-            console.log('[App] 消息服务初始化成功！！！');
-        } catch (error) {
-            console.error('[App] 初始化失败:', error);
-            showNotification('连接失败: ' + error.message, 'error');
-            this.showLoginView();
-            return;
-        }
-        
-        console.log('[App] 开始创建聊天界面 DOM...');
-        
-        // 清空容器并重置样式
+        // 清空容器
         this.container.innerHTML = '';
         this.container.style.display = 'block';
         this.container.style.alignItems = '';
@@ -180,131 +191,124 @@ class App {
         this.container.style.height = '100vh';
         this.container.style.width = '100vw';
 
-        console.log('[App] 容器已清空，开始创建 chatView...');
-
-        // 创建聊天视图容器
+        // 创建聊天视图
         const chatView = createElement('div', { className: 'chat-view' });
-        console.log('[App] chatView 已创建:', chatView);
 
         // 头部
         const header = createElement('div', { className: 'chat-header' });
-        console.log('[App] header 已创建:', header);
-        
         const title = createElement('h1', { textContent: 'MuseumAgent 智能体' });
-        console.log('[App] title 已创建:', title);
         
-        // 创建登出按钮
-        const logoutButton = createElement('button', {
-            className: 'logout-button',
-            textContent: '登出'
-        });
-        console.log('[App] logoutButton 已创建:', logoutButton);
-
-        // 创建设置按钮
+        // 按钮容器
+        const buttonContainer = createElement('div', { className: 'header-button-container' });
+        
+        // 设置按钮
         const settingsButton = createElement('button', {
             className: 'settings-button',
             textContent: '⚙️'
         });
-        console.log('[App] settingsButton 已创建:', settingsButton);
-
-        // 绑定事件
-        logoutButton.addEventListener('click', async () => {
-            await messageService.disconnect();
-            authService.logout();
-        });
-
-        // 绑定设置按钮事件
         settingsButton.addEventListener('click', () => {
             if (window.settingsPanel) {
                 window.settingsPanel.toggle();
             } else {
-                // 动态导入SettingsPanel
                 import('./components/SettingsPanel.js').then(({ SettingsPanel }) => {
-                    window.settingsPanel = new SettingsPanel();
+                    window.settingsPanel = new SettingsPanel(this.client);
                     window.settingsPanel.toggle();
                 });
             }
         });
-
-        // 创建按钮容器，用于对齐和布局
-        const buttonContainer = createElement('div', {
-            className: 'header-button-container'
+        
+        // 登出按钮
+        const logoutButton = createElement('button', {
+            className: 'logout-button',
+            textContent: '登出'
         });
+        logoutButton.addEventListener('click', () => {
+            this.logout();
+        });
+
         buttonContainer.appendChild(settingsButton);
         buttonContainer.appendChild(logoutButton);
-
         header.appendChild(title);
         header.appendChild(buttonContainer);
-        console.log('[App] header 子元素已添加');
 
-        // 添加样式
-        const style = document.createElement('style');
-        style.textContent = `
-            .header-button-container {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            
-            .logout-button,
-            .settings-button {
-                padding: 8px 16px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 14px;
-                height: 36px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .logout-button {
-                background-color: #dc3545;
-                color: white;
-            }
-            
-            .logout-button:hover {
-                background-color: #c82333;
-            }
-            
-            .settings-button {
-                background-color: #6c757d;
-                color: white;
-                font-size: 16px;
-                padding: 8px;
-                width: 36px;
-            }
-            
-            .settings-button:hover {
-                background-color: #5a6268;
-            }
-        `;
-        document.head.appendChild(style);
-
-        // 聊天窗口容器
-        const chatContainer = createElement('div', {
-            className: 'chat-container'
-        });
-        console.log('[App] chatContainer 已创建:', chatContainer);
+        // 聊天容器
+        const chatContainer = createElement('div', { className: 'chat-container' });
 
         chatView.appendChild(header);
         chatView.appendChild(chatContainer);
-        console.log('[App] chatView 子元素已添加');
-        
         this.container.appendChild(chatView);
-        console.log('[App] chatView 已添加到 container');
-        console.log('[App] container.children:', this.container.children);
 
         // 创建聊天窗口组件
-        console.log('[App] 创建聊天窗口组件...');
-        this.currentView = new ChatWindow(chatContainer);
+        this.currentView = new ChatWindow(chatContainer, this.client);
         
         console.log('[App] 聊天窗口创建完成');
-        console.log('[App] messageContainer:', chatContainer.querySelector('.message-container'));
-        console.log('[App] inputContainer:', chatContainer.querySelector('.input-container'));
+    }
+
+    /**
+     * 登出
+     */
+    async logout() {
+        console.log('[App] 登出');
         
-        showNotification('连接成功', 'success');
+        // 断开连接
+        if (this.client) {
+            await this.client.disconnect();
+            this.client.cleanup();
+            this.client = null;
+        }
+        
+        // 清除保存的认证信息
+        this.clearAuthData();
+        
+        // 显示登录界面
+        this.showLoginView();
+    }
+
+    /**
+     * 清理当前视图
+     */
+    cleanupCurrentView() {
+        if (this.currentView && typeof this.currentView.destroy === 'function') {
+            this.currentView.destroy();
+        }
+        this.currentView = null;
+    }
+
+    /**
+     * 保存认证信息
+     */
+    async saveAuthData(serverUrl, authData) {
+        const data = {
+            serverUrl,
+            authData: {
+                type: authData.type,
+                account: authData.account,
+                password: authData.password ? await encryptData(authData.password) : undefined,
+                api_key: authData.api_key ? await encryptData(authData.api_key) : undefined
+            }
+        };
+        localStorage.setItem('museumAgent_auth', JSON.stringify(data));
+    }
+
+    /**
+     * 加载认证信息
+     */
+    loadAuthData() {
+        const data = localStorage.getItem('museumAgent_auth');
+        if (!data) return null;
+        
+        try {
+            return JSON.parse(data);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * 清除认证信息
+     */
+    clearAuthData() {
+        localStorage.removeItem('museumAgent_auth');
     }
 }
 
@@ -314,4 +318,3 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 export default App;
-
