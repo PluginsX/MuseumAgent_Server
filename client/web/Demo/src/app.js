@@ -141,22 +141,14 @@ class App {
             }
         ];
 
-        // 创建客户端（使用灵敏的VAD参数）
+        // 创建客户端（使用库默认的最佳VAD参数）
         this.client = new MuseumAgentClient({
             serverUrl: serverUrl,
             requireTTS: true,
             enableSRS: true,
-            autoPlay: false,  // 默认关闭自动播放，用户可以在设置中开启
+            autoPlay: true,  // 默认开启自动播放
             vadEnabled: true,
-            functionCalling: petFunctions,
-            vadParams: {
-                silenceThreshold: 0.005,      // 更低的静音阈值，更灵敏
-                silenceDuration: 500,          // 更短的静音持续时间，快速响应
-                speechThreshold: 0.015,        // 更低的语音阈值，更容易触发
-                minSpeechDuration: 150,        // 更短的最小语音时长
-                preSpeechPadding: 100,         // 更短的前置填充
-                postSpeechPadding: 200         // 更短的后置填充
-            }
+            functionCalling: petFunctions
         });
 
         // 监听会话过期
@@ -212,6 +204,8 @@ class App {
             } else {
                 import('./components/SettingsPanel.js').then(({ SettingsPanel }) => {
                     window.settingsPanel = new SettingsPanel(this.client);
+                    // ✅ 将设置面板引用传递给客户端（用于差异配置更新）
+                    this.client.setSettingsPanel(window.settingsPanel);
                     window.settingsPanel.toggle();
                 });
             }
@@ -226,8 +220,18 @@ class App {
             this.logout();
         });
 
+        // 全屏按钮
+        const fullscreenButton = createElement('button', {
+            className: 'fullscreen-button',
+            textContent: '◱'
+        });
+        fullscreenButton.addEventListener('click', () => {
+            this.toggleFullscreen();
+        });
+
         buttonContainer.appendChild(settingsButton);
         buttonContainer.appendChild(logoutButton);
+        buttonContainer.appendChild(fullscreenButton);
         header.appendChild(title);
         header.appendChild(buttonContainer);
 
@@ -262,6 +266,31 @@ class App {
         
         // 显示登录界面
         this.showLoginView();
+    }
+
+    /**
+     * 切换全屏
+     */
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            // 进入全屏
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            } else if (document.documentElement.webkitRequestFullscreen) {
+                document.documentElement.webkitRequestFullscreen();
+            } else if (document.documentElement.msRequestFullscreen) {
+                document.documentElement.msRequestFullscreen();
+            }
+        } else {
+            // 退出全屏
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
     }
 
     /**

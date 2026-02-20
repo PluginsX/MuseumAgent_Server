@@ -30,15 +30,32 @@
         "type": "json_object"
       }
     },
-    "prompt_template": "你是辽宁省博物馆智能助手。请根据用户需求选择合适的函数并生成正确的参数。在调用函数的同时，请用自然语言与用户进行友好交流。\n\n场景：{scene_type}\n{rag_instruction}\n用户输入：{user_input}\n\n请调用适当的函数并提供正确的参数，同时用自然语言回应用户。如果没有合适的函数可用，请进行友好的普通对话。",
-    "system_prompts": {
-      "base": "你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 用专业友好的语言与用户交流；3. 保持对话的连贯性和可读性。请根据用户需求选择合适的函数并生成正确的参数。",
-      "function_calling": "你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 在调用函数前要说明将要做什么；3. 用专业友好的语言与用户交流。\n\n可用函数：\n{functions_list}\n\n场景：{scene_type}\n{rag_instruction}\n\n用户输入：{user_input}\n\n请分析用户需求，选择合适的函数并生成正确参数，同时用自然语言解释你的操作。",
-      "fallback": "你是辽宁省博物馆智能助手。你必须遵守以下规则：1. 每次响应都必须包含自然语言对话内容；2. 用专业友好的语言与用户交流；3. 保持对话的连贯性。\n\n场景：{scene_type}\n用户输入：{user_input}\n\n请用自然语言与用户进行友好交流，回答用户的问题。"
-    },
-    "rag_templates": {
-      "enabled": "请参考以下相关文物信息来回答：{retrieved_context}",
-      "disabled": ""
+    "prompt_templates": {
+      "system_message": {
+        "template": "{role_description}\n\n{response_requirements}\n\n{scene_description}\n\n当前场景下支持以下功能：\n{functions_description}",
+        "variables": ["role_description", "response_requirements", "scene_description", "functions_description"],
+        "description": "系统消息模板，定义智能体的角色、职责和能力"
+      },
+      "user_message_with_rag": {
+        "template": "用户的问题是：{user_input}\n\n相关的资料包括：\n{retrieved_materials}",
+        "variables": ["user_input", "retrieved_materials"],
+        "description": "带RAG检索的用户消息模板"
+      },
+      "user_message_without_rag": {
+        "template": "用户的问题是：{user_input}",
+        "variables": ["user_input"],
+        "description": "不带RAG检索的用户消息模板"
+      },
+      "function_item_format": {
+        "template": "• {name}: {description}",
+        "variables": ["name", "description"],
+        "description": "单个函数的格式化模板"
+      },
+      "rag_material_format": {
+        "template": "【{title}】\n{content}",
+        "variables": ["title", "content"],
+        "description": "单条RAG材料的格式化模板"
+      }
     }
   },
   "artifact_knowledge_base": {

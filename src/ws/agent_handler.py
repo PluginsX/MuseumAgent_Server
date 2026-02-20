@@ -69,6 +69,10 @@ async def _handle_register(ws: WebSocket, payload: Dict, conn_session_id: Option
     require_tts = payload["require_tts"]
     enable_srs = payload.get("enable_srs", True)  # 默认启用 SRS
     function_calling = payload.get("function_calling", [])
+    
+    # ✅ V2.0: 获取角色配置和场景描述
+    system_prompt = payload.get("system_prompt")
+    scene_context = payload.get("scene_context")
 
     client_api = ClientLocalAPI()
     try:
@@ -102,6 +106,13 @@ async def _handle_register(ws: WebSocket, payload: Dict, conn_session_id: Option
         "user_id": client_info.get("username", "api_user"),
         "client_info": client_info,
     }
+    
+    # ✅ V2.0: 添加系统提示词和场景上下文到元数据
+    if system_prompt:
+        client_metadata["system_prompt"] = system_prompt
+    if scene_context:
+        client_metadata["scene_context"] = scene_context
+    
     strict_session_manager.register_session_with_functions(
         session_id, client_metadata, function_calling
     )
@@ -139,24 +150,121 @@ async def _handle_request(
         await ws.send_json(build_error("SESSION_INVALID", "会话无效或已超时", request_id=payload.get("request_id"), session_id=session_id))
         return True
 
-    # 更新会话属性
-    if "require_tts" in payload:
-        strict_session_manager.update_session_attributes(session_id, require_tts=payload["require_tts"])
-    if "enable_srs" in payload:
-        strict_session_manager.update_session_attributes(session_id, enable_srs=payload["enable_srs"])
-    if payload.get("function_calling_op") and "function_calling" in payload:
-        strict_session_manager.update_session_attributes(
-            session_id,
-            function_calling_op=payload["function_calling_op"],
-            function_calling=payload["function_calling"],
-        )
-
+    # 获取请求基本信息
     request_id = payload["request_id"]
     data_type = payload["data_type"]
     stream_flag = payload["stream_flag"]
     stream_seq = int(payload["stream_seq"])
     content = payload.get("content", {})
     require_tts = payload.get("require_tts")
+
+    # ✅ 仅在首包或非流式消息时更新会话配置
+    # 对于语音流式消息：只在 stream_seq=0 时更新配置
+    # 对于文本消息：每次都更新配置
+    should_update_config = False
+    if data_type == "TEXT":
+        should_update_config = True
+    elif data_type == "VOICE":
+        if stream_flag and stream_seq == 0:
+            should_update_config = True
+        elif not stream_flag:
+            should_update_config = True
+    
+    if should_update_config:
+        update_session = payload.get("update_session", {})
+        
+        # 🔍 调试日志：查看收到的配置更新内容
+        logger.ws.info("Config update triggered", {
+            "session_id": session_id[:16],
+            "request_id": request_id[:16],
+            "data_type": data_type,
+            "stream_seq": stream_seq,
+            "has_update_session": bool(update_session),
+            "update_session_keys": list(update_session.keys()) if update_session else [],
+            "has_function_calling_in_payload": "function_calling" in payload,
+            "has_function_calling_in_update": "function_calling" in update_session
+        })
+        
+        # 更新基本属性
+        if "require_tts" in payload:
+            strict_session_manager.update_session_attributes(session_id, require_tts=payload["require_tts"])
+        if "enable_srs" in payload:
+            strict_session_manager.update_session_attributes(session_id, enable_srs=payload["enable_srs"])
+        
+        # ✅ 更新系统提示词
+        if "system_prompt" in update_session:
+            strict_session_manager.update_session_attributes(
+                session_id,
+                system_prompt=update_session["system_prompt"]
+            )
+            logger.ws.info("Updated system_prompt from request", {
+                "session_id": session_id[:16],
+                "request_id": payload.get("request_id", "unknown")[:16]
+            })
+        
+        # ✅ 更新场景上下文
+        if "scene_context" in update_session:
+            strict_session_manager.update_session_attributes(
+                session_id,
+                scene_context=update_session["scene_context"]
+            )
+            logger.ws.info("Updated scene_context from request", {
+                "session_id": session_id[:16],
+                "request_id": payload.get("request_id", "unknown")[:16],
+                "scene": update_session["scene_context"].get("current_scene", "unknown")
+            })
+        
+        # ✅ 更新 enable_srs（从 update_session）
+        if "enable_srs" in update_session:
+            strict_session_manager.update_session_attributes(
+                session_id,
+                enable_srs=update_session["enable_srs"]
+            )
+            logger.ws.info("Updated enable_srs from update_session", {
+                "session_id": session_id[:16],
+                "enable_srs": update_session["enable_srs"]
+            })
+        
+        # ✅ 更新 require_tts（从 update_session）
+        if "require_tts" in update_session:
+            strict_session_manager.update_session_attributes(
+                session_id,
+                require_tts=update_session["require_tts"]
+            )
+            logger.ws.info("Updated require_tts from update_session", {
+                "session_id": session_id[:16],
+                "require_tts": update_session["require_tts"]
+            })
+        
+        # 更新函数调用
+        if payload.get("function_calling_op") and "function_calling" in payload:
+            strict_session_manager.update_session_attributes(
+                session_id,
+                function_calling_op=payload["function_calling_op"],
+                function_calling=payload["function_calling"],
+            )
+            logger.ws.info("Updated function_calling from payload", {
+                "session_id": session_id[:16],
+                "operation": payload["function_calling_op"],
+                "function_count": len(payload["function_calling"])
+            })
+        
+        # ✅ 更新函数调用（从 update_session）
+        if "function_calling" in update_session:
+            # 如果没有指定 operation，默认使用 REPLACE
+            function_calling_op = update_session.get("function_calling_op", "REPLACE")
+            strict_session_manager.update_session_attributes(
+                session_id,
+                function_calling_op=function_calling_op,
+                function_calling=update_session["function_calling"],
+            )
+            logger.ws.info("Updated function_calling from update_session", {
+                "session_id": session_id[:16],
+                "operation": function_calling_op,
+                "function_count": len(update_session["function_calling"])
+            })
+
+    # 获取会话的 require_tts 配置
     session = strict_session_manager.get_session(session_id)
     if session:
         require_tts = require_tts if require_tts is not None else session.client_metadata.get("require_tts", False)

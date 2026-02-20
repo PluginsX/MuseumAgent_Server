@@ -78,14 +78,14 @@ export class LoginForm {
             type: 'text',
             className: 'login-input',
             placeholder: '用户名',
-            value: 'test'
+            value: '123'
         });
 
         const passwordInput = createElement('input', {
             type: 'password',
             className: 'login-input',
             placeholder: '密码',
-            value: '123456'
+            value: '123'
         });
 
         accountContainer.appendChild(usernameInput);

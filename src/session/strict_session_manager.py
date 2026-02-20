@@ -122,13 +122,19 @@ class StrictSessionManager:
         
         try:
             config = get_global_config()
+            # ✅ 如果配置为空（未加载），直接使用默认配置
+            if not config:
+                self.config = default_config
+                return
+            
             session_config = config.get('session_management', {})
             
             # 合并配置
             self.config = {**default_config, **session_config}
             
         except Exception as e:
-            self.logger.sess.error('Failed to load session configuration, using defaults', {'error': str(e)})
+            # ✅ 降低日志级别为 debug，避免启动时显示错误
+            # 这是正常情况，因为 StrictSessionManager 在全局配置加载前就初始化了
             self.config = default_config
     def _start_enhanced_cleanup_daemon(self):
         """启动增强清理守护线程"""
@@ -380,40 +386,117 @@ class StrictSessionManager:
         enable_srs: Optional[bool] = None,
         function_calling_op: Optional[str] = None,
         function_calling: Optional[List[Dict[str, Any]]] = None,
+        system_prompt: Optional[Dict[str, str]] = None,
+        scene_context: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """按协议更新会话属性：require_tts、enable_srs、function_calling（REPLACE/ADD/UPDATE/DELETE）"""
+        """按协议更新会话属性（完整版）
+        
+        Args:
+            session_id: 会话ID
+            require_tts: TTS 开关
+            enable_srs: SRS 开关
+            function_calling_op: 函数操作类型（REPLACE/ADD/UPDATE/DELETE）
+            function_calling: 函数定义列表
+            system_prompt: 系统提示词配置
+            scene_context: 场景上下文配置
+            
+        Returns:
+            是否更新成功
+        """
         if not function_calling:
             function_calling = []
         with self._lock:
             session = self.sessions.get(session_id)
             if not session:
+                self.logger.sess.warn('Update failed - session not found', 
+                              {'session_id': session_id[:8]})
                 return False
+            
+            # 更新 TTS 开关
             if require_tts is not None:
                 session.client_metadata["require_tts"] = require_tts
+                self.logger.sess.debug('Updated require_tts', 
+                              {'session_id': session_id[:8], 'value': require_tts})
+            
+            # 更新 SRS 开关
             if enable_srs is not None:
                 session.client_metadata["enable_srs"] = enable_srs
+                self.logger.sess.debug('Updated enable_srs', 
+                              {'session_id': session_id[:8], 'value': enable_srs})
+            
+            # ✅ 新增：更新系统提示词
+            if system_prompt is not None:
+                current_prompt = session.client_metadata.get("system_prompt", {})
+                # 只更新提供的字段
+                if "role_description" in system_prompt:
+                    current_prompt["role_description"] = system_prompt["role_description"]
+                if "response_requirements" in system_prompt:
+                    current_prompt["response_requirements"] = system_prompt["response_requirements"]
+                
+                session.client_metadata["system_prompt"] = current_prompt
+                self.logger.sess.info('Updated system_prompt', 
+                              {'session_id': session_id[:8], 
+                               'has_role': "role_description" in system_prompt,
+                               'has_requirements': "response_requirements" in system_prompt})
+            
+            # ✅ 新增：更新场景上下文
+            if scene_context is not None:
+                current_scene = session.client_metadata.get("scene_context", {})
+                # 只更新提供的字段
+                if "current_scene" in scene_context:
+                    current_scene["current_scene"] = scene_context["current_scene"]
+                if "scene_description" in scene_context:
+                    current_scene["scene_description"] = scene_context["scene_description"]
+                if "keywords" in scene_context:
+                    current_scene["keywords"] = scene_context["keywords"]
+                if "scene_specific_prompt" in scene_context:
+                    current_scene["scene_specific_prompt"] = scene_context["scene_specific_prompt"]
+                
+                session.client_metadata["scene_context"] = current_scene
+                self.logger.sess.info('Updated scene_context', 
+                              {'session_id': session_id[:8],
+                               'scene': current_scene.get("current_scene", "unknown")})
+            
+            # 更新函数调用
             if function_calling_op and function_calling is not None:
                 fc = session.client_metadata.get("functions", [])
                 names = {f.get("name") for f in fc if isinstance(f, dict) and f.get("name")}
+                
                 if function_calling_op == "REPLACE":
                     session.client_metadata["functions"] = list(function_calling)
                     session.client_metadata["function_names"] = [f.get("name", "") for f in function_calling if isinstance(f, dict)]
+                    self.logger.sess.info('Replaced functions', 
+                                  {'session_id': session_id[:8], 
+                                   'count': len(function_calling)})
+                
                 elif function_calling_op == "ADD":
                     session.client_metadata["functions"] = fc + list(function_calling)
                     session.client_metadata["function_names"] = session.client_metadata.get("function_names", []) + [
                         f.get("name", "") for f in function_calling if isinstance(f, dict)
                     ]
+                    self.logger.sess.info('Added functions', 
+                                  {'session_id': session_id[:8], 
+                                   'added': len(function_calling)})
+                
                 elif function_calling_op == "UPDATE":
                     new_names = {f.get("name") for f in function_calling if isinstance(f, dict) and f.get("name")}
                     fc = [x for x in fc if x.get("name") not in new_names]
                     fc.extend(function_calling)
                     session.client_metadata["functions"] = fc
                     session.client_metadata["function_names"] = [f.get("name", "") for f in fc if isinstance(f, dict) and f.get("name")]
+                    self.logger.sess.info('Updated functions', 
+                                  {'session_id': session_id[:8], 
+                                   'updated': len(new_names)})
+                
                 elif function_calling_op == "DELETE":
                     del_names = {f.get("name") for f in function_calling if isinstance(f, dict)}
                     fc = [x for x in fc if x.get("name") not in del_names]
                     session.client_metadata["functions"] = fc
                     session.client_metadata["function_names"] = [f.get("name", "") for f in fc if isinstance(f, dict) and f.get("name")]
+                    self.logger.sess.info('Deleted functions', 
+                                  {'session_id': session_id[:8], 
+                                   'deleted': len(del_names)})
+            
             return True
 
     def get_protocol_session_data(self, session_id: str) -> Optional[Dict[str, Any]]:

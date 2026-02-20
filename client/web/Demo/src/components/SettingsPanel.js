@@ -123,7 +123,30 @@ export class SettingsPanel {
                 minSpeechDuration: 150,
                 preSpeechPadding: 100,
                 postSpeechPadding: 200
-            }
+            },
+            // 智能体角色配置
+            roleDescription: client.config.roleDescription || '你叫韩立，辽宁省博物馆智能讲解员，男性。性格热情、阳光、开朗、健谈、耐心。你精通辽博的历史文物、展览背景、文化知识，擅长用通俗的语言讲解复杂的知识。只回答与辽宁省博物馆、文物、历史文化、参观导览相关的内容，保持专业又友好的讲解员形象。',
+            responseRequirements: client.config.responseRequirements || '基于当前所处的场景以及场景的内容，综合相关材料，回答用户的提问。同时你要分析用户的需求！在合适的时机选择合适函数，传入合适的参数返回函数调用响应，调用函数也必须要有语言回答内容！',
+            // 场景描述
+            sceneDescription: client.config.sceneDescription || '当前所处的是“卷体夔纹蟠龙盖罍展示场景”，主要内容为该青铜器表面包含的各种纹样的图形和寓意展示，以及各部分组成结构的造型寓意。'
+        };
+        
+        // 折叠状态
+        this.collapsedSections = {
+            basic: true,
+            role: true,
+            scene: true,
+            functions: true,
+            vad: true
+        };
+        
+        // ✅ 配置更新开关状态（手动标记哪些配置需要更新）
+        this.updateSwitches = {
+            basic: false,      // 基本配置（requireTTS, enableSRS）
+            role: false,       // 角色配置（roleDescription, responseRequirements）
+            scene: false,      // 场景配置（sceneDescription）
+            functions: false   // 函数定义（functionCalling）
+            // VAD 配置不需要发送到服务器，所以不需要开关
         };
     }
 
@@ -162,11 +185,43 @@ export class SettingsPanel {
         });
 
         // 1. 客户端基本信息
-        const basicSection = this.renderBasicSettings();
+        const basicSection = this.renderCollapsibleSection(
+            'basic',
+            '客户端基本信息',
+            () => this.renderBasicSettings()
+        );
         content.appendChild(basicSection);
 
-        // 2. VAD配置
-        const vadSection = this.renderVADSettings();
+        // 2. 智能体角色配置
+        const roleSection = this.renderCollapsibleSection(
+            'role',
+            '智能体角色配置',
+            () => this.renderRoleSettings()
+        );
+        content.appendChild(roleSection);
+
+        // 3. 上下文配置
+        const sceneSection = this.renderCollapsibleSection(
+            'scene',
+            '上下文配置',
+            () => this.renderSceneSettings()
+        );
+        content.appendChild(sceneSection);
+
+        // 4. 函数定义
+        const functionsSection = this.renderCollapsibleSection(
+            'functions',
+            '函数定义',
+            () => this.renderFunctionsSettings()
+        );
+        content.appendChild(functionsSection);
+
+        // 5. VAD配置
+        const vadSection = this.renderCollapsibleSection(
+            'vad',
+            'VAD配置',
+            () => this.renderVADSettings()
+        );
         content.appendChild(vadSection);
 
         this.element.appendChild(header);
@@ -176,17 +231,129 @@ export class SettingsPanel {
     }
 
     /**
+     * 渲染可折叠区域
+     */
+    renderCollapsibleSection(id, title, contentRenderer) {
+        const section = createElement('div', {
+            className: 'settings-section collapsible-section'
+        });
+        
+        // ✅ 添加 data-section-id 属性，用于自动开启开关时定位
+        section.setAttribute('data-section-id', id);
+
+        // 标题栏（可点击）
+        const header = createElement('div', {
+            className: 'section-header'
+        });
+
+        const toggleIcon = createElement('span', {
+            className: 'toggle-icon',
+            textContent: this.collapsedSections[id] ? '▶' : '▼'
+        });
+
+        const titleElement = createElement('h4', {
+            textContent: title
+        });
+
+        // ✅ 左侧区域（折叠图标 + 标题）- 可点击展开/折叠
+        const leftArea = createElement('div', {
+            className: 'section-header-left'
+        });
+        leftArea.appendChild(toggleIcon);
+        leftArea.appendChild(titleElement);
+
+        // ✅ 右侧区域（更新开关）- 仅对需要发送到服务器的配置显示
+        const rightArea = createElement('div', {
+            className: 'section-header-right'
+        });
+
+        // 只有 basic, role, scene, functions 需要更新开关（VAD 是客户端本地配置）
+        if (this.updateSwitches.hasOwnProperty(id)) {
+            const switchLabel = createElement('label', {
+                className: 'update-switch-label'
+            });
+
+            const switchInput = createElement('input', {
+                type: 'checkbox',
+                className: 'update-switch'
+            });
+            switchInput.checked = this.updateSwitches[id];
+
+            // 阻止事件冒泡，避免触发折叠/展开
+            switchInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            switchInput.addEventListener('change', (e) => {
+                this.updateSwitches[id] = e.target.checked;
+                console.log(`[SettingsPanel] 配置更新开关 [${id}]:`, e.target.checked);
+            });
+
+            const switchSlider = createElement('span', {
+                className: 'update-switch-slider'
+            });
+
+            const switchText = createElement('span', {
+                className: 'update-switch-text',
+                textContent: '更新'
+            });
+
+            switchLabel.appendChild(switchInput);
+            switchLabel.appendChild(switchSlider);
+            switchLabel.appendChild(switchText);
+
+            rightArea.appendChild(switchLabel);
+        }
+
+        header.appendChild(leftArea);
+        header.appendChild(rightArea);
+
+        // 内容区域
+        const contentWrapper = createElement('div', {
+            className: 'section-content'
+        });
+        
+        if (!this.collapsedSections[id]) {
+            contentWrapper.style.display = 'block';
+            const content = contentRenderer();
+            contentWrapper.appendChild(content);
+        } else {
+            contentWrapper.style.display = 'none';
+        }
+
+        // 点击左侧区域切换折叠状态
+        leftArea.addEventListener('click', () => {
+            this.collapsedSections[id] = !this.collapsedSections[id];
+            
+            if (this.collapsedSections[id]) {
+                // 折叠
+                toggleIcon.textContent = '▶';
+                contentWrapper.style.display = 'none';
+            } else {
+                // 展开
+                toggleIcon.textContent = '▼';
+                contentWrapper.style.display = 'block';
+                // 如果内容为空，则渲染
+                if (contentWrapper.children.length === 0) {
+                    const content = contentRenderer();
+                    contentWrapper.appendChild(content);
+                }
+            }
+        });
+
+        section.appendChild(header);
+        section.appendChild(contentWrapper);
+
+        return section;
+    }
+
+    /**
      * 渲染基本设置
      */
     renderBasicSettings() {
-        const section = createElement('div', {
-            className: 'settings-section'
+        const container = createElement('div', {
+            className: 'settings-fields'
         });
-
-        const sectionTitle = createElement('h4', {
-            textContent: '客户端基本信息'
-        });
-        section.appendChild(sectionTitle);
 
         // Platform
         const platformGroup = this.createSelectGroup(
@@ -200,7 +367,7 @@ export class SettingsPanel {
                 { value: 'TV', label: '电视端' }
             ]
         );
-        section.appendChild(platformGroup);
+        container.appendChild(platformGroup);
 
         // RequireTTS
         const requireTTSGroup = this.createCheckboxGroup(
@@ -209,7 +376,7 @@ export class SettingsPanel {
             this.config.requireTTS,
             '是否要求服务器用语音回复'
         );
-        section.appendChild(requireTTSGroup);
+        container.appendChild(requireTTSGroup);
 
         // EnableSRS
         const enableSRSGroup = this.createCheckboxGroup(
@@ -218,7 +385,7 @@ export class SettingsPanel {
             this.config.enableSRS,
             '是否启用增强检索（SRS语义检索系统）'
         );
-        section.appendChild(enableSRSGroup);
+        container.appendChild(enableSRSGroup);
 
         // AutoPlay
         const autoPlayGroup = this.createCheckboxGroup(
@@ -227,32 +394,87 @@ export class SettingsPanel {
             this.config.autoPlay,
             '收到语音消息是否自动播放'
         );
-        section.appendChild(autoPlayGroup);
+        container.appendChild(autoPlayGroup);
+
+        return container;
+    }
+
+    /**
+     * 渲染智能体角色配置
+     */
+    renderRoleSettings() {
+        const container = createElement('div', {
+            className: 'settings-fields'
+        });
+
+        // 角色描述
+        const roleDescGroup = this.createTextareaGroup(
+            '角色描述',
+            'roleDescription',
+            this.config.roleDescription,
+            '告诉 LLM 它的角色定位和身份'
+        );
+        container.appendChild(roleDescGroup);
+
+        // 响应要求
+        const responseReqGroup = this.createTextareaGroup(
+            '响应要求',
+            'responseRequirements',
+            this.config.responseRequirements,
+            '告诉 LLM 如何回答问题，有何侧重'
+        );
+        container.appendChild(responseReqGroup);
+
+        return container;
+    }
+
+    /**
+     * 渲染场景配置
+     */
+    renderSceneSettings() {
+        const container = createElement('div', {
+            className: 'settings-fields'
+        });
+
+        // 场景描述
+        const sceneDescGroup = this.createTextareaGroup(
+            '场景描述',
+            'sceneDescription',
+            this.config.sceneDescription,
+            '描述当前所处的场景（例如：纹样展示场景、铸造工艺展示场景）'
+        );
+        container.appendChild(sceneDescGroup);
+
+        return container;
+    }
+
+    /**
+     * 渲染函数定义配置
+     */
+    renderFunctionsSettings() {
+        const container = createElement('div', {
+            className: 'settings-fields'
+        });
 
         // FunctionCalling
         const functionCallingGroup = this.createTextareaGroup(
             'FunctionCalling',
             'functionCalling',
             JSON.stringify(this.config.functionCalling, null, 2),
-            '函数定义（JSON格式）'
+            '当前场景可执行的函数定义（JSON格式）'
         );
-        section.appendChild(functionCallingGroup);
+        container.appendChild(functionCallingGroup);
 
-        return section;
+        return container;
     }
 
     /**
      * 渲染VAD设置
      */
     renderVADSettings() {
-        const section = createElement('div', {
-            className: 'settings-section'
+        const container = createElement('div', {
+            className: 'settings-fields'
         });
-
-        const sectionTitle = createElement('h4', {
-            textContent: '客户端语音采集VAD配置'
-        });
-        section.appendChild(sectionTitle);
 
         // EnableVAD
         const enableVADGroup = this.createCheckboxGroup(
@@ -261,15 +483,10 @@ export class SettingsPanel {
             this.config.vadEnabled,
             '是否启用语音活动检测'
         );
-        section.appendChild(enableVADGroup);
-
-        // VAD详细参数
-        const vadParamsGroup = createElement('div', {
-            className: 'vad-params-group'
-        });
+        container.appendChild(enableVADGroup);
 
         // Silence Threshold
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Silence Threshold',
             'vadParams.silenceThreshold',
             this.config.vadParams.silenceThreshold,
@@ -280,7 +497,7 @@ export class SettingsPanel {
         ));
 
         // Silence Duration
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Silence Duration (ms)',
             'vadParams.silenceDuration',
             this.config.vadParams.silenceDuration,
@@ -291,7 +508,7 @@ export class SettingsPanel {
         ));
 
         // Speech Threshold
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Speech Threshold',
             'vadParams.speechThreshold',
             this.config.vadParams.speechThreshold,
@@ -302,7 +519,7 @@ export class SettingsPanel {
         ));
 
         // Min Speech Duration
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Min Speech Duration (ms)',
             'vadParams.minSpeechDuration',
             this.config.vadParams.minSpeechDuration,
@@ -313,7 +530,7 @@ export class SettingsPanel {
         ));
 
         // Pre-Speech Padding
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Pre-Speech Padding (ms)',
             'vadParams.preSpeechPadding',
             this.config.vadParams.preSpeechPadding,
@@ -324,7 +541,7 @@ export class SettingsPanel {
         ));
 
         // Post-Speech Padding
-        vadParamsGroup.appendChild(this.createNumberGroup(
+        container.appendChild(this.createNumberGroup(
             'Post-Speech Padding (ms)',
             'vadParams.postSpeechPadding',
             this.config.vadParams.postSpeechPadding,
@@ -334,9 +551,7 @@ export class SettingsPanel {
             50
         ));
 
-        section.appendChild(vadParamsGroup);
-
-        return section;
+        return container;
     }
 
     /**
@@ -419,6 +634,44 @@ export class SettingsPanel {
     }
 
     /**
+     * 创建输入框组
+     */
+    createInputGroup(label, key, value, description) {
+        const group = createElement('div', {
+            className: 'form-group'
+        });
+
+        const labelElement = createElement('label', {
+            textContent: label
+        });
+
+        const input = createElement('input', {
+            type: 'text',
+            className: 'form-control'
+        });
+        input.value = value;
+
+        input.addEventListener('blur', (e) => {
+            this.updateConfig(key, e.target.value);
+        });
+
+        if (description) {
+            const desc = createElement('div', {
+                className: 'form-description',
+                textContent: description
+            });
+            group.appendChild(labelElement);
+            group.appendChild(desc);
+        } else {
+            group.appendChild(labelElement);
+        }
+
+        group.appendChild(input);
+
+        return group;
+    }
+
+    /**
      * 创建文本域组
      */
     createTextareaGroup(label, key, value, description) {
@@ -437,13 +690,20 @@ export class SettingsPanel {
         textarea.value = value;
 
         textarea.addEventListener('blur', (e) => {
-            try {
-                const parsed = JSON.parse(e.target.value);
-                this.updateConfig(key, parsed);
+            // ✅ 只对 functionCalling 字段进行 JSON 解析
+            if (key === 'functionCalling') {
+                try {
+                    const parsed = JSON.parse(e.target.value);
+                    this.updateConfig(key, parsed);
+                    textarea.classList.remove('error');
+                } catch (error) {
+                    textarea.classList.add('error');
+                    console.error('[SettingsPanel] JSON解析失败:', error);
+                }
+            } else {
+                // 其他字段直接保存文本
+                this.updateConfig(key, e.target.value);
                 textarea.classList.remove('error');
-            } catch (error) {
-                textarea.classList.add('error');
-                console.error('[SettingsPanel] JSON解析失败:', error);
             }
         });
 
@@ -514,10 +774,10 @@ export class SettingsPanel {
         // 处理嵌套键（如 vadParams.silenceThreshold）
         if (key.includes('.')) {
             const [parent, child] = key.split('.');
-            this.config[parent][child] = value;
             
-            // 更新客户端库配置
+            // 处理 vadParams 配置
             if (parent === 'vadParams') {
+                this.config.vadParams[child] = value;
                 this.client.config.vadParams[child] = value;
             }
         } else {
@@ -526,20 +786,64 @@ export class SettingsPanel {
             // 更新客户端库配置
             if (key === 'requireTTS') {
                 this.client.config.requireTTS = value;
+                // ✅ 自动开启 basic 配置的更新开关
+                this._autoEnableUpdateSwitch('basic');
             } else if (key === 'enableSRS') {
                 this.client.config.enableSRS = value;
+                // ✅ 自动开启 basic 配置的更新开关
+                this._autoEnableUpdateSwitch('basic');
             } else if (key === 'autoPlay') {
                 this.client.config.autoPlay = value;
             } else if (key === 'vadEnabled') {
                 this.client.vadEnabled = value;
             } else if (key === 'functionCalling') {
                 this.client.config.functionCalling = value;
+                // ✅ 自动开启 functions 配置的更新开关
+                this._autoEnableUpdateSwitch('functions');
             } else if (key === 'platform') {
                 this.client.config.platform = value;
+            } else if (key === 'roleDescription') {
+                this.client.config.roleDescription = value;
+                // ✅ 自动开启 role 配置的更新开关
+                this._autoEnableUpdateSwitch('role');
+            } else if (key === 'responseRequirements') {
+                this.client.config.responseRequirements = value;
+                // ✅ 自动开启 role 配置的更新开关
+                this._autoEnableUpdateSwitch('role');
+            } else if (key === 'sceneDescription') {
+                this.client.config.sceneDescription = value;
+                // ✅ 自动开启 scene 配置的更新开关
+                this._autoEnableUpdateSwitch('scene');
             }
         }
 
         console.log('[SettingsPanel] 配置已更新并应用到客户端库');
+    }
+
+    /**
+     * ✅ 自动开启更新开关（仅开启一次，用户可手动关闭）
+     * @private
+     */
+    _autoEnableUpdateSwitch(switchId) {
+        // 如果开关已经是开启状态，不重复开启
+        if (this.updateSwitches[switchId]) {
+            return;
+        }
+
+        // 开启开关
+        this.updateSwitches[switchId] = true;
+        console.log(`[SettingsPanel] 自动开启更新开关: ${switchId}`);
+
+        // 更新 UI 中的开关状态
+        if (this.element) {
+            const section = this.element.querySelector(`[data-section-id="${switchId}"]`);
+            if (section) {
+                const switchInput = section.querySelector('.update-switch');
+                if (switchInput) {
+                    switchInput.checked = true;
+                }
+            }
+        }
     }
 
     /**
@@ -579,5 +883,60 @@ export class SettingsPanel {
         } else {
             this.open();
         }
+    }
+
+    /**
+     * ✅ 获取需要更新的配置（差异更新）
+     * 只返回开关打开的配置项
+     */
+    getPendingUpdates() {
+        const updates = {};
+
+        // 基本配置
+        if (this.updateSwitches.basic) {
+            updates.require_tts = this.config.requireTTS;
+            updates.enable_srs = this.config.enableSRS;
+        }
+
+        // 角色配置
+        if (this.updateSwitches.role) {
+            updates.system_prompt = {
+                role_description: this.config.roleDescription || '',
+                response_requirements: this.config.responseRequirements || ''
+            };
+        }
+
+        // 场景配置
+        if (this.updateSwitches.scene) {
+            updates.scene_context = {
+                scene_description: this.config.sceneDescription || ''
+            };
+        }
+
+        // 函数定义
+        if (this.updateSwitches.functions) {
+            updates.function_calling = this.config.functionCalling;
+        }
+
+        return updates;
+    }
+
+    /**
+     * ✅ 清除所有更新开关（发送成功后调用）
+     */
+    clearUpdateSwitches() {
+        for (const key in this.updateSwitches) {
+            this.updateSwitches[key] = false;
+        }
+        
+        // 更新 UI 中的开关状态
+        if (this.element) {
+            const switches = this.element.querySelectorAll('.update-switch');
+            switches.forEach(sw => {
+                sw.checked = false;
+            });
+        }
+        
+        console.log('[SettingsPanel] 所有更新开关已清除');
     }
 }

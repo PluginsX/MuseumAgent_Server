@@ -1,11 +1,20 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo   MuseumAgent Web Demo - 重构版
+echo   MuseumAgent Web Demo - V2.0
+echo ========================================
+echo.
+echo 【重要提示】
+echo 如果看不到新功能，请在浏览器中：
+echo   1. 按 Ctrl + Shift + R 强制刷新
+echo   2. 或按 F12 打开开发者工具
+echo   3. 右键点击刷新按钮
+echo   4. 选择"清空缓存并硬性重新加载"
+echo.
 echo ========================================
 echo.
 echo 正在启动 HTTP 服务器...
-echo 服务器地址: http://localhost:8080
+echo 服务器地址: http://localhost:18000
 echo.
 
 cd /d "%~dp0"

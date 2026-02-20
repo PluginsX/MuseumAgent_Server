@@ -1,28 +1,45 @@
 # -*- coding: utf-8 -*-
 """
-会话管理API
-提供客户端指令集动态注册和会话管理功能
+会话管理API（完整版 V2.0）
+提供完整的会话配置和管理功能
 """
 from fastapi import APIRouter, HTTPException, Header, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime
 import json
 
 from ..session.strict_session_manager import strict_session_manager
-# 已移除旧的指令集模型导入 - 现在完全基于OpenAI函数调用标准
 from ..common.enhanced_logger import get_enhanced_logger
 
 router = APIRouter(prefix="/api/session", tags=["会话管理"])
 logger = get_enhanced_logger()
 
 
+# ===== 新增：配置模型 =====
+
+class SystemPromptConfig(BaseModel):
+    """系统提示词配置"""
+    role_description: str = Field(..., description="LLM 角色描述")
+    response_requirements: str = Field(..., description="LLM 响应要求")
+
+
+class SceneContextConfig(BaseModel):
+    """场景上下文配置"""
+    current_scene: str = Field(..., description="当前场景名称")
+    scene_description: str = Field(..., description="场景描述")
+    keywords: List[str] = Field(default_factory=list, description="场景关键词")
+    scene_specific_prompt: Optional[str] = Field(None, description="场景特定提示")
+
+
 class ClientRegistrationRequest(BaseModel):
-    """客户端注册请求"""
-    client_metadata: Dict[str, Any]
-    functions: Optional[List[Dict[str, Any]]] = None  # 新增：函数定义列表
-    client_signature: Optional[str] = None
+    """客户端注册请求（完整版）"""
+    client_metadata: Dict[str, Any] = Field(..., description="客户端元数据")
+    functions: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="函数定义列表")
+    system_prompt: Optional[SystemPromptConfig] = Field(None, description="系统提示词配置")
+    scene_context: Optional[SceneContextConfig] = Field(None, description="场景上下文配置")
+    client_signature: Optional[str] = Field(None, description="客户端签名")
 
 
 class ClientRegistrationResponse(BaseModel):
@@ -60,67 +77,108 @@ class SessionInfoResponse(BaseModel):
 @router.post("/register", response_model=ClientRegistrationResponse)
 async def register_client_session(registration: ClientRegistrationRequest):
     """
-    客户端注册接口
-    客户端首次连接时调用此接口注册自己的能力集
+    客户端注册接口（完整版 V2.0）
+    支持系统提示词和场景上下文配置
     """
     try:
         # 记录客户端注册请求
-        logger.sess.info("Client registration request received", 
-                        {'client_type': registration.client_metadata.get('client_type')})
+        logger.sess.info("Client registration request received (V2.0)", 
+                        {'client_type': registration.client_metadata.get('client_type'),
+                         'has_system_prompt': registration.system_prompt is not None,
+                         'has_scene_context': registration.scene_context is not None})
         
         # 验证基本字段
         if not registration.client_metadata:
             logger.sess.error("Invalid client registration data format")
             raise HTTPException(status_code=400, detail="无效的客户端注册数据格式")
         
-        # 验证客户端类型（简化处理）
-        client_type_str = registration.client_metadata.get("client_type", "custom")
+        # 验证客户端类型
+        client_type_str = registration.client_metadata.get("client_type", "WEB")
         if not client_type_str:
-            registration.client_metadata["client_type"] = "custom"
-            logger.sess.info("Set default client type to custom")
+            registration.client_metadata["client_type"] = "WEB"
+            logger.sess.info("Set default client type to WEB")
         
         # 生成唯一会话ID
         session_id = str(uuid.uuid4())
-        logger.sess.info("New session ID generated", 
-                      {'session_id': session_id})
+        logger.sess.info("New session ID generated", {'session_id': session_id[:8]})
         
-        # 函数定义是可选的 - 支持普通对话模式
+        # ✅ 添加系统提示词配置
+        if registration.system_prompt:
+            registration.client_metadata["system_prompt"] = {
+                "role_description": registration.system_prompt.role_description,
+                "response_requirements": registration.system_prompt.response_requirements
+            }
+            logger.sess.info("System prompt configured", 
+                          {'session_id': session_id[:8],
+                           'role_length': len(registration.system_prompt.role_description)})
+        else:
+            # 使用默认值
+            registration.client_metadata["system_prompt"] = {
+                "role_description": "你是智能助手。",
+                "response_requirements": "请用友好、专业的语言回答问题。"
+            }
+            logger.sess.info("Using default system prompt")
+        
+        # ✅ 添加场景上下文配置
+        if registration.scene_context:
+            registration.client_metadata["scene_context"] = {
+                "current_scene": registration.scene_context.current_scene,
+                "scene_description": registration.scene_context.scene_description,
+                "keywords": registration.scene_context.keywords,
+                "scene_specific_prompt": registration.scene_context.scene_specific_prompt or ""
+            }
+            logger.sess.info("Scene context configured", 
+                          {'session_id': session_id[:8],
+                           'scene': registration.scene_context.current_scene})
+        else:
+            # 使用默认值
+            registration.client_metadata["scene_context"] = {
+                "current_scene": "公共场景",
+                "scene_description": "通用对话场景",
+                "keywords": [],
+                "scene_specific_prompt": ""
+            }
+            logger.sess.info("Using default scene context")
+        
+        # 函数定义是可选的
         if registration.functions and len(registration.functions) > 0:
-            logger.sess.info("Client provided function definitions, enabling function calling mode", 
+            logger.sess.info("Client provided function definitions", 
                           {'function_count': len(registration.functions)})
         else:
-            logger.sess.info("Client did not provide function definitions, enabling general chat mode")
-            # 设置空函数列表而不是拒绝注册
+            logger.sess.info("No function definitions provided, general chat mode")
             registration.functions = []
         
-        # 使用支持OpenAI标准函数调用的会话注册
+        # 使用支持完整配置的会话注册
         session = strict_session_manager.register_session_with_functions(
             session_id=session_id,
             client_metadata=registration.client_metadata,
             functions=registration.functions
         )
         
-        logger.sess.info("Session registration successful", 
-                      {'functions': len(registration.functions),
+        logger.sess.info("Session registration successful (V2.0)", 
+                      {'session_id': session_id[:8],
+                       'functions': len(registration.functions),
+                       'has_system_prompt': 'system_prompt' in registration.client_metadata,
+                       'has_scene_context': 'scene_context' in registration.client_metadata,
                        'expires_at': session.expires_at.isoformat()})
-        
-        # 记录注册成功的响应
-        response_data = {
-            "session_id": session_id,
-            "expires_at": session.expires_at.isoformat(),
-            "supported_features": ["dynamic_operations", "session_management", "heartbeat", "function_calling"]
-        }
-        logger.sess.info("Registration success response sent", response_data)
         
         # 返回注册成功响应
         return ClientRegistrationResponse(
             session_id=session_id,
             expires_at=session.expires_at.isoformat(),
             server_timestamp=datetime.now().isoformat(),
-            supported_features=["dynamic_operations", "session_management", "heartbeat", "function_calling"]
+            supported_features=[
+                "dynamic_operations", 
+                "session_management", 
+                "heartbeat", 
+                "function_calling",
+                "system_prompt_config",  # ✅ 新增特性
+                "scene_context_config"   # ✅ 新增特性
+            ]
         )
         
     except Exception as e:
+        logger.sess.error(f"Session registration failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"会话注册失败: {str(e)}")
 
 

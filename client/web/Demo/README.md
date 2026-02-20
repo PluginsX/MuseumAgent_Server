@@ -16,9 +16,17 @@
 ```
 Demo/
 ├── lib/                        # 客户端库（独立副本）
+│   ├── core/                   # 核心模块
+│   │   ├── EventBus.js        # 事件总线
+│   │   ├── ReceiveManager.js  # 接收管理器
+│   │   ├── SendManager.js     # 发送管理器
+│   │   └── WebSocketClient.js # WebSocket 客户端
+│   ├── managers/               # 管理器
+│   │   └── AudioManager.js    # 音频管理器
+│   ├── index.js                # 库入口
 │   ├── MuseumAgentSDK.js      # 主 SDK 类
-│   ├── MuseumAgentClient.js   # WebSocket 客户端
-│   └── AudioManager.js         # 音频管理器
+│   ├── package.json            # 包配置
+│   └── README.md               # 库文档
 ├── res/                        # 资源文件
 │   ├── favicon.ico
 │   └── Loading.mp4
@@ -27,14 +35,16 @@ Demo/
 │   │   ├── ChatWindow.js      # 聊天窗口
 │   │   ├── LoginForm.js       # 登录表单
 │   │   ├── MessageBubble.js   # 消息气泡
-│   │   └── SettingsPanel.js   # 设置面板
+│   │   └── SettingsPanel.js   # 配置面板（唯一）
 │   ├── utils/                  # 工具函数
+│   │   ├── audioPlayer.js     # 音频播放器
 │   │   ├── dom.js             # DOM 操作
 │   │   └── security.js        # 安全工具
 │   ├── app.js                  # 应用入口
 │   └── styles.css              # 样式
 ├── index.html                  # 入口页面
 ├── start.bat                   # 启动脚本（Windows）
+├── CLEANUP_REPORT.md           # 清理报告
 └── README.md                   # 本文件
 ```
 
