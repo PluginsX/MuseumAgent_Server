@@ -59,6 +59,7 @@ class App {
             } catch (error) {
                 console.error('[App] 登录失败:', error);
                 showNotification('登录失败: ' + error.message, 'error');
+                throw error; // 重新抛出错误，让LoginForm处理
             }
         });
     }

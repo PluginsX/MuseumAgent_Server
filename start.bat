@@ -14,7 +14,7 @@ if not exist "venv\Scripts\python.exe" (
 )
 
 REM Start server using main.py as the unified entry point
-"%~dp0venv\Scripts\python.exe" "%~dp0main.py"
+"%~dp0venv\Scripts\python.exe" "%~dp0main.py" --host 0.0.0.0 --port 12301
 
 REM Keep window open after server stops
 echo.
