@@ -156,7 +156,7 @@ export class SendManager {
      */
     sendAudioChunk(audioData) {
         if (!this.currentVoiceStream) {
-            console.warn('[SendManager] 没有活跃的语音流');
+            // ✅ 静默忽略，不输出警告（录音停止后可能还有残留数据）
             return;
         }
 

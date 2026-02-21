@@ -314,7 +314,7 @@ export class SettingsPanel {
             switchInput.checked = this.updateSwitches[id];
 
             // 阻止事件冒泡，避免触发折叠/展开
-            switchInput.addEventListener('click', (e) => {
+            switchLabel.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
 
@@ -850,15 +850,23 @@ export class SettingsPanel {
         this.updateSwitches[switchId] = true;
         console.log(`[SettingsPanel] 自动开启更新开关: ${switchId}`);
 
-        // 更新 UI 中的开关状态
-        if (this.element) {
-            const section = this.element.querySelector(`[data-section-id="${switchId}"]`);
+        // ✅ 更新 UI 中的开关状态（支持独立模式和容器模式）
+        const container = this.element || this.container;
+        if (container) {
+            const section = container.querySelector(`[data-section-id="${switchId}"]`);
             if (section) {
                 const switchInput = section.querySelector('.update-switch');
                 if (switchInput) {
                     switchInput.checked = true;
+                    console.log(`[SettingsPanel] UI 开关已更新: ${switchId}`);
+                } else {
+                    console.warn(`[SettingsPanel] 找不到开关元素: ${switchId}`);
                 }
+            } else {
+                console.warn(`[SettingsPanel] 找不到区域元素: ${switchId}`);
             }
+        } else {
+            console.warn(`[SettingsPanel] 容器未初始化`);
         }
     }
 
@@ -945,9 +953,10 @@ export class SettingsPanel {
             this.updateSwitches[key] = false;
         }
         
-        // 更新 UI 中的开关状态
-        if (this.element) {
-            const switches = this.element.querySelectorAll('.update-switch');
+        // ✅ 更新 UI 中的开关状态（支持独立模式和容器模式）
+        const container = this.element || this.container;
+        if (container) {
+            const switches = container.querySelectorAll('.update-switch');
             switches.forEach(sw => {
                 sw.checked = false;
             });

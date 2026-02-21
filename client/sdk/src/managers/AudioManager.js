@@ -314,19 +314,38 @@ export class AudioManager {
         this.isRecording = false;
 
         if (this.audioWorkletNode) {
-            // 通知 AudioWorklet 停止
+            // ✅ 通知 AudioWorklet 停止（这会让 process() 返回 false）
             this.audioWorkletNode.port.postMessage({
                 type: 'stop'
             });
             
+            // ✅ 等待一小段时间让 AudioWorklet 处理完最后的消息
+            setTimeout(() => {
+                if (this.audioWorkletNode) {
+                    try {
             this.audioWorkletNode.disconnect();
+                    } catch (error) {
+                        // 忽略断开连接时的错误
+                    }
             this.audioWorkletNode = null;
+                }
+            }, 50);
         }
 
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(track => track.stop());
             this.mediaStream = null;
         }
+        
+        // ✅ 重置 VAD 状态
+        this.vadEnabled = false;
+        this.vadParams = null;
+        this.vadState = {
+            isSpeaking: false,
+            silenceStart: null,
+            speechStart: null,
+            audioBuffer: []
+        };
     }
 
     /**

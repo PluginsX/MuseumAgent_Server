@@ -200,14 +200,30 @@ export class ControlButton {
             if (this.client.isRecording) {
                 await this.client.stopRecording();
             } else {
+                // ✅ 获取设置面板的待更新配置
+                const settingsPanel = window._currentSettingsPanel;
+                const updates = settingsPanel ? settingsPanel.getPendingUpdates() : {};
+                
+                // ✅ 传递当前配置参数 + 待更新配置
                 await this.client.startRecording({
                     vadEnabled: this.client.vadEnabled,
-                    vadParams: this.client.config.vadParams
+                    vadParams: this.client.config.vadParams,
+                    requireTTS: this.client.config.requireTTS,
+                    enableSRS: this.client.config.enableSRS,
+                    functionCalling: this.client.config.functionCalling.length > 0 ? this.client.config.functionCalling : undefined,
+                    ...updates
                 });
+                
+                // ✅ 发送成功后清除更新开关
+                if (settingsPanel && Object.keys(updates).length > 0) {
+                    settingsPanel.clearUpdateSwitches();
+                    console.log('[ControlButton] 已发送配置更新:', updates);
+                }
             }
         } catch (error) {
             console.error('[ControlButton] 录音失败:', error);
-            alert('录音失败: ' + error.message);
+            // ✅ 不要弹出 alert，只在控制台输出错误
+            console.error('[ControlButton] 录音错误详情:', error.message);
         }
     }
     
@@ -223,10 +239,18 @@ export class ControlButton {
      */
     handleDragStart(point) {
         const rect = this.element.getBoundingClientRect();
-        this.dragStartPosition = {
-            x: rect.left,
-            y: rect.top
+        
+        // ✅ 记录鼠标相对于按钮左上角的偏移量
+        this.dragOffset = {
+            x: point.x - rect.left,
+            y: point.y - rect.top
         };
+        
+        console.log('[ControlButton] 拖拽开始:', {
+            point: point,
+            rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+            offset: this.dragOffset
+        });
         
         this.element.classList.add('dragging');
         
@@ -240,18 +264,33 @@ export class ControlButton {
      * 处理拖拽移动
      */
     handleDragMove(point, deltaX, deltaY) {
-        const newX = this.dragStartPosition.x + deltaX;
-        const newY = this.dragStartPosition.y + deltaY;
+        // ✅ 使用鼠标当前位置减去偏移量，实现实时跟手
+        let newX = point.x - this.dragOffset.x;
+        let newY = point.y - this.dragOffset.y;
         
-        // 约束位置
+        // ✅ 实时约束位置（在设置之前约束）
         const rect = this.element.getBoundingClientRect();
         const maxX = window.innerWidth - rect.width;
         const maxY = window.innerHeight - rect.height;
         
-        const constrainedX = Math.max(0, Math.min(newX, maxX));
-        const constrainedY = Math.max(0, Math.min(newY, maxY));
+        newX = Math.max(0, Math.min(newX, maxX));
+        newY = Math.max(0, Math.min(newY, maxY));
         
-        this.setPosition(constrainedX, constrainedY);
+        console.log('[ControlButton] 拖拽移动:', {
+            point: point,
+            offset: this.dragOffset,
+            newX: newX,
+            newY: newY,
+            deltaX: deltaX,
+            deltaY: deltaY,
+            constrained: {
+                maxX: maxX,
+                maxY: maxY
+            }
+        });
+        
+        // ✅ 设置约束后的位置
+        this.setPosition(newX, newY);
     }
     
     /**
@@ -306,17 +345,24 @@ export class ControlButton {
             this.menu.appendChild(menuItem);
         });
         
-        // 设置菜单位置
+        // ✅ 添加到页面（先添加才能获取尺寸）
+        document.body.appendChild(this.menu);
+        
+        // ✅ 获取菜单尺寸
+        const menuRect = this.menu.getBoundingClientRect();
+        
+        // ✅ 计算菜单位置（与按钮左右居中对齐）
+        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+        const menuLeft = buttonCenterX - menuRect.width / 2;
+        
+        // ✅ 设置菜单位置
         if (direction === 'down') {
-            this.menu.style.left = buttonRect.left + 'px';
+            this.menu.style.left = menuLeft + 'px';
             this.menu.style.top = (buttonRect.bottom + 10) + 'px';
         } else {
-            this.menu.style.left = buttonRect.left + 'px';
+            this.menu.style.left = menuLeft + 'px';
             this.menu.style.bottom = (window.innerHeight - buttonRect.top + 10) + 'px';
         }
-        
-        // 添加到页面
-        document.body.appendChild(this.menu);
         
         // 点击其他地方关闭菜单
         setTimeout(() => {

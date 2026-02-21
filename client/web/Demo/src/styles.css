@@ -553,7 +553,7 @@ button[type="submit"]:active {
     border-radius: 8px;
     margin-bottom: 15px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .section-header {
@@ -565,6 +565,7 @@ button[type="submit"]:active {
     color: white;
     user-select: none;
     transition: all 0.3s;
+    border-radius: 8px;
 }
 
 .section-header:hover {
@@ -613,22 +614,25 @@ button[type="submit"]:active {
 }
 
 .update-switch {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    appearance: none;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
-    outline: none;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.update-switch:checked {
-    background: #4caf50;
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
 .update-switch-slider {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    transition: background 0.3s;
+    cursor: pointer;
+}
+
+.update-switch-slider::before {
+    content: '';
     position: absolute;
     top: 2px;
     left: 2px;
@@ -637,10 +641,13 @@ button[type="submit"]:active {
     background: white;
     border-radius: 50%;
     transition: transform 0.3s;
-    pointer-events: none;
 }
 
 .update-switch:checked + .update-switch-slider {
+    background: #4caf50;
+}
+
+.update-switch:checked + .update-switch-slider::before {
     transform: translateX(20px);
 }
 
@@ -655,6 +662,7 @@ button[type="submit"]:active {
     padding: 20px;
     background: #fafafa;
     border-top: 1px solid #e0e0e0;
+    border-radius: 0 0 8px 8px;
 }
 
 .settings-fields {

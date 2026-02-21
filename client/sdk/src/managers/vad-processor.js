@@ -11,6 +11,9 @@ class VADProcessor extends AudioWorkletProcessor {
         this.vadParams = null;
         this.vadEnabled = false;
         
+        // ✅ 停止标志
+        this.isStopped = false;
+        
         // VAD 状态
         this.isSpeaking = false;
         this.silenceStart = null;
@@ -24,7 +27,10 @@ class VADProcessor extends AudioWorkletProcessor {
             if (type === 'init') {
                 this.vadParams = data.vadParams;
                 this.vadEnabled = data.vadEnabled;
+                this.isStopped = false;
             } else if (type === 'stop') {
+                // ✅ 设置停止标志，停止处理音频
+                this.isStopped = true;
                 this.vadEnabled = false;
                 this.isSpeaking = false;
                 this.audioBuffer = [];
@@ -33,6 +39,11 @@ class VADProcessor extends AudioWorkletProcessor {
     }
     
     process(inputs, outputs, parameters) {
+        // ✅ 如果已停止，返回 false 终止处理器
+        if (this.isStopped) {
+            return false;
+        }
+        
         const input = inputs[0];
         if (!input || !input[0]) {
             return true;

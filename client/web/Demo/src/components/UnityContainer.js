@@ -28,6 +28,9 @@ export class UnityContainer {
     async init() {
         console.log('[UnityContainer] 初始化...');
         
+        // ✅ 立即设置全局消息监听器（确保所有消息都被记录）
+        this.setupGlobalMessageListener();
+        
         // 创建 Unity 容器
         this.createUnityContainer();
         
@@ -38,6 +41,120 @@ export class UnityContainer {
         this.createControlButton();
         
         console.log('[UnityContainer] 初始化完成');
+    }
+    
+    /**
+     * ✅ 设置全局消息监听器（确保即使 ChatWindow 未打开也能记录消息）
+     */
+    setupGlobalMessageListener() {
+        // 检查是否已经设置
+        if (window._globalMessageListenerInitialized) {
+            return;
+        }
+        
+        console.log('[UnityContainer] 设置全局消息监听器');
+        
+        // 初始化全局消息历史
+        if (!window._messageHistory) {
+            window._messageHistory = [];
+        }
+        
+        const { Events } = window.MuseumAgentSDK;
+        
+        // 监听消息发送（记录到全局历史）
+        this.client.on(Events.MESSAGE_SENT, (data) => {
+            const message = {
+                id: data.id,
+                type: 'sent',
+                contentType: data.type === 'voice' ? 'voice' : 'text',
+                content: data.content || '',
+                timestamp: Date.now(),
+                duration: data.type === 'voice' ? 0 : undefined,
+                startTime: data.type === 'voice' ? data.startTime : undefined
+            };
+            
+            // 检查是否已存在（避免重复）
+            const exists = window._messageHistory.find(m => m.id === message.id);
+            if (!exists) {
+                window._messageHistory.push(message);
+                console.log('[UnityContainer] 全局记录发送消息:', message.id);
+            }
+        });
+        
+        // 监听文本流（记录到全局历史）
+        let globalCurrentTextMessage = null;
+        this.client.on(Events.TEXT_CHUNK, (data) => {
+            if (!globalCurrentTextMessage || globalCurrentTextMessage.id !== data.messageId) {
+                // 新消息
+                globalCurrentTextMessage = {
+                    id: data.messageId,
+                    type: 'received',
+                    contentType: 'text',
+                    content: data.chunk,
+                    timestamp: Date.now(),
+                    isStreaming: true
+                };
+                window._messageHistory.push(globalCurrentTextMessage);
+                console.log('[UnityContainer] 全局记录接收文本消息:', globalCurrentTextMessage.id);
+            } else {
+                // 累加内容
+                globalCurrentTextMessage.content += data.chunk;
+            }
+        });
+        
+        // 监听消息完成（标记流式消息完成）
+        this.client.on(Events.MESSAGE_COMPLETE, (data) => {
+            if (globalCurrentTextMessage && globalCurrentTextMessage.id === data.messageId) {
+                globalCurrentTextMessage.isStreaming = false;
+                globalCurrentTextMessage = null;
+            }
+        });
+        
+        // 监听语音流（记录到全局历史）
+        let globalCurrentVoiceMessage = null;
+        this.client.on(Events.VOICE_CHUNK, (data) => {
+            const voiceMessageId = `${data.messageId}_voice`;
+            
+            if (!globalCurrentVoiceMessage || globalCurrentVoiceMessage.id !== voiceMessageId) {
+                // 新消息
+                globalCurrentVoiceMessage = {
+                    id: voiceMessageId,
+                    type: 'received',
+                    contentType: 'voice',
+                    content: '语音消息',
+                    timestamp: Date.now(),
+                    isStreaming: true,
+                    duration: 0
+                };
+                window._messageHistory.push(globalCurrentVoiceMessage);
+                console.log('[UnityContainer] 全局记录接收语音消息:', globalCurrentVoiceMessage.id);
+            }
+        });
+        
+        // 监听函数调用（记录到全局历史）
+        this.client.on(Events.FUNCTION_CALL, (functionCall) => {
+            const message = {
+                id: `func_${Date.now()}_${Math.random()}`,
+                type: 'received',
+                contentType: 'function',
+                content: functionCall,
+                timestamp: Date.now()
+            };
+            window._messageHistory.push(message);
+            console.log('[UnityContainer] 全局记录函数调用:', message.id);
+        });
+        
+        // 监听录音完成（更新语音消息的时长和音频数据）
+        this.client.on(Events.RECORDING_COMPLETE, (data) => {
+            const message = window._messageHistory.find(m => m.id === data.id);
+            if (message && message.contentType === 'voice') {
+                message.duration = data.duration;
+                message.audioData = data.audioData;
+                console.log('[UnityContainer] 更新语音消息时长:', data.id, data.duration.toFixed(2) + 's');
+            }
+        });
+        
+        window._globalMessageListenerInitialized = true;
     }
     
     /**
@@ -207,6 +324,9 @@ export class UnityContainer {
             title: '客户端配置',
             onClose: () => this.closePanel()
         });
+        
+        // ✅ 保存设置面板实例到全局变量（供 ChatWindow 访问）
+        window._currentSettingsPanel = this.currentPanel.contentComponent;
     }
     
     /**
@@ -231,6 +351,9 @@ export class UnityContainer {
             this.currentPanel.destroy();
             this.currentPanel = null;
         }
+        
+        // ✅ 清除全局设置面板引用
+        window._currentSettingsPanel = null;
         
         // 显示控制按钮
         this.controlButton.show();
