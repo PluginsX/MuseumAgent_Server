@@ -40,6 +40,8 @@ class AdminUserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
+    created_at: str
+    last_login: Optional[str]
 
 
 class ClientUserResponse(BaseModel):
@@ -48,6 +50,9 @@ class ClientUserResponse(BaseModel):
     email: Optional[str]
     role: str
     is_active: bool
+    created_at: str
+    last_login: Optional[str]
+    api_key: Optional[str] = None
 
 
 # 管理员用户相关API
@@ -65,7 +70,15 @@ def list_admin_users(
         q = q.filter(or_(AdminUser.username.ilike(f"%{search}%"), AdminUser.email.ilike(f"%{search}%")))
     total = q.count()
     users = q.offset((page - 1) * size).limit(size).all()
-    return [AdminUserResponse(id=u.id, username=u.username, email=u.email, role=u.role, is_active=u.is_active) for u in users]
+    return [AdminUserResponse(
+        id=u.id, 
+        username=u.username, 
+        email=u.email, 
+        role=u.role, 
+        is_active=u.is_active,
+        created_at=u.created_at.isoformat() if u.created_at else None,
+        last_login=u.last_login.isoformat() if u.last_login else None
+    ) for u in users]
 
 
 @router.post("/admins", response_model=AdminUserResponse)
@@ -88,7 +101,15 @@ def create_admin_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    return AdminUserResponse(id=user.id, username=user.username, email=user.email, role=user.role, is_active=user.is_active)
+    return AdminUserResponse(
+        id=user.id, 
+        username=user.username, 
+        email=user.email, 
+        role=user.role, 
+        is_active=user.is_active,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None
+    )
 
 
 @router.put("/admins/{user_id}", response_model=AdminUserResponse)
@@ -110,7 +131,15 @@ def update_admin_user(
         user.is_active = body.is_active
     db.commit()
     db.refresh(user)
-    return AdminUserResponse(id=user.id, username=user.username, email=user.email, role=user.role, is_active=user.is_active)
+    return AdminUserResponse(
+        id=user.id, 
+        username=user.username, 
+        email=user.email, 
+        role=user.role, 
+        is_active=user.is_active,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None
+    )
 
 
 # 客户用户相关API
@@ -128,7 +157,26 @@ def list_client_users(
         q = q.filter(or_(ClientUser.username.ilike(f"%{search}%"), ClientUser.email.ilike(f"%{search}%")))
     total = q.count()
     users = q.offset((page - 1) * size).limit(size).all()
-    return [ClientUserResponse(id=u.id, username=u.username, email=u.email, role=u.role, is_active=u.is_active) for u in users]
+    
+    # 获取每个客户的API密钥
+    from src.db.models import APIKey
+    responses = []
+    for u in users:
+        # 查找客户的API密钥
+        api_key = db.query(APIKey).filter(APIKey.client_user_id == u.id).first()
+        api_key_str = api_key.key_plaintext if api_key else "未生成"
+        
+        responses.append(ClientUserResponse(
+            id=u.id, 
+            username=u.username, 
+            email=u.email, 
+            role=u.role, 
+            is_active=u.is_active,
+            created_at=u.created_at.isoformat() if u.created_at else None,
+            last_login=u.last_login.isoformat() if u.last_login else None,
+            api_key=api_key_str
+        ))
+    return responses
 
 
 @router.post("/clients", response_model=ClientUserResponse)
@@ -151,7 +199,15 @@ def create_client_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    return ClientUserResponse(id=user.id, username=user.username, email=user.email, role=user.role, is_active=user.is_active)
+    return ClientUserResponse(
+        id=user.id, 
+        username=user.username, 
+        email=user.email, 
+        role=user.role, 
+        is_active=user.is_active,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None
+    )
 
 
 @router.put("/clients/{user_id}", response_model=ClientUserResponse)
@@ -173,7 +229,15 @@ def update_client_user(
         user.is_active = body.is_active
     db.commit()
     db.refresh(user)
-    return ClientUserResponse(id=user.id, username=user.username, email=user.email, role=user.role, is_active=user.is_active)
+    return ClientUserResponse(
+        id=user.id, 
+        username=user.username, 
+        email=user.email, 
+        role=user.role, 
+        is_active=user.is_active,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        last_login=user.last_login.isoformat() if user.last_login else None
+    )
 
 
 @router.delete("/admins/{user_id}")

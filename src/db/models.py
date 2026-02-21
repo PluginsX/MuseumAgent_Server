@@ -49,6 +49,7 @@ class APIKey(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     key_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    key_plaintext: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)  # 存储明文API密钥
     client_user_id: Mapped[int] = mapped_column(ForeignKey("client_users.id"), nullable=False)  # 仅关联客户用户
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

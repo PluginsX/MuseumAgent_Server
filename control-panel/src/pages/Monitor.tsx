@@ -19,7 +19,7 @@ export default function Monitor() {
       console.log('Loading status...');
       const response = await monitorApi.status();
       console.log('Status response:', response);
-      setStatus(response.data.data);
+      setStatus(response.data.data as unknown as Record<string, unknown> || {});
       message.success('状态加载成功');
     } catch (error: any) {
       console.error('Status load error:', error);
@@ -33,7 +33,7 @@ export default function Monitor() {
       console.log('Loading logs...');
       const response = await monitorApi.logs({ page: 1, size: 50 });
       console.log('Logs response:', response);
-      setLogs(response.data.data);
+      setLogs(response.data.data as unknown as { lines: string[]; total: number; } || { lines: [], total: 0 });
       message.success('日志加载成功');
     } catch (error: any) {
       console.error('Logs load error:', error);

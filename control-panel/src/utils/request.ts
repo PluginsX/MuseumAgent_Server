@@ -1,10 +1,11 @@
 import { message } from 'antd';
-import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { ApiResponse } from '../types';
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '', // 使用相对路径，自动继承页面的协议
   timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ request.interceptors.response.use(
           message.error('服务器内部错误');
           break;
         default:
-          const errorMsg = data?.msg || data?.message || data?.detail || '请求失败';
+          const errorMsg = data?.msg || data?.message || '请求失败';
           message.error(errorMsg);
       }
     } else if (error.request) {

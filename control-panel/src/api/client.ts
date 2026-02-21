@@ -72,16 +72,16 @@ export const usersApi = {
   delete: (id: number) => http.delete(`/api/admin/users/admins/${id}`),
 };
 
-// 客户管理API（通过内部管理员API）
+// 客户管理API
 export const clientsApiExtended = {
   // 创建客户账户
   createClient: (data: { username: string; password: string; email?: string; role?: string; remark?: string }) =>
-    http.post<{ api_key: string; user: User }>('/internal/admin/client/user/create', data),
+    http.post<User>('/api/admin/users/clients', data),
   // 删除客户账户
-  deleteClient: (clientId: number) => http.delete(`/internal/admin/client/user/${clientId}`),
+  deleteClient: (clientId: number) => http.delete(`/api/admin/users/clients/${clientId}`),
   // 重置客户API密钥
   resetApiKey: (clientId: number) => 
-    http.post<{ api_key: string }>('/internal/admin/client/api_key/reset', { client_id: clientId }),
+    http.post<{ api_key: string }>('/api/internal/client/api_key/reset', { client_id: clientId }),
   // 查询审计日志
   getAuditLogs: (params?: { 
     start_time?: string; 
@@ -90,10 +90,10 @@ export const clientsApiExtended = {
     user_id?: number; 
     page?: number; 
     size?: number;
-  }) => http.get<{ logs: AuditLog[]; pagination: any }>('/internal/admin/logs', { params }),
+  }) => http.get<{ logs: AuditLog[]; pagination: any }>('/api/internal/audit/logs', { params }),
   // 获取客户列表
   listClients: (params?: PaginationParams) => 
-    http.get<User[]>('/internal/admin/client/users', { params }),
+    http.get<User[]>('/api/admin/users/clients', { params }),
 };
 
 // 客户端连接管理API

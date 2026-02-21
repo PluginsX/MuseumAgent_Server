@@ -134,13 +134,52 @@ def main():
         
         print(f"\n启动Web服务器... (host={host}, port={port})")
         
-        uvicorn.run(
-            gateway.app,
-            host=host,
-            port=port,
-            reload=debug,
-            log_level="info" if debug else "warning"
-        )
+        # 检查SSL配置
+        ssl_enabled = server_config.get("ssl_enabled", False)
+        ssl_cert_file = server_config.get("ssl_cert_file")
+        ssl_key_file = server_config.get("ssl_key_file")
+        
+        # 如果启用了SSL且提供了证书文件，则使用SSL
+        if ssl_enabled and ssl_cert_file and ssl_key_file:
+            # 确保证书文件路径存在
+            cert_path = os.path.join(os.path.dirname(__file__), ssl_cert_file)
+            key_path = os.path.join(os.path.dirname(__file__), ssl_key_file)
+            
+            if os.path.exists(cert_path) and os.path.exists(key_path):
+                print(f"\n启用SSL加密连接...")
+                print(f"证书文件: {cert_path}")
+                print(f"密钥文件: {key_path}")
+                
+                uvicorn.run(
+                    gateway.app,
+                    host=host,
+                    port=port,
+                    reload=debug,
+                    log_level="info" if debug else "warning",
+                    ssl_certfile=cert_path,
+                    ssl_keyfile=key_path
+                )
+            else:
+                print(f"\n警告: SSL证书文件不存在")
+                print(f"证书文件路径: {cert_path}")
+                print(f"密钥文件路径: {key_path}")
+                print("将使用非SSL连接启动服务器")
+                
+                uvicorn.run(
+                    gateway.app,
+                    host=host,
+                    port=port,
+                    reload=debug,
+                    log_level="info" if debug else "warning"
+                )
+        else:
+            uvicorn.run(
+                gateway.app,
+                host=host,
+                port=port,
+                reload=debug,
+                log_level="info" if debug else "warning"
+            )
         
     except KeyboardInterrupt:
         print("\n\n收到停止信号，正在关闭服务器...")

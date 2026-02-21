@@ -14,7 +14,8 @@ from src.common.auth_utils import (
     create_access_token,
     decode_access_token,
     hash_password,
-    verify_password
+    verify_password,
+    get_current_user
 )
 from src.db.database import get_db_session
 from src.db.models import AdminUser, ClientUser, APIKey, AuditLog
@@ -138,15 +139,16 @@ def admin_auth(request: AdminLoginRequest, ip: str = None, db: Session = Depends
 
 
 @internal_router.post("/client/user/create")
-def create_client(request: ClientCreateRequest, token: str = None, ip: str = None, db: Session = Depends(get_db_session)):
+def create_client(request: ClientCreateRequest, current_user: dict = Depends(get_current_user), ip: str = None, db: Session = Depends(get_db_session)):
     """创建客户账号接口"""
     logger = get_enhanced_logger()
     
     # 验证管理员权限
-    admin_info = verify_admin_token(token, db)
-    if not admin_info or admin_info["role"] not in ["admin", "Admin", "Administrator", "Operator"]:
-        log_audit_action(db, admin_info["user_id"] if admin_info else None, "CLIENT_CREATE_FAILED", ip or "", "Insufficient permissions")
+    if current_user.get("role") not in ["admin", "Admin", "Administrator", "Operator"]:
+        log_audit_action(db, current_user.get("user_id"), "CLIENT_CREATE_FAILED", ip or "", "Insufficient permissions")
         raise HTTPException(status_code=403, detail="无创建客户权限")
+    
+    admin_info = current_user
     
     try:
         # 检查用户名是否已存在
@@ -197,15 +199,16 @@ def create_client(request: ClientCreateRequest, token: str = None, ip: str = Non
 
 
 @internal_router.post("/client/api_key/reset")
-def reset_api_key(request: APIKeyResetRequest, token: str = None, ip: str = None, db: Session = Depends(get_db_session)):
+def reset_api_key(request: APIKeyResetRequest, current_user: dict = Depends(get_current_user), ip: str = None, db: Session = Depends(get_db_session)):
     """重置客户API密钥"""
     logger = get_enhanced_logger()
     
     # 验证管理员权限
-    admin_info = verify_admin_token(token, db)
-    if not admin_info or admin_info["role"] not in ["admin", "Admin", "Administrator", "Operator"]:
-        log_audit_action(db, admin_info["user_id"] if admin_info else None, "API_KEY_RESET_FAILED", ip or "", "Insufficient permissions")
+    if current_user.get("role") not in ["admin", "Admin", "Administrator", "Operator"]:
+        log_audit_action(db, current_user.get("user_id"), "API_KEY_RESET_FAILED", ip or "", "Insufficient permissions")
         raise HTTPException(status_code=403, detail="无重置API密钥权限")
+    
+    admin_info = current_user
     
     try:
         # 检查客户是否存在
@@ -225,6 +228,7 @@ def reset_api_key(request: APIKeyResetRequest, token: str = None, ip: str = None
         
         new_api_key = APIKey(
             key_hash=new_api_key_hash,
+            key_plaintext=new_api_key_plaintext,  # 存储明文API密钥
             client_user_id=request.client_id,
             is_active=True,
             remark=f"Reset API Key for {client.username}"
@@ -257,7 +261,7 @@ def get_audit_logs(
     admin_user_id: Optional[int] = None, 
     client_user_id: Optional[int] = None, 
     action: Optional[str] = None,
-    token: str = None,
+    current_user: dict = Depends(get_current_user),
     ip: str = None,
     db: Session = Depends(get_db_session)
 ):
@@ -265,10 +269,11 @@ def get_audit_logs(
     logger = get_enhanced_logger()
     
     # 验证管理员权限
-    admin_info = verify_admin_token(token, db)
-    if not admin_info or admin_info["role"] not in ["admin", "Admin", "Administrator", "Operator"]:
-        log_audit_action(db, admin_info["user_id"] if admin_info else None, "AUDIT_LOG_ACCESS_FAILED", ip or "", "Insufficient permissions")
+    if current_user.get("role") not in ["admin", "Admin", "Administrator", "Operator"]:
+        log_audit_action(db, current_user.get("user_id"), "AUDIT_LOG_ACCESS_FAILED", ip or "", "Insufficient permissions")
         raise HTTPException(status_code=403, detail="无查看审计日志权限")
+    
+    admin_info = current_user
     
     try:
         query = db.query(AuditLog).order_by(desc(AuditLog.created_at))

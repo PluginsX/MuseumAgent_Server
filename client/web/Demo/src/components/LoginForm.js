@@ -32,7 +32,7 @@ export class LoginForm {
             type: 'text',
             className: 'login-input',
             placeholder: '服务器地址',
-            value: 'ws://localhost:12301'
+            value: 'wss://museum.soulflaw.com:12301'
         });
         
         // 认证方式选择

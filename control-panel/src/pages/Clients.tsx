@@ -43,8 +43,8 @@ export default function Clients() {
     try {
       setLoading(true);
       const response = await api.get('/api/admin/clients/connected');
-      setClients(response.data);
-      setFilteredClients(response.data);
+      setClients(response.data.data);
+      setFilteredClients(response.data.data);
     } catch (error: any) {
       message.error('获取客户端信息失败: ' + (error.response?.data?.detail || error.message));
     } finally {
@@ -56,7 +56,7 @@ export default function Clients() {
   const fetchStats = async () => {
     try {
       const response = await api.get('/api/admin/clients/stats');
-      setStats(response.data);
+      setStats(response.data.data);
     } catch (error: any) {
       console.error('获取统计信息失败:', error);
     }

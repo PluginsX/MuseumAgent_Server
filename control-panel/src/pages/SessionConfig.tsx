@@ -19,13 +19,14 @@ const SessionConfigPage: React.FC = () => {
     setLoading(true);
     try {
       const response = await sessionConfigApi.getCurrent();
-      const data = response.data;
-      
-      setRuntimeInfo(data.runtime_info);
-      setSessionStats(data.session_stats);
-      
-      // 设置表单值
-      form.setFieldsValue(data.current_config);
+      const data = response.data.data;
+      if (data) {
+        setRuntimeInfo(data.runtime_info);
+        setSessionStats(data.session_stats);
+        
+        // 设置表单默认值
+        form.setFieldsValue(data.current_config);
+      }
       
       message.success('配置加载成功');
     } catch (error: any) {
@@ -41,7 +42,7 @@ const SessionConfigPage: React.FC = () => {
     try {
       const response = await sessionConfigApi.update(values);
       
-      if (response.data.restart_required) {
+      if (response.data.data && response.data.data.restart_required) {
         message.warning('配置已保存，但需要重启服务才能完全生效');
       } else {
         message.success('配置保存成功');
@@ -71,12 +72,16 @@ const SessionConfigPage: React.FC = () => {
   const validateConfig = async (values: any) => {
     try {
       const response = await sessionConfigApi.validate(values);
-      if (response.data.is_valid) {
+      if (response.data.data && response.data.data.is_valid) {
         message.success('配置验证通过');
+        return true;
+      } else if (response.data.data && response.data.data.errors) {
+        message.error('配置验证失败: ' + response.data.data.errors.join(', '));
+        return false;
       } else {
-        message.error('配置验证失败: ' + response.data.errors.join(', '));
+        message.error('配置验证失败: 无效的响应数据');
+        return false;
       }
-      return response.data.is_valid;
     } catch (error: any) {
       message.error('验证配置失败: ' + (error.response?.data?.detail || error.message));
       return false;

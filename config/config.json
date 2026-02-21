@@ -8,9 +8,9 @@
     ],
     "request_limit": 200,
     "request_timeout": 30,
-    "ssl_enabled": false,
-    "ssl_cert_file": "./security/SSL/www.soulflaw.com_nginx/www.soulflaw.com_bundle.pem",
-    "ssl_key_file": "./security/SSL/www.soulflaw.com_nginx/www.soulflaw.com.key"
+    "ssl_enabled": true,
+    "ssl_cert_file": "./config/SSL/www.soulflaw.com_nginx/www.soulflaw.com_bundle.pem",
+    "ssl_key_file": "./config/SSL/www.soulflaw.com_nginx/www.soulflaw.com.key"
   },
   "llm": {
     "api_type": "openai_compatible",

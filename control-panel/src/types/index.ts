@@ -15,6 +15,7 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login?: string;
+  api_key?: string;
 }
 
 // 客户端信息类型

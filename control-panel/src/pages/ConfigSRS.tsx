@@ -16,7 +16,7 @@ export default function ConfigSRS() {
         console.log('Calling configApi.getSRS()...');
         const r = await configApi.getSRS();
         console.log('API response received:', r);
-        const d = r.data as Record<string, unknown>;
+        const d = r.data.data as unknown as Record<string, unknown> || {};
         console.log('Config data:', d);
         
         if (d.api_key) {
@@ -26,7 +26,7 @@ export default function ConfigSRS() {
         }
         
         // 设置默认值
-        const searchParams = d.search_params as Record<string, number> || {};
+        const searchParams = d.search_params as Record<string, unknown> || {};
         
         form.setFieldsValue({
           base_url: d.base_url,
@@ -57,12 +57,12 @@ export default function ConfigSRS() {
     setLoading(true);
     try {
       await configApi.updateSRS({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        timeout: values.timeout,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        timeout: values.timeout as number,
         search_params: {
-          top_k: values.top_k,
-          threshold: values.threshold,
+          top_k: values.top_k as number,
+          threshold: values.threshold as number,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -84,8 +84,8 @@ export default function ConfigSRS() {
     setTestResult(''); // 清空之前的测试结果
     try {
       const { data } = await configApi.validateSRS({
-        base_url: values.base_url,
-        api_key: values.api_key || '',
+        base_url: values.base_url as string,
+        api_key: values.api_key as string || '',
       });
       const result = (data as { valid?: boolean; message?: string });
       setTestResult(result.message || '连接成功');

@@ -16,7 +16,7 @@ export default function ConfigSTT() {
         console.log('Calling configApi.getSTT()...');
         const r = await configApi.getSTT();
         console.log('API response received:', r);
-        const d = r.data as Record<string, unknown>;
+        const d = r.data.data as unknown as Record<string, unknown> || {};
         console.log('Config data:', d);
         
         if (d.api_key) {
@@ -63,18 +63,18 @@ export default function ConfigSTT() {
     setLoading(true);
     try {
       await configApi.updateSTT({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
         parameters: {
-          sample_rate: values.sample_rate,
-          format: values.format,
-          language: values.language,
-          enable_punctuation: values.enable_punctuation,
-          enable_itn: values.enable_itn,
-          enable_vad: values.enable_vad,
-          vad_silence_timeout: values.vad_silence_timeout,
-          max_sentence_length: values.max_sentence_length,
+          sample_rate: values.sample_rate as number,
+          format: values.format as string,
+          language: values.language as string,
+          enable_punctuation: values.enable_punctuation as boolean,
+          enable_itn: values.enable_itn as boolean,
+          enable_vad: values.enable_vad as boolean,
+          vad_silence_timeout: values.vad_silence_timeout as number,
+          max_sentence_length: values.max_sentence_length as number,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -96,9 +96,9 @@ export default function ConfigSTT() {
     setTestResult(''); // 清空之前的测试结果
     try {
       const { data } = await configApi.validateSTT({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
       });
       const result = (data as { valid?: boolean; message?: string });
       setTestResult(result.message || '连接成功');

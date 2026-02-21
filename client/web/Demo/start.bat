@@ -4,27 +4,34 @@ echo ========================================
 echo   MuseumAgent Web Demo
 echo ========================================
 echo.
-echo Starting HTTP server...
-echo Server address: http://localhost:12302
 
 cd /d "%~dp0"
 
+REM Default settings
+set SSL_ENABLED=false
+set PORT=12302
+
+REM Check for SSL argument
+if "%1"=="--ssl" set SSL_ENABLED=true
+
 REM Check if Python is installed
 where python >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
-    echo Using Python server...
-    start http://localhost:12302/index.html
-    python -m http.server 12302 --bind 0.0.0.0
+if %ERRORLEVEL% NEQ 0 (
+    echo Error: Python not found
+    echo Please install Python 3 and try again
+    pause
+    exit /b 1
+)
+
+if "%SSL_ENABLED%"=="true" (
+    echo Starting HTTPS server...
+    echo Server address: https://museum.soulflaw.com:%PORT%
+    echo SSL enabled
+    start https://museum.soulflaw.com:%PORT%/index.html
+    python ssl_server.py --ssl --port %PORT%
 ) else (
-    REM Check if Node.js is installed
-    where node >nul 2>nul
-    if %ERRORLEVEL% EQU 0 (
-        echo Using Node.js server...
-        start http://localhost:12302/index.html
-        npx http-server -p 12302 -a 0.0.0.0
-    ) else (
-        echo Error: Python or Node.js not found
-        echo Please install Python 3 or Node.js and try again
-        pause
-    )
+    echo Starting HTTP server...
+    echo Server address: http://museum.soulflaw.com:%PORT%
+    start http://museum.soulflaw.com:%PORT%/index.html
+    python -m http.server %PORT% --bind 0.0.0.0
 )

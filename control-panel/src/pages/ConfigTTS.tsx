@@ -16,7 +16,7 @@ export default function ConfigTTS() {
         console.log('Calling configApi.getTTS()...');
         const r = await configApi.getTTS();
         console.log('API response received:', r);
-        const d = r.data as Record<string, unknown>;
+        const d = r.data.data as unknown as Record<string, unknown> || {};
         console.log('Config data:', d);
         
         if (d.api_key) {
@@ -62,17 +62,17 @@ export default function ConfigTTS() {
     setLoading(true);
     try {
       await configApi.updateTTS({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
         parameters: {
-          voice: values.voice,
-          speech_rate: values.speech_rate,
-          pitch: values.pitch,
-          volume: values.volume,
-          format: values.format,
-          sample_rate: values.sample_rate,
-          enable_subtitle: values.enable_subtitle,
+          voice: values.voice as string,
+          speech_rate: values.speech_rate as number,
+          pitch: values.pitch as number,
+          volume: values.volume as number,
+          format: values.format as string,
+          sample_rate: values.sample_rate as number,
+          enable_subtitle: values.enable_subtitle as boolean,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -94,9 +94,9 @@ export default function ConfigTTS() {
     setTestResult(''); // 清空之前的测试结果
     try {
       const { data } = await configApi.validateTTS({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
       });
       const result = (data as { valid?: boolean; message?: string });
       setTestResult(result.message || '连接成功');

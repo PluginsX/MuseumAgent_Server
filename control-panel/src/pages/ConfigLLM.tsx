@@ -16,7 +16,7 @@ export default function ConfigLLM() {
         console.log('Calling configApi.getLLM()...');
         const r = await configApi.getLLM();
         console.log('API response received:', r);
-        const d = r.data as Record<string, unknown>;
+        const d = r.data.data as unknown as Record<string, unknown> || {};
         console.log('Config data:', d);
         
         if (d.api_key) {
@@ -26,7 +26,7 @@ export default function ConfigLLM() {
         }
         
         // 设置默认值
-        const parameters = d.parameters as Record<string, number> || {};
+        const parameters = d.parameters as Record<string, unknown> || {};
         
         form.setFieldsValue({
           base_url: d.base_url,
@@ -63,18 +63,18 @@ export default function ConfigLLM() {
     setLoading(true);
     try {
       await configApi.updateLLM({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
         parameters: {
-          temperature: values.temperature,
-          max_tokens: values.max_tokens,
-          top_p: values.top_p,
-          stream: values.stream,
-          seed: values.seed,
-          presence_penalty: values.presence_penalty,
-          frequency_penalty: values.frequency_penalty,
-          n: values.n,
+          temperature: values.temperature as number,
+          max_tokens: values.max_tokens as number,
+          top_p: values.top_p as number,
+          stream: values.stream as boolean,
+          seed: values.seed as number | undefined,
+          presence_penalty: values.presence_penalty as number,
+          frequency_penalty: values.frequency_penalty as number,
+          n: values.n as number,
         },
       });
       message.success('保存成功，重启服务后生效');
@@ -96,9 +96,9 @@ export default function ConfigLLM() {
     setTestResult(''); // 清空之前的测试结果
     try {
       const { data } = await configApi.validateLLM({
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
+        base_url: values.base_url as string,
+        api_key: values.api_key as string,
+        model: values.model as string,
       });
       const result = (data as { valid?: boolean; message?: string });
       setTestResult(result.message || '连接成功');

@@ -55,13 +55,19 @@ class APIGateway:
             session_secret = "change-me-in-production"
             session_max_age = 86400
 
+        # 检查是否启用了SSL
+        try:
+            ssl_enabled = get_config_by_key("server", "ssl_enabled")
+        except Exception:
+            ssl_enabled = False
+        
         # 会话中间件
         self.app.add_middleware(
             SessionMiddleware,
             secret_key=session_secret,
             max_age=session_max_age,
             same_site="lax",
-            https_only=False,
+            https_only=ssl_enabled,
         )
         
         # CORS中间件

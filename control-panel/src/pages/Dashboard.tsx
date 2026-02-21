@@ -6,7 +6,7 @@ export default function Dashboard() {
   const [llmConfig, setLlmConfig] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
-    configApi.getLLM().then((r) => setLlmConfig(r.data)).catch(() => {});
+    configApi.getLLM().then((r) => setLlmConfig(r.data.data as unknown as Record<string, unknown> || {})).catch(() => {});
   }, []);
 
   return (
