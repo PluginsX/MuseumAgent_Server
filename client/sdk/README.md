@@ -18,11 +18,12 @@ MuseumAgent 通用 Web 客户端 SDK - 全新架构，发送接收完全解耦�
 - 🚀 **全双工通信**：发送和接收完全解耦，异步并行运行
 - 🔄 **会话管理**：自动保存和恢复会话，支持加密存储
 - ⚙️ **配置管理**：统一的配置持久化，支持热更新
-- 🎤 **音频处理**：内置录音、播放、VAD 语音检测
+- 🎤 **音频处理**：内置录音、播放、VAD 语音检测（基于 AudioWorklet）
 - 🔌 **零依赖**：纯原生 JavaScript 实现，无外部依赖
 - 📦 **多格式支持**：UMD、ESM 双格式，支持 Tree-shaking
 - 🔒 **安全可靠**：内置加密工具和错误处理
 - 📝 **完整日志**：可配置的日志级别和输出
+- ⚡ **高性能**：AudioWorklet 独立线程处理音频，不阻塞主线程
 
 ---
 
@@ -52,7 +53,12 @@ dist/
 ├── museum-agent-sdk.min.js       # UMD 压缩 (34KB) ⭐
 ├── museum-agent-sdk.esm.js       # ESM 未压缩 (85KB)
 └── museum-agent-sdk.esm.min.js   # ESM 压缩 (34KB)
+
+src/managers/
+└── vad-processor.js              # AudioWorklet 处理器 (5KB) ⚠️ 必需
 ```
+
+**注意**：`vad-processor.js` 是 AudioWorklet 处理器，必须与 SDK 一起部署。
 
 ---
 
@@ -79,6 +85,8 @@ dist/
   }
 </script>
 ```
+
+**重要**：确保 `vad-processor.js` 与 SDK 在同一目录或可访问路径。
 
 ### ES 模块引入
 
@@ -109,7 +117,7 @@ update-demo.bat
 
 # 自动执行：
 # 1. 构建 SDK
-# 2. 复制到 Demo
+# 2. 复制到 Demo（包括 AudioWorklet 处理器）
 # 3. 验证文件
 ```
 
@@ -119,10 +127,13 @@ update-demo.bat
 # 1. 构建
 npm run build
 
-# 2. 复制
+# 2. 复制所有必需文件
 cp dist/museum-agent-sdk.min.js ../web/Demo/lib/
 cp dist/museum-agent-sdk.min.js.map ../web/Demo/lib/
+cp src/managers/vad-processor.js ../web/Demo/lib/
 ```
+
+**注意**：必须同时复制 `vad-processor.js`，否则录音功能将无法工作。
 
 ---
 
@@ -170,6 +181,10 @@ sdk/
 ├── src/                  # 源码
 │   ├── core/            # 核心模块
 │   ├── managers/        # 管理器
+│   │   ├── AudioManager.js      # 音频管理器
+│   │   ├── SessionManager.js    # 会话管理器
+│   │   ├── ConfigManager.js     # 配置管理器
+│   │   └── vad-processor.js     # AudioWorklet 处理器 ⚠️
 │   ├── utils/           # 工具函数
 │   ├── constants.js     # 常量定义
 │   ├── MuseumAgentSDK.js # 主 SDK 类
@@ -181,6 +196,8 @@ sdk/
 ├── rollup.config.js     # 构建配置
 └── README.md            # 本文档
 ```
+
+**⚠️ 重要**：`vad-processor.js` 是 AudioWorklet 处理器，必须作为独立文件部署。
 
 ### 开发流程
 
@@ -227,9 +244,90 @@ npm publish
 ### 发布到 CDN
 
 ```bash
-# 上传 dist/ 目录到 CDN
+# 上传 dist/ 目录和 vad-processor.js 到 CDN
+# 确保两个文件在同一目录或相对路径正确
+
 # 然后在项目中引用
 <script src="https://cdn.example.com/museum-agent-sdk@2.0.0/museum-agent-sdk.min.js"></script>
+<!-- vad-processor.js 会自动从相对路径加载 -->
+```
+
+**注意**：部署时必须包含以下文件：
+- `museum-agent-sdk.min.js` - 主 SDK
+- `vad-processor.js` - AudioWorklet 处理器（必需）
+- `museum-agent-sdk.min.js.map` - Source Map（可选）
+
+---
+
+## 🌐 浏览器兼容性
+
+### ✅ 完全支持
+
+| 浏览器 | 最低版本 | 推荐版本 | 说明 |
+|--------|---------|---------|------|
+| Chrome | 66+ | 90+ | 完全支持，性能最佳 |
+| Edge | 79+ | 90+ | 基于 Chromium，与 Chrome 一致 |
+| Firefox | 76+ | 100+ | 完全支持 |
+| Safari (macOS) | 14.1+ | 16.0+ | 完全支持 |
+| Safari (iOS) | 14.5+ | 16.0+ | 完全支持，需 HTTPS |
+| Opera | 53+ | 最新 | 基于 Chromium |
+
+**全球覆盖率：~94%**
+
+### 核心技术依赖
+
+- **WebSocket**：双向通信
+- **Web Audio API**：音频处理
+- **AudioWorkletNode**：音频处理（关键）⚠️
+- **MediaDevices.getUserMedia**：麦克风访问
+- **localStorage**：数据持久化
+- **ES6+**：async/await, Promise, class 等
+
+### ⚠️ 部分支持
+
+- **Safari 14.0 及以下**：不支持 AudioWorklet，录音功能无法使用
+- **旧版 Android 浏览器**：可能不支持
+
+### ❌ 不支持
+
+- **Internet Explorer**：完全不支持（已停止维护）
+- **Chrome < 66**：缺少 AudioWorklet 支持
+- **Firefox < 76**：缺少 AudioWorklet 支持
+
+### 兼容性检测
+
+```javascript
+function checkBrowserCompatibility() {
+    const issues = [];
+    
+    if (!window.WebSocket) {
+        issues.push('WebSocket 不支持');
+    }
+    
+    if (!window.AudioContext && !window.webkitAudioContext) {
+        issues.push('Web Audio API 不支持');
+    }
+    
+    if (!navigator.mediaDevices?.getUserMedia) {
+        issues.push('麦克风访问不支持');
+    }
+    
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioContext.audioWorklet) {
+        issues.push('AudioWorklet 不支持（录音功能无法使用）');
+    }
+    
+    return {
+        compatible: issues.length === 0,
+        issues: issues
+    };
+}
+
+// 使用
+const result = checkBrowserCompatibility();
+if (!result.compatible) {
+    console.warn('浏览器兼容性问题：', result.issues);
+}
 ```
 
 ---
