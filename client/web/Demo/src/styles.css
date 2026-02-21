@@ -1053,6 +1053,243 @@ button[type="submit"]:active {
     50% { transform: scale(1.1); }
 }
 
+/* ==================== Unity 视图样式 ==================== */
+
+.unity-view {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+    background: #000;
+}
+
+.unity-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 1;
+}
+
+.unity-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    outline: none;
+}
+
+.unity-loading-bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 10;
+}
+
+.unity-loading-text {
+    color: white;
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+
+.unity-progress-bar-empty {
+    width: 300px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.unity-progress-bar-full {
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    transition: width 0.3s;
+    width: 0%;
+}
+
+/* ==================== 控制按钮样式 ==================== */
+
+.control-button {
+    position: fixed;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    user-select: none;
+    font-size: 32px;
+    color: white;
+}
+
+.control-button::before {
+    content: '';
+    position: absolute;
+    width: 90%;
+    height: 90%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    z-index: -1;
+}
+
+.control-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.control-button:active {
+    transform: scale(0.95);
+}
+
+.control-button.dragging {
+    cursor: move;
+    opacity: 0.8;
+}
+
+.control-button.recording {
+    background: linear-gradient(135deg, #ef5350 0%, #e53935 100%);
+    animation: recordingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recordingPulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(239, 83, 80, 0.5);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(239, 83, 80, 0.8);
+    }
+}
+
+/* ==================== 控制菜单样式 ==================== */
+
+.control-menu {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
+    border-radius: 40px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 999;
+    animation: menuFadeIn 0.3s ease-out;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.control-menu-item {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 28px;
+    transition: all 0.3s ease;
+    color: white;
+}
+
+.control-menu-item:hover {
+    background: rgba(255, 255, 255, 0.5);
+    transform: scale(1.1);
+}
+
+.control-menu-item:active {
+    transform: scale(0.95);
+}
+
+/* ==================== 悬浮面板样式 ==================== */
+
+.floating-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: white;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: scale(0.95);
+    transition: all 0.3s ease-out;
+}
+
+.floating-panel.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.floating-panel-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.floating-panel-title {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0;
+}
+
+.floating-panel-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.floating-panel-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.floating-panel-button:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.floating-panel-button:active {
+    transform: scale(0.95);
+}
+
+.floating-panel-content {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
     .login-form-container,
@@ -1092,6 +1329,18 @@ button[type="submit"]:active {
     .message-bubble.message-voice .bubble-content,
     .message-bubble.message-function .bubble-content {
         min-width: 150px;
+    }
+    
+    .control-button {
+        width: 60px;
+        height: 60px;
+        font-size: 24px;
+    }
+    
+    .control-menu-item {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
     }
 }
 

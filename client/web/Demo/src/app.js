@@ -7,7 +7,7 @@
 const { MuseumAgentClient, Events } = window.MuseumAgentSDK;
 
 import { LoginForm } from './components/LoginForm.js';
-import { ChatWindow } from './components/ChatWindow.js';
+import { UnityContainer } from './components/UnityContainer.js';
 import { createElement, $, showNotification } from './utils/dom.js';
 
 class App {
@@ -42,7 +42,7 @@ class App {
         if (restored) {
             console.log('[App] 会话恢复成功');
             this.client = client;
-            this.showChatView();
+            this.showUnityView();
             showNotification('会话已恢复', 'success');
         } else {
             console.log('[App] 没有保存的会话，显示登录页面');
@@ -188,15 +188,17 @@ class App {
         await this.client.saveSession();
         console.log('[App] 会话已保存');
         
-        // 显示聊天界面
-        this.showChatView();
+        // 显示 Unity 界面
+        this.showUnityView();
     }
 
     /**
-     * 显示聊天视图
+     * 显示 Unity 视图
      */
-    showChatView() {
-        console.log('[App] 显示聊天视图');
+    showUnityView() {
+        console.log('[App] 显示 Unity 视图');
+        
+        this.cleanupCurrentView();
         
         // 清空容器
         this.container.innerHTML = '';
@@ -205,70 +207,12 @@ class App {
         this.container.style.justifyContent = '';
         this.container.style.height = '100vh';
         this.container.style.width = '100vw';
+        this.container.style.overflow = 'hidden';
 
-        // 创建聊天视图
-        const chatView = createElement('div', { className: 'chat-view' });
-
-        // 头部
-        const header = createElement('div', { className: 'chat-header' });
-        const title = createElement('h1', { textContent: 'MuseumAgent 智能体' });
+        // 创建 Unity 容器组件
+        this.currentView = new UnityContainer(this.container, this.client);
         
-        // 按钮容器
-        const buttonContainer = createElement('div', { className: 'header-button-container' });
-        
-        // 设置按钮
-        const settingsButton = createElement('button', {
-            className: 'settings-button',
-            textContent: '⚙️'
-        });
-        settingsButton.addEventListener('click', () => {
-            if (window.settingsPanel) {
-                window.settingsPanel.toggle();
-            } else {
-                import('./components/SettingsPanel.js').then(({ SettingsPanel }) => {
-                    window.settingsPanel = new SettingsPanel(this.client);
-                    // ✅ 将设置面板引用传递给客户端（用于差异配置更新）
-                    this.client.setSettingsPanel(window.settingsPanel);
-                    window.settingsPanel.toggle();
-                });
-            }
-        });
-        
-        // 登出按钮
-        const logoutButton = createElement('button', {
-            className: 'logout-button',
-            textContent: '登出'
-        });
-        logoutButton.addEventListener('click', () => {
-            this.logout();
-        });
-
-        // 全屏按钮
-        const fullscreenButton = createElement('button', {
-            className: 'fullscreen-button',
-            textContent: '◱'
-        });
-        fullscreenButton.addEventListener('click', () => {
-            this.toggleFullscreen();
-        });
-
-        buttonContainer.appendChild(settingsButton);
-        buttonContainer.appendChild(logoutButton);
-        buttonContainer.appendChild(fullscreenButton);
-        header.appendChild(title);
-        header.appendChild(buttonContainer);
-
-        // 聊天容器
-        const chatContainer = createElement('div', { className: 'chat-container' });
-
-        chatView.appendChild(header);
-        chatView.appendChild(chatContainer);
-        this.container.appendChild(chatView);
-
-        // 创建聊天窗口组件
-        this.currentView = new ChatWindow(chatContainer, this.client);
-        
-        console.log('[App] 聊天窗口创建完成');
+        console.log('[App] Unity 视图创建完成');
     }
 
     /**
@@ -286,31 +230,6 @@ class App {
         
         // 显示登录界面
         this.showLoginView();
-    }
-
-    /**
-     * 切换全屏
-     */
-    toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            // 进入全屏
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen();
-            } else if (document.documentElement.webkitRequestFullscreen) {
-                document.documentElement.webkitRequestFullscreen();
-            } else if (document.documentElement.msRequestFullscreen) {
-                document.documentElement.msRequestFullscreen();
-            }
-        } else {
-            // 退出全屏
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
-            }
-        }
     }
 
     /**

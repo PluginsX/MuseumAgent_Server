@@ -7,8 +7,22 @@
 import { createElement } from '../utils/dom.js';
 
 export class SettingsPanel {
-    constructor(client) {
-        this.client = client;
+    constructor(container, client) {
+        // 支持两种调用方式：
+        // 1. new SettingsPanel(container, client) - 在 FloatingPanel 中使用
+        // 2. new SettingsPanel(client) - 独立使用（向后兼容）
+        if (client === undefined) {
+            // 独立使用模式
+            this.client = container;
+            this.container = null;
+            this.isStandalone = true;
+        } else {
+            // FloatingPanel 模式
+            this.container = container;
+            this.client = client;
+            this.isStandalone = false;
+        }
+        
         this.element = null;
         this.isOpen = false;
         
@@ -148,12 +162,24 @@ export class SettingsPanel {
             functions: false   // 函数定义（functionCalling）
             // VAD 配置不需要发送到服务器，所以不需要开关
         };
+        
+        // 如果是在 FloatingPanel 中使用，立即渲染
+        if (!this.isStandalone && this.container) {
+            this.render();
+        }
     }
 
     /**
      * 渲染设置面板
      */
     render() {
+        // 如果是在 FloatingPanel 中使用，直接渲染到容器
+        if (!this.isStandalone && this.container) {
+            this.renderContent(this.container);
+            return this.container;
+        }
+        
+        // 独立模式：创建完整的面板
         this.element = createElement('div', {
             className: 'settings-panel'
         });
@@ -184,13 +210,26 @@ export class SettingsPanel {
             className: 'settings-content'
         });
 
+        this.renderContent(content);
+
+        this.element.appendChild(header);
+        this.element.appendChild(content);
+
+        return this.element;
+    }
+
+    /**
+     * 渲染内容部分（可复用）
+     */
+    renderContent(container) {
+
         // 1. 客户端基本信息
         const basicSection = this.renderCollapsibleSection(
             'basic',
             '客户端基本信息',
             () => this.renderBasicSettings()
         );
-        content.appendChild(basicSection);
+        container.appendChild(basicSection);
 
         // 2. 智能体角色配置
         const roleSection = this.renderCollapsibleSection(
@@ -198,7 +237,7 @@ export class SettingsPanel {
             '智能体角色配置',
             () => this.renderRoleSettings()
         );
-        content.appendChild(roleSection);
+        container.appendChild(roleSection);
 
         // 3. 上下文配置
         const sceneSection = this.renderCollapsibleSection(
@@ -206,7 +245,7 @@ export class SettingsPanel {
             '上下文配置',
             () => this.renderSceneSettings()
         );
-        content.appendChild(sceneSection);
+        container.appendChild(sceneSection);
 
         // 4. 函数定义
         const functionsSection = this.renderCollapsibleSection(
@@ -214,7 +253,7 @@ export class SettingsPanel {
             '函数定义',
             () => this.renderFunctionsSettings()
         );
-        content.appendChild(functionsSection);
+        container.appendChild(functionsSection);
 
         // 5. VAD配置
         const vadSection = this.renderCollapsibleSection(
@@ -222,12 +261,7 @@ export class SettingsPanel {
             'VAD配置',
             () => this.renderVADSettings()
         );
-        content.appendChild(vadSection);
-
-        this.element.appendChild(header);
-        this.element.appendChild(content);
-
-        return this.element;
+        container.appendChild(vadSection);
     }
 
     /**
@@ -920,5 +954,21 @@ export class SettingsPanel {
         }
         
         console.log('[SettingsPanel] 所有更新开关已清除');
+    }
+
+    /**
+     * 销毁组件
+     */
+    destroy() {
+        console.log('[SettingsPanel] 销毁组件');
+        
+        if (this.element && this.element.parentNode) {
+            this.element.parentNode.removeChild(this.element);
+        }
+        
+        this.element = null;
+        this.isOpen = false;
+        
+        console.log('[SettingsPanel] 组件已销毁');
     }
 }
