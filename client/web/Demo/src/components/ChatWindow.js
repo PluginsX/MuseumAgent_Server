@@ -3,7 +3,9 @@
  * 基于 MuseumAgentSDK 客户端库开发
  */
 
-import { Events } from '../../lib/MuseumAgentSDK.js';
+// 从全局变量获取 SDK
+const { Events } = window.MuseumAgentSDK;
+
 import { MessageBubble } from './MessageBubble.js';
 import { createElement, scrollToBottom } from '../utils/dom.js';
 

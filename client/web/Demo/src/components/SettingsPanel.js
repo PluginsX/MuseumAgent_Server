@@ -778,46 +778,28 @@ export class SettingsPanel {
             // 处理 vadParams 配置
             if (parent === 'vadParams') {
                 this.config.vadParams[child] = value;
-                this.client.config.vadParams[child] = value;
+                // ✅ 使用 SDK 的配置管理（自动保存）
+                this.client.updateConfig('vadParams', { ...this.client.config.vadParams, [child]: value });
             }
         } else {
             this.config[key] = value;
             
-            // 更新客户端库配置
-            if (key === 'requireTTS') {
-                this.client.config.requireTTS = value;
-                // ✅ 自动开启 basic 配置的更新开关
+            // ✅ 使用 SDK 的配置管理（自动保存）
+            this.client.updateConfig(key, value);
+            
+            // 更新开关状态
+            if (key === 'requireTTS' || key === 'enableSRS') {
                 this._autoEnableUpdateSwitch('basic');
-            } else if (key === 'enableSRS') {
-                this.client.config.enableSRS = value;
-                // ✅ 自动开启 basic 配置的更新开关
-                this._autoEnableUpdateSwitch('basic');
-            } else if (key === 'autoPlay') {
-                this.client.config.autoPlay = value;
-            } else if (key === 'vadEnabled') {
-                this.client.vadEnabled = value;
             } else if (key === 'functionCalling') {
-                this.client.config.functionCalling = value;
-                // ✅ 自动开启 functions 配置的更新开关
                 this._autoEnableUpdateSwitch('functions');
-            } else if (key === 'platform') {
-                this.client.config.platform = value;
-            } else if (key === 'roleDescription') {
-                this.client.config.roleDescription = value;
-                // ✅ 自动开启 role 配置的更新开关
-                this._autoEnableUpdateSwitch('role');
-            } else if (key === 'responseRequirements') {
-                this.client.config.responseRequirements = value;
-                // ✅ 自动开启 role 配置的更新开关
+            } else if (key === 'roleDescription' || key === 'responseRequirements') {
                 this._autoEnableUpdateSwitch('role');
             } else if (key === 'sceneDescription') {
-                this.client.config.sceneDescription = value;
-                // ✅ 自动开启 scene 配置的更新开关
                 this._autoEnableUpdateSwitch('scene');
             }
         }
 
-        console.log('[SettingsPanel] 配置已更新并应用到客户端库');
+        console.log('[SettingsPanel] 配置已更新并自动保存');
     }
 
     /**

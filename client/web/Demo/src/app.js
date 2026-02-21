@@ -1,13 +1,14 @@
 /**
  * MuseumAgent Demo - 应用入口
- * 基于 MuseumAgentSDK 客户端库开发
+ * 使用 MuseumAgentSDK 构建产物（UMD 格式）
  */
 
-import { MuseumAgentClient, Events } from '../lib/index.js';
+// 从全局变量获取 SDK
+const { MuseumAgentClient, Events } = window.MuseumAgentSDK;
+
 import { LoginForm } from './components/LoginForm.js';
 import { ChatWindow } from './components/ChatWindow.js';
 import { createElement, $, showNotification } from './utils/dom.js';
-import { encryptData, decryptData } from './utils/security.js';
 
 class App {
     constructor() {
@@ -31,47 +32,31 @@ class App {
             document.body.appendChild(this.container);
         }
 
-        // 直接显示登录页面（不尝试恢复会话）
-        // 因为 WebSocket 会话是临时的，关闭浏览器后会话就失效了
-        this.showLoginView();
+        // ✅ 尝试从保存的会话恢复
+        const client = new MuseumAgentClient({
+            serverUrl: 'wss://museum.soulflaw.com:12301',
+            functionCalling: this.getPetFunctions()
+        });
+        
+        const restored = await client.reconnectFromSavedSession();
+        if (restored) {
+            console.log('[App] 会话恢复成功');
+            this.client = client;
+            this.showChatView();
+            showNotification('会话已恢复', 'success');
+        } else {
+            console.log('[App] 没有保存的会话，显示登录页面');
+            this.showLoginView();
+        }
 
         console.log('[App] 应用初始化完成');
     }
-
+    
     /**
-     * 显示登录视图
+     * 获取宠物函数配置
      */
-    showLoginView() {
-        console.log('[App] 显示登录视图');
-        
-        this.cleanupCurrentView();
-        
-        this.container.innerHTML = '';
-        this.container.style.display = 'flex';
-        this.container.style.alignItems = 'center';
-        this.container.style.justifyContent = 'center';
-        
-        this.currentView = new LoginForm(this.container, async (serverUrl, authData) => {
-            // 登录回调
-            try {
-                await this.connectAndShowChat(serverUrl, authData);
-                showNotification('登录成功', 'success');
-            } catch (error) {
-                console.error('[App] 登录失败:', error);
-                showNotification('登录失败: ' + error.message, 'error');
-                throw error; // 重新抛出错误，让LoginForm处理
-            }
-        });
-    }
-
-    /**
-     * 连接并显示聊天界面
-     */
-    async connectAndShowChat(serverUrl, authData) {
-        console.log('[App] 连接服务器...');
-        
-        // 桌面智能宠物预设函数定义
-        const petFunctions = [
+    getPetFunctions() {
+        return [
             {
                 name: "move_to_position",
                 description: "移动宠物到屏幕指定位置",
@@ -141,7 +126,40 @@ class App {
                 }
             }
         ];
+    }
 
+    /**
+     * 显示登录视图
+     */
+    showLoginView() {
+        console.log('[App] 显示登录视图');
+        
+        this.cleanupCurrentView();
+        
+        this.container.innerHTML = '';
+        this.container.style.display = 'flex';
+        this.container.style.alignItems = 'center';
+        this.container.style.justifyContent = 'center';
+        
+        this.currentView = new LoginForm(this.container, async (serverUrl, authData) => {
+            // 登录回调
+            try {
+                await this.connectAndShowChat(serverUrl, authData);
+                showNotification('登录成功', 'success');
+            } catch (error) {
+                console.error('[App] 登录失败:', error);
+                showNotification('登录失败: ' + error.message, 'error');
+                throw error; // 重新抛出错误，让LoginForm处理
+            }
+        });
+    }
+
+    /**
+     * 连接并显示聊天界面
+     */
+    async connectAndShowChat(serverUrl, authData) {
+        console.log('[App] 连接服务器...');
+        
         // 创建客户端（使用库默认的最佳VAD参数）
         this.client = new MuseumAgentClient({
             serverUrl: serverUrl,
@@ -149,7 +167,7 @@ class App {
             enableSRS: true,
             autoPlay: true,  // 默认开启自动播放
             vadEnabled: true,
-            functionCalling: petFunctions
+            functionCalling: this.getPetFunctions()
         });
 
         // 监听会话过期
@@ -165,6 +183,10 @@ class App {
 
         // 连接
         await this.client.connect(authData);
+        
+        // ✅ 保存会话（自动加密）
+        await this.client.saveSession();
+        console.log('[App] 会话已保存');
         
         // 显示聊天界面
         this.showChatView();
@@ -255,15 +277,12 @@ class App {
     async logout() {
         console.log('[App] 登出');
         
-        // 断开连接
+        // 断开连接并清除保存的会话
         if (this.client) {
-            await this.client.disconnect();
+            await this.client.disconnect('用户登出', true);  // ✅ 第二个参数 true 表示清除会话
             this.client.cleanup();
             this.client = null;
         }
-        
-        // 清除保存的认证信息
-        this.clearAuthData();
         
         // 显示登录界面
         this.showLoginView();
@@ -302,43 +321,6 @@ class App {
             this.currentView.destroy();
         }
         this.currentView = null;
-    }
-
-    /**
-     * 保存认证信息
-     */
-    async saveAuthData(serverUrl, authData) {
-        const data = {
-            serverUrl,
-            authData: {
-                type: authData.type,
-                account: authData.account,
-                password: authData.password ? await encryptData(authData.password) : undefined,
-                api_key: authData.api_key ? await encryptData(authData.api_key) : undefined
-            }
-        };
-        localStorage.setItem('museumAgent_auth', JSON.stringify(data));
-    }
-
-    /**
-     * 加载认证信息
-     */
-    loadAuthData() {
-        const data = localStorage.getItem('museumAgent_auth');
-        if (!data) return null;
-        
-        try {
-            return JSON.parse(data);
-        } catch (error) {
-            return null;
-        }
-    }
-
-    /**
-     * 清除认证信息
-     */
-    clearAuthData() {
-        localStorage.removeItem('museumAgent_auth');
     }
 }
 

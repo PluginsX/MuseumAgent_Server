@@ -1,0 +1,70 @@
+{
+  "name": "museum-agent-client-sdk",
+  "version": "2.0.0",
+  "description": "MuseumAgent 通用 Web 客户端 SDK V2.0 - 全新架构，发送接收完全解耦，支持会话管理和配置持久化",
+  "type": "module",
+  "main": "dist/museum-agent-sdk.js",
+  "module": "dist/museum-agent-sdk.esm.js",
+  "unpkg": "dist/museum-agent-sdk.min.js",
+  "jsdelivr": "dist/museum-agent-sdk.min.js",
+  "exports": {
+    ".": {
+      "import": "./dist/museum-agent-sdk.esm.js",
+      "require": "./dist/museum-agent-sdk.js",
+      "browser": "./dist/museum-agent-sdk.min.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "lib/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.config.js",
+    "watch": "rollup -c rollup.config.js -w",
+    "dev": "rollup -c rollup.config.js -w",
+    "lint": "eslint lib/**/*.js",
+    "format": "prettier --write \"lib/**/*.js\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "museum-agent",
+    "websocket",
+    "ai-agent",
+    "voice",
+    "tts",
+    "stt",
+    "vad",
+    "streaming",
+    "full-duplex",
+    "session-management",
+    "config-management"
+  ],
+  "author": "MuseumAgent Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/museum-agent"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/museum-agent/issues"
+  },
+  "homepage": "https://github.com/your-org/museum-agent#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0",
+    "rollup": "^4.9.0"
+  },
+  "browser": {
+    "index.js": "./dist/museum-agent-sdk.min.js"
+  }
+}

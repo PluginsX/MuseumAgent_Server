@@ -1,17 +1,19 @@
 /**
- * 安全工具
- * 提供加密、XSS 防护等功能
+ * 安全工具函数（纯函数）
+ * 提供加密、解密、XSS 防护等功能
  */
 
 /**
  * 使用 Web Crypto API 加密数据
+ * @param {string} data - 要加密的数据
+ * @returns {Promise<string>} Base64 编码的加密数据
  */
 export async function encryptData(data) {
     try {
         const encoder = new TextEncoder();
         const dataBuffer = encoder.encode(data);
         
-        // 生成密钥（实际应用中应该使用用户特定的密钥）
+        // 生成密钥
         const key = await getEncryptionKey();
         
         // 生成随机 IV
@@ -41,6 +43,8 @@ export async function encryptData(data) {
 
 /**
  * 解密数据
+ * @param {string} encryptedData - Base64 编码的加密数据
+ * @returns {Promise<string>} 解密后的数据
  */
 export async function decryptData(encryptedData) {
     try {
@@ -78,6 +82,7 @@ export async function decryptData(encryptedData) {
 
 /**
  * 获取加密密钥（从浏览器指纹生成）
+ * @private
  */
 async function getEncryptionKey() {
     // 使用浏览器指纹作为密钥材料
@@ -108,6 +113,7 @@ async function getEncryptionKey() {
 
 /**
  * 获取浏览器指纹
+ * @private
  */
 async function getBrowserFingerprint() {
     const components = [
@@ -123,6 +129,8 @@ async function getBrowserFingerprint() {
 
 /**
  * XSS 防护：转义 HTML
+ * @param {string} text - 要转义的文本
+ * @returns {string} 转义后的文本
  */
 export function escapeHtml(text) {
     const div = document.createElement('div');
@@ -132,6 +140,8 @@ export function escapeHtml(text) {
 
 /**
  * XSS 防护：清理 HTML（保留安全标签）
+ * @param {string} html - 要清理的 HTML
+ * @returns {string} 清理后的 HTML
  */
 export function sanitizeHtml(html) {
     const allowedTags = ['b', 'i', 'em', 'strong', 'a', 'br', 'p'];
@@ -179,6 +189,9 @@ export function sanitizeHtml(html) {
 
 /**
  * 验证输入
+ * @param {string} value - 要验证的值
+ * @param {Object} rules - 验证规则
+ * @returns {Object} 验证结果 { valid, errors }
  */
 export function validateInput(value, rules = {}) {
     const errors = [];
@@ -219,6 +232,7 @@ export function validateInput(value, rules = {}) {
 
 /**
  * 生成安全的随机 ID
+ * @returns {string} 随机 ID
  */
 export function generateSecureId() {
     const array = new Uint8Array(16);
