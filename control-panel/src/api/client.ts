@@ -3,14 +3,11 @@ import type {
   User, 
   ClientInfo, 
   ClientStats, 
-  AuditLog, 
   LLMConfig, 
   STTConfig, 
   TTSConfig, 
   SRSConfig,
   SessionConfig,
-  MonitorStatus,
-  LogsResponse,
   PaginationParams 
 } from '../types';
 
@@ -55,47 +52,9 @@ export const configApi = {
   updateServer: (data: any) => http.put('/api/admin/config/server', data),
 };
 
-// 系统监控API
-export const monitorApi = {
-  status: () => http.get<MonitorStatus>('/api/admin/monitor/status'),
-  logs: (params?: PaginationParams) => http.get<LogsResponse>('/api/admin/monitor/logs', { params }),
-  clearLogs: () => http.delete('/api/admin/monitor/logs'),
-};
 
-// 用户管理API
-export const usersApi = {
-  list: (params?: PaginationParams & { search?: string }) => 
-    http.get<User[]>('/api/admin/users/admins', { params }),
-  create: (data: { username: string; password: string; email?: string; role?: string }) =>
-    http.post<User>('/api/admin/users/admins', data),
-  update: (id: number, data: { email?: string; role?: string; is_active?: boolean; password?: string }) =>
-    http.put<User>(`/api/admin/users/admins/${id}`, data),
-  delete: (id: number) => http.delete(`/api/admin/users/admins/${id}`),
-};
 
-// 客户管理API
-export const clientsApiExtended = {
-  // 创建客户账户
-  createClient: (data: { username: string; password: string; email?: string; role?: string; remark?: string }) =>
-    http.post<User>('/api/admin/users/clients', data),
-  // 删除客户账户
-  deleteClient: (clientId: number) => http.delete(`/api/admin/users/clients/${clientId}`),
-  // 重置客户API密钥
-  resetApiKey: (clientId: number) => 
-    http.post<{ api_key: string }>('/api/internal/client/api_key/reset', { client_id: clientId }),
-  // 查询审计日志
-  getAuditLogs: (params?: { 
-    start_time?: string; 
-    end_time?: string; 
-    action?: string; 
-    user_id?: number; 
-    page?: number; 
-    size?: number;
-  }) => http.get<{ logs: AuditLog[]; pagination: any }>('/api/internal/audit/logs', { params }),
-  // 获取客户列表
-  listClients: (params?: PaginationParams) => 
-    http.get<User[]>('/api/admin/users/clients', { params }),
-};
+
 
 // 客户端连接管理API
 export const clientsApi = {
@@ -139,4 +98,6 @@ export const databaseApi = {
   initializeDatabase: () => http.post('/api/admin/database/initialize'),
   // 清空数据库
   clearDatabase: () => http.post('/api/admin/database/clear'),
+  // 清空表记录
+  clearTable: (tableName: string) => http.post(`/api/admin/database/tables/${tableName}/clear`),
 };

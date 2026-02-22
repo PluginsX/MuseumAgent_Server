@@ -29,6 +29,7 @@ from src.db.client_api import ClientLocalAPI
 from src.session.strict_session_manager import strict_session_manager
 from src.services.registry import service_registry
 from src.services.interrupt_manager import get_interrupt_manager
+from src.common.access_log_manager import access_log_manager
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 manager = ConnectionManager()
@@ -123,6 +124,16 @@ async def _handle_register(ws: WebSocket, payload: Dict, conn_session_id: Option
         "session_id": session_id,
         "session_timeout_seconds": SESSION_TIMEOUT_SECONDS,
     }, session_id))
+    # 记录注册请求访问日志
+    access_log_manager.add_log({
+        'client_user_id': client_info.get('user_id'),
+        'request_type': 'WEBSOCKET_REGISTER',
+        'endpoint': '/ws/agent/stream',
+        'ip_address': _get_client_ip(ws),
+        'status_code': 200,
+        'details': f"Platform: {platform}, Require TTS: {require_tts}, Enable SRS: {enable_srs}"
+    })
+    
     logger.ws.info("Session registered", {"session_id": session_id[:16], "platform": platform})
     return session_id
 
@@ -157,6 +168,16 @@ async def _handle_request(
     stream_seq = int(payload["stream_seq"])
     content = payload.get("content", {})
     require_tts = payload.get("require_tts")
+    
+    # 记录请求开始
+    start_time = time.time()
+    log_record = {
+        'request_type': f'WEBSOCKET_REQUEST_{data_type}',
+        'endpoint': '/ws/agent/stream',
+        'ip_address': _get_client_ip(ws),
+        'status_code': 200,  # 默认状态码
+        'details': f"Request ID: {request_id}, Stream: {stream_flag}, Data Type: {data_type}"
+    }
 
     # ✅ 仅在首包或非流式消息时更新会话配置
     # 对于语音流式消息：只在 stream_seq=0 时更新配置
@@ -486,6 +507,12 @@ async def _handle_request(
     task = asyncio.create_task(process_request())
     active_tasks[session_id] = task
     
+    # 暂时注释掉REQUEST消息的日志记录，只保留注册和释放会话的记录
+    # 记录请求结束，计算响应时间
+    # response_time = int((time.time() - start_time) * 1000)
+    # log_record['response_time'] = response_time
+    # access_log_manager.add_log(log_record)
+    
     # ✅ 立即返回 True，不阻塞主循环，让主循环可以立即接收下一条消息
     return True
 
@@ -697,6 +724,15 @@ async def agent_stream(websocket: WebSocket):
                 reason = payload.get("reason", "客户端关闭")
                 await send_json(build_message("SHUTDOWN", {"reason": reason}, session_id))
                 if session_id:
+                    # 记录释放会话的访问日志
+                    access_log_manager.add_log({
+                        'client_user_id': None,  # 无法直接获取用户ID，可以从会话中获取
+                        'request_type': 'WEBSOCKET_SHUTDOWN',
+                        'endpoint': '/ws/agent/stream',
+                        'ip_address': _get_client_ip(websocket),
+                        'status_code': 200,
+                        'details': f"Session: {session_id}, Reason: {reason}"
+                    })
                     strict_session_manager.unregister_session(session_id)
                     await manager.disconnect(session_id)
                 break

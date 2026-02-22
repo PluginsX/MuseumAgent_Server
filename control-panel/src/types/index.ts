@@ -142,16 +142,5 @@ export interface SessionConfig {
   enable_heartbeat_monitoring: boolean;
 }
 
-// 系统监控状态
-export interface MonitorStatus {
-  service_status: string;
-  version: string;
-  uptime: string;
-}
 
-// 日志响应
-export interface LogsResponse {
-  lines: string[];
-  total: number;
-}
 

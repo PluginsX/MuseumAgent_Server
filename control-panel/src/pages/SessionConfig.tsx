@@ -94,7 +94,7 @@ const SessionConfigPage: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Title level={3}>会话管理配置</Title>
+      <Title level={3}>会话配置</Title>
       
       <Row gutter={[24, 24]}>
         {/* 配置表单区域 */}

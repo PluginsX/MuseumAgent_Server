@@ -1,17 +1,18 @@
 /**
  * 控制按钮组件
  * 悬浮在页面顶层的圆形按钮，支持单击、长按、拖拽
+ * ✅ 现代化方案：Transform + Pointer Events + RAF
  */
 
-import { GestureRecognizer } from '../utils/gesture.js';
 import { createElement } from '../utils/dom.js';
 
 // 从全局变量获取 SDK
 const { Events } = window.MuseumAgentSDK;
 
 export class ControlButton {
-    constructor(client, options = {}) {
+    constructor(client, agentController, options = {}) {
         this.client = client;
+        this.agentController = agentController;  // ✅ 引用 AgentController
         this.options = {
             onMenuSelect: options.onMenuSelect || null,
             defaultPosition: options.defaultPosition || 'bottom-right'
@@ -19,9 +20,26 @@ export class ControlButton {
         
         this.element = null;
         this.menu = null;
-        this.gesture = null;
         this.isVisible = true;
-        this.dragStartPosition = { x: 0, y: 0 };
+        
+        // ✅ 拖拽状态（单一数据源）
+        this.position = { x: 0, y: 0 };
+        this.buttonSize = 60;  // 固定尺寸
+        this.isDragging = false;
+        this.dragStartOffset = { x: 0, y: 0 };
+        this.rafId = null;
+        
+        // ✅ 手势识别状态
+        this.gestureState = {
+            isPressed: false,
+            startX: 0,
+            startY: 0,
+            startTime: 0,
+            longPressTimer: null,
+            longPressTriggered: false,
+            moveThreshold: 10,
+            longPressDelay: 500
+        };
         
         this.init();
     }
@@ -73,6 +91,7 @@ export class ControlButton {
         const minDimension = Math.min(window.innerWidth, window.innerHeight);
         const size = Math.max(30, Math.min(100, minDimension * 0.1));
         
+        this.buttonSize = size;  // ✅ 更新逻辑尺寸
         this.element.style.width = size + 'px';
         this.element.style.height = size + 'px';
         this.element.style.fontSize = (size * 0.5) + 'px';
@@ -82,90 +101,195 @@ export class ControlButton {
      * 设置默认位置
      */
     setDefaultPosition() {
-        const rect = this.element.getBoundingClientRect();
         const padding = 20;
-        
-        let x, y;
         
         switch (this.options.defaultPosition) {
             case 'bottom-right':
-                x = window.innerWidth - rect.width - padding;
-                y = window.innerHeight - rect.height - padding;
+                this.position.x = window.innerWidth - this.buttonSize - padding;
+                this.position.y = window.innerHeight - this.buttonSize - padding;
                 break;
             case 'bottom-left':
-                x = padding;
-                y = window.innerHeight - rect.height - padding;
+                this.position.x = padding;
+                this.position.y = window.innerHeight - this.buttonSize - padding;
                 break;
             case 'top-right':
-                x = window.innerWidth - rect.width - padding;
-                y = padding;
+                this.position.x = window.innerWidth - this.buttonSize - padding;
+                this.position.y = padding;
                 break;
             case 'top-left':
-                x = padding;
-                y = padding;
+                this.position.x = padding;
+                this.position.y = padding;
                 break;
             default:
-                x = window.innerWidth - rect.width - padding;
-                y = window.innerHeight - rect.height - padding;
+                this.position.x = window.innerWidth - this.buttonSize - padding;
+                this.position.y = window.innerHeight - this.buttonSize - padding;
         }
         
-        this.setPosition(x, y);
+        this.updatePosition();
     }
     
     /**
-     * 设置位置
+     * ✅ 更新位置（使用 transform，GPU 加速）
      */
-    setPosition(x, y) {
-        this.element.style.left = x + 'px';
-        this.element.style.top = y + 'px';
+    updatePosition() {
+        this.element.style.transform = `translate(${this.position.x}px, ${this.position.y}px)`;
     }
     
     /**
      * 约束位置（限制在页面范围内）
      */
     constrainPosition() {
-        const rect = this.element.getBoundingClientRect();
-        const maxX = window.innerWidth - rect.width;
-        const maxY = window.innerHeight - rect.height;
+        const maxX = window.innerWidth - this.buttonSize;
+        const maxY = window.innerHeight - this.buttonSize;
         
-        const x = Math.max(0, Math.min(rect.left, maxX));
-        const y = Math.max(0, Math.min(rect.top, maxY));
+        this.position.x = Math.max(0, Math.min(this.position.x, maxX));
+        this.position.y = Math.max(0, Math.min(this.position.y, maxY));
         
-        this.setPosition(x, y);
+        this.updatePosition();
     }
     
     /**
-     * 绑定手势
+     * ✅ 绑定手势（使用 Pointer Events）
      */
     bindGestures() {
-        this.gesture = new GestureRecognizer(this.element, {
-            longPressDelay: 500,
-            moveThreshold: 10
+        // Pointer Down
+        this.element.addEventListener('pointerdown', (e) => {
+            // ✅ 只在按钮自身上阻止默认行为
+            if (e.target === this.element || this.element.contains(e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // ✅ 自动捕获后续事件
+            this.element.setPointerCapture(e.pointerId);
+            
+            // 记录手势状态
+            this.gestureState.isPressed = true;
+            this.gestureState.startX = e.clientX;
+            this.gestureState.startY = e.clientY;
+            this.gestureState.startTime = Date.now();
+            this.gestureState.longPressTriggered = false;
+            
+            // 启动长按定时器
+            this.gestureState.longPressTimer = setTimeout(() => {
+                if (this.gestureState.isPressed && !this.isDragging) {
+                    this.gestureState.longPressTriggered = true;
+                    this.handleLongPress();
+                }
+            }, this.gestureState.longPressDelay);
         });
         
-        // 单击 - 切换语音录制
-        this.gesture.on('click', () => {
-            this.handleClick();
+        // Pointer Move
+        this.element.addEventListener('pointermove', (e) => {
+            if (!this.gestureState.isPressed) return;
+            
+            // ✅ 只在拖拽时阻止默认行为
+            if (this.isDragging || Math.sqrt(
+                Math.pow(e.clientX - this.gestureState.startX, 2) + 
+                Math.pow(e.clientY - this.gestureState.startY, 2)
+            ) >= this.gestureState.moveThreshold) {
+                e.preventDefault();
+            }
+            
+            const deltaX = e.clientX - this.gestureState.startX;
+            const deltaY = e.clientY - this.gestureState.startY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // 超过阈值，进入拖拽模式
+            if (distance >= this.gestureState.moveThreshold) {
+                // 取消长按
+                if (this.gestureState.longPressTimer) {
+                    clearTimeout(this.gestureState.longPressTimer);
+                    this.gestureState.longPressTimer = null;
+                }
+                
+                // 开始拖拽
+                if (!this.isDragging) {
+                    this.isDragging = true;
+                    this.dragStartOffset = {
+                        x: e.clientX - this.position.x,
+                        y: e.clientY - this.position.y
+                    };
+                    this.element.classList.add('dragging');
+                    
+                    // 关闭菜单
+                    if (this.menu) {
+                        this.hideMenu();
+                    }
+                }
+                
+                // ✅ 拖拽移动（实时跟手）
+                this.position.x = e.clientX - this.dragStartOffset.x;
+                this.position.y = e.clientY - this.dragStartOffset.y;
+                
+                // 约束范围
+                const maxX = window.innerWidth - this.buttonSize;
+                const maxY = window.innerHeight - this.buttonSize;
+                this.position.x = Math.max(0, Math.min(this.position.x, maxX));
+                this.position.y = Math.max(0, Math.min(this.position.y, maxY));
+                
+                // ✅ 使用 RAF 批量更新
+                if (!this.rafId) {
+                    this.rafId = requestAnimationFrame(() => {
+                        this.updatePosition();
+                        this.rafId = null;
+                    });
+                }
+            }
         });
         
-        // 长按 - 显示菜单
-        this.gesture.on('longPress', () => {
-            this.handleLongPress();
+        // Pointer Up
+        this.element.addEventListener('pointerup', (e) => {
+            if (!this.gestureState.isPressed) return;
+            
+            // 释放捕获
+            this.element.releasePointerCapture(e.pointerId);
+            
+            // 取消长按定时器
+            if (this.gestureState.longPressTimer) {
+                clearTimeout(this.gestureState.longPressTimer);
+                this.gestureState.longPressTimer = null;
+            }
+            
+            // 取消 RAF
+            if (this.rafId) {
+                cancelAnimationFrame(this.rafId);
+                this.rafId = null;
+            }
+            
+            const deltaX = e.clientX - this.gestureState.startX;
+            const deltaY = e.clientY - this.gestureState.startY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const duration = Date.now() - this.gestureState.startTime;
+            
+            if (this.isDragging) {
+                // 结束拖拽
+                this.isDragging = false;
+                this.element.classList.remove('dragging');
+            } else if (!this.gestureState.longPressTriggered && 
+                       distance < this.gestureState.moveThreshold && 
+                       duration < 500) {
+                // 单击
+                this.handleClick();
+            }
+            
+            // 重置状态
+            this.gestureState.isPressed = false;
         });
         
-        // 拖拽开始
-        this.gesture.on('dragStart', (point) => {
-            this.handleDragStart(point);
-        });
-        
-        // 拖拽移动
-        this.gesture.on('dragMove', (point, deltaX, deltaY) => {
-            this.handleDragMove(point, deltaX, deltaY);
-        });
-        
-        // 拖拽结束
-        this.gesture.on('dragEnd', () => {
-            this.handleDragEnd();
+        // Pointer Cancel
+        this.element.addEventListener('pointercancel', (e) => {
+            if (this.gestureState.longPressTimer) {
+                clearTimeout(this.gestureState.longPressTimer);
+                this.gestureState.longPressTimer = null;
+            }
+            if (this.rafId) {
+                cancelAnimationFrame(this.rafId);
+                this.rafId = null;
+            }
+            this.isDragging = false;
+            this.gestureState.isPressed = false;
+            this.element.classList.remove('dragging');
         });
     }
     
@@ -200,8 +324,8 @@ export class ControlButton {
             if (this.client.isRecording) {
                 await this.client.stopRecording();
             } else {
-                // ✅ 获取设置面板的待更新配置
-                const settingsPanel = window._currentSettingsPanel;
+                // ✅ 通过 AgentController 获取设置面板的待更新配置
+                const settingsPanel = this.agentController ? this.agentController.getSettingsPanel() : null;
                 const updates = settingsPanel ? settingsPanel.getPendingUpdates() : {};
                 
                 // ✅ 传递当前配置参数 + 待更新配置
@@ -234,71 +358,7 @@ export class ControlButton {
         this.showMenu();
     }
     
-    /**
-     * 处理拖拽开始
-     */
-    handleDragStart(point) {
-        const rect = this.element.getBoundingClientRect();
-        
-        // ✅ 记录鼠标相对于按钮左上角的偏移量
-        this.dragOffset = {
-            x: point.x - rect.left,
-            y: point.y - rect.top
-        };
-        
-        console.log('[ControlButton] 拖拽开始:', {
-            point: point,
-            rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-            offset: this.dragOffset
-        });
-        
-        this.element.classList.add('dragging');
-        
-        // 如果菜单打开，关闭菜单
-        if (this.menu) {
-            this.hideMenu();
-        }
-    }
-    
-    /**
-     * 处理拖拽移动
-     */
-    handleDragMove(point, deltaX, deltaY) {
-        // ✅ 使用鼠标当前位置减去偏移量，实现实时跟手
-        let newX = point.x - this.dragOffset.x;
-        let newY = point.y - this.dragOffset.y;
-        
-        // ✅ 实时约束位置（在设置之前约束）
-        const rect = this.element.getBoundingClientRect();
-        const maxX = window.innerWidth - rect.width;
-        const maxY = window.innerHeight - rect.height;
-        
-        newX = Math.max(0, Math.min(newX, maxX));
-        newY = Math.max(0, Math.min(newY, maxY));
-        
-        console.log('[ControlButton] 拖拽移动:', {
-            point: point,
-            offset: this.dragOffset,
-            newX: newX,
-            newY: newY,
-            deltaX: deltaX,
-            deltaY: deltaY,
-            constrained: {
-                maxX: maxX,
-                maxY: maxY
-            }
-        });
-        
-        // ✅ 设置约束后的位置
-        this.setPosition(newX, newY);
-    }
-    
-    /**
-     * 处理拖拽结束
-     */
-    handleDragEnd() {
-        this.element.classList.remove('dragging');
-    }
+
     
     /**
      * 显示菜单
@@ -426,8 +486,14 @@ export class ControlButton {
      * 销毁
      */
     destroy() {
-        if (this.gesture) {
-            this.gesture.destroy();
+        // 清理定时器
+        if (this.gestureState.longPressTimer) {
+            clearTimeout(this.gestureState.longPressTimer);
+        }
+        
+        // 清理 RAF
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
         }
         
         if (this.menu) {

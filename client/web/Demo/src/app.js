@@ -1,5 +1,6 @@
 /**
  * MuseumAgent Demo - 应用入口
+ * ✅ 重构版本：引入 AgentController，实现 Agent-First 架构
  * 使用 MuseumAgentSDK 构建产物（UMD 格式）
  */
 
@@ -8,6 +9,7 @@ const { MuseumAgentClient, Events } = window.MuseumAgentSDK;
 
 import { LoginForm } from './components/LoginForm.js';
 import { UnityContainer } from './components/UnityContainer.js';
+import { AgentController } from './AgentController.js';
 import { createElement, $, showNotification } from './utils/dom.js';
 
 class App {
@@ -15,6 +17,7 @@ class App {
         this.container = null;
         this.currentView = null;
         this.client = null;
+        this.agentController = null;  // ✅ AgentController 实例
         
         this.init();
     }
@@ -31,6 +34,9 @@ class App {
             this.container = createElement('div', { id: 'app' });
             document.body.appendChild(this.container);
         }
+        
+        // ✅ 防止 Unity 捕获输入框的键盘事件
+        this.preventUnityKeyboardCapture();
 
         // ✅ 尝试从保存的会话恢复
         const client = new MuseumAgentClient({
@@ -42,6 +48,11 @@ class App {
         if (restored) {
             console.log('[App] 会话恢复成功');
             this.client = client;
+            
+            // ✅ 创建 AgentController
+            this.agentController = new AgentController(this.client);
+            console.log('[App] AgentController 已创建');
+            
             this.showUnityView();
             showNotification('会话已恢复', 'success');
         } else {
@@ -50,6 +61,41 @@ class App {
         }
 
         console.log('[App] 应用初始化完成');
+    }
+    
+    /**
+     * ✅ 防止 Unity 捕获输入框的键盘事件
+     * 简化方案：不需要任何复杂的事件拦截，Unity 几乎不需要键盘输入
+     */
+    preventUnityKeyboardCapture() {
+        // 什么都不做！
+        // 面板打开时会通过 disableUnityInput() 禁用 Unity
+        // 面板关闭时会通过 enableUnityInput() 恢复 Unity
+        console.log('[App] 键盘事件保护已简化，由面板控制 Unity 输入状态');
+    }
+    
+    /**
+     * ✅ 禁用 Unity 输入（面板打开时调用）
+     */
+    disableUnityInput() {
+        const canvas = document.querySelector('#unity-canvas');
+        if (canvas) {
+            canvas.style.pointerEvents = 'none';  // 禁用所有鼠标事件
+            canvas.setAttribute('tabindex', '-1');  // 禁用焦点
+            console.log('[App] Unity 输入已禁用');
+        }
+    }
+    
+    /**
+     * ✅ 启用 Unity 输入（面板关闭时调用）
+     */
+    enableUnityInput() {
+        const canvas = document.querySelector('#unity-canvas');
+        if (canvas) {
+            canvas.style.pointerEvents = 'auto';  // 恢复所有鼠标事件
+            canvas.setAttribute('tabindex', '0');  // 恢复焦点
+            console.log('[App] Unity 输入已启用');
+        }
     }
     
     /**
@@ -188,12 +234,16 @@ class App {
         await this.client.saveSession();
         console.log('[App] 会话已保存');
         
+        // ✅ 创建 AgentController（登录成功后立即创建）
+        this.agentController = new AgentController(this.client);
+        console.log('[App] AgentController 已创建');
+        
         // 显示 Unity 界面
         this.showUnityView();
     }
 
     /**
-     * 显示 Unity 视图
+     * ✅ 显示 Unity 视图（传入 AgentController）
      */
     showUnityView() {
         console.log('[App] 显示 Unity 视图');
@@ -209,17 +259,23 @@ class App {
         this.container.style.width = '100vw';
         this.container.style.overflow = 'hidden';
 
-        // 创建 Unity 容器组件
-        this.currentView = new UnityContainer(this.container, this.client);
+        // ✅ 创建 Unity 容器组件（传入 AgentController）
+        this.currentView = new UnityContainer(this.container, this.client, this.agentController);
         
         console.log('[App] Unity 视图创建完成');
     }
 
     /**
-     * 登出
+     * ✅ 登出（清理 AgentController）
      */
     async logout() {
         console.log('[App] 登出');
+        
+        // ✅ 销毁 AgentController
+        if (this.agentController) {
+            this.agentController.destroy();
+            this.agentController = null;
+        }
         
         // 断开连接并清除保存的会话
         if (this.client) {

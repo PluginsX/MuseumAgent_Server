@@ -14,7 +14,6 @@ const ConfigTTS = lazy(() => import('./pages/ConfigTTS'));
 const ConfigSRS = lazy(() => import('./pages/ConfigSRS'));
 const Clients = lazy(() => import('./pages/Clients'));
 const SessionConfig = lazy(() => import('./pages/SessionConfig'));
-const Monitor = lazy(() => import('./pages/Monitor'));
 const DatabaseManagement = lazy(() => import('./pages/DatabaseManagement'));
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -97,7 +96,6 @@ export default function App() {
             <Route path="config/srs" element={<LazyLoad><ConfigSRS /></LazyLoad>} />
             <Route path="clients" element={<LazyLoad><Clients /></LazyLoad>} />
             <Route path="session-config" element={<LazyLoad><SessionConfig /></LazyLoad>} />
-            <Route path="monitor" element={<LazyLoad><Monitor /></LazyLoad>} />
             <Route path="database-management" element={<LazyLoad><DatabaseManagement /></LazyLoad>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

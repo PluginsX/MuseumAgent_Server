@@ -48,7 +48,7 @@ def login(
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now()
     db.commit()
     from src.common.auth_utils import _get_jwt_config
     cfg = _get_jwt_config()  # noqa: F811

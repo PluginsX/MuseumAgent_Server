@@ -12,24 +12,24 @@ body {
 
 /* Ant Design Vue风格主题 */
 [data-theme='light'] {
-  --ant-primary-color: #42b883;
-  --ant-success-color: #67c23a;
-  --ant-warning-color: #e6a23c;
-  --ant-error-color: #f56c6c;
-  --ant-info-color: #909399;
-  --ant-layout-body-background: #f0f2f5;
+  --ant-primary-color: #2c3e50;
+  --ant-success-color: #34495e;
+  --ant-warning-color: #f39c12;
+  --ant-error-color: #e74c3c;
+  --ant-info-color: #95a5a6;
+  --ant-layout-body-background: #f8f9fa;
   --ant-component-background: #ffffff;
-  --ant-border-color-split: #e4e7ed;
-  --ant-text-color: #303133;
-  --ant-text-color-secondary: #606266;
-  --ant-text-color-placeholder: #a8abb2;
-  --ant-text-color-disabled: #c0c4cc;
-  --ant-text-color-heading: #303133;
-  --ant-text-color-link: #42b883;
+  --ant-border-color-split: #dee2e6;
+  --ant-text-color: #2c3e50;
+  --ant-text-color-secondary: #6c757d;
+  --ant-text-color-placeholder: #adb5bd;
+  --ant-text-color-disabled: #ced4da;
+  --ant-text-color-heading: #2c3e50;
+  --ant-text-color-link: #3498db;
   --ant-bg-container: #ffffff;
-  --ant-bg-container-disabled: #f5f7fa;
-  --ant-bg-layout: #f0f2f5;
-  --ant-border-color-base: #dcdfe6;
+  --ant-bg-container-disabled: #e9ecef;
+  --ant-bg-layout: #f8f9fa;
+  --ant-border-color-base: #dee2e6;
   --ant-border-color-inverse: #ffffff;
   --ant-box-shadow-card: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   --ant-box-shadow-toggle-button: 0 2px 8px 0 rgba(0, 0, 0, 0.15);
@@ -38,13 +38,13 @@ body {
 /* 链接样式 */
 #root a {
   font-weight: 500;
-  color: #42b883;
+  color: #ffffff;
   text-decoration: none;
   transition: color 0.3s;
 }
 
 #root a:hover {
-  color: #66c2a4;
+  color: #ffffff;
 }
 
 /* 标题样式 */
@@ -91,25 +91,25 @@ body {
 
 /* 主按钮 */
 .ant-btn-primary {
-  background-color: #42b883 !important;
-  border-color: #42b883 !important;
+  background-color: #2c3e50 !important;
+  border-color: #34495e !important;
   color: #ffffff !important;
   border-radius: 4px !important;
   font-weight: 500 !important;
-  box-shadow: 0 2px 4px rgba(66, 184, 131, 0.2) !important;
+  box-shadow: 0 2px 4px rgba(44, 62, 80, 0.2) !important;
 }
 
 .ant-btn-primary:hover,
 .ant-btn-primary:focus {
-  background-color: #66c2a4 !important;
-  border-color: #66c2a4 !important;
+  background-color: #34495e !important;
+  border-color: #34495e !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 8px rgba(66, 184, 131, 0.3) !important;
+  box-shadow: 0 4px 8px rgba(44, 62, 80, 0.3) !important;
 }
 
 .ant-btn-primary:active {
-  background-color: #33a069 !important;
-  border-color: #33a069 !important;
+  background-color: #1a252f !important;
+  border-color: #1a252f !important;
 }
 
 .ant-btn-primary[disabled],
@@ -153,8 +153,8 @@ body {
 
 .ant-input:focus,
 .ant-input:hover {
-  border-color: #42b883 !important;
-  box-shadow: 0 0 0 2px rgba(66, 184, 131, 0.1) !important;
+  border-color: #3498db !important;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1) !important;
 }
 
 .ant-input-number {
@@ -176,8 +176,8 @@ body {
 
 .ant-select-selector:focus,
 .ant-select-selector:hover {
-  border-color: #42b883 !important;
-  box-shadow: 0 0 0 2px rgba(66, 184, 131, 0.1) !important;
+  border-color: #3498db !important;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1) !important;
 }
 
 /* 下拉菜单 */
@@ -191,8 +191,8 @@ body {
 }
 
 .ant-select-item-option-selected {
-  background-color: #f0f9eb !important;
-  color: #42b883 !important;
+  background-color: #ebf5ff !important;
+  color: #3498db !important;
 }
 
 /* 表格样式 */
@@ -218,7 +218,7 @@ body {
 }
 
 .ant-table-tbody > tr.ant-table-row-selected > td {
-  background-color: #ecf5ff !important;
+  background-color: #ebf5ff !important;
 }
 
 /* 表单样式 */
@@ -248,13 +248,13 @@ body {
 }
 
 .ant-switch-checked {
-  background-color: #42b883 !important;
-  box-shadow: inset 0 0 0 1px #42b883 !important;
+  background-color: #2c3e50 !important;
+  box-shadow: inset 0 0 0 1px #3498db !important;
 }
 
 .ant-switch-checked:hover {
-  background-color: #66c2a4 !important;
-  box-shadow: inset 0 0 0 1px #66c2a4 !important;
+  background-color: #34495e !important;
+  box-shadow: inset 0 0 0 1px #34495e !important;
 }
 
 .ant-switch-handle {
@@ -302,12 +302,12 @@ body {
 /* 文字链接 */
 .ant-typography a,
 a.ant-typography {
-  color: #42b883 !important;
+  color: #3498db !important;
 }
 
 .ant-typography a:hover,
 a.ant-typography:hover {
-  color: #66c2a4 !important;
+  color: #2980b9 !important;
 }
 
 /* 标签 */
@@ -392,7 +392,7 @@ a.ant-typography:hover {
 }
 
 .ant-message-success .anticon {
-  color: #42b883 !important;
+  color: #3498db !important;
 }
 
 .ant-message-error .anticon {
@@ -499,10 +499,10 @@ pre {
 }
 
 .ant-menu-dark .ant-menu-item-selected {
-  background-color: #42b883 !important;
+  background-color: #2c3e50 !important;
   color: #ffffff !important;
   font-weight: 600 !important;
-  box-shadow: 0 2px 8px rgba(66, 184, 131, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3) !important;
 }
 
 .ant-menu-dark .ant-menu-item-selected .anticon {
@@ -526,21 +526,21 @@ pre {
 
 /* 加载中 */
 .ant-spin-dot-item {
-  background-color: #42b883 !important;
+  background-color: #2c3e50 !important;
 }
 
 /* 进度条 */
 .ant-progress-bg {
-  background-color: #42b883 !important;
+  background-color: #2c3e50 !important;
 }
 
 /* 滑块 */
 .ant-slider-track {
-  background-color: #42b883 !important;
+  background-color: #2c3e50 !important;
 }
 
 .ant-slider-handle {
-  border-color: #42b883 !important;
+  border-color: #3498db !important;
 }
 
 /* 评分 */
@@ -558,8 +558,8 @@ pre {
 
 .ant-picker:hover,
 .ant-picker-focused {
-  border-color: #42b883 !important;
-  box-shadow: 0 0 0 2px rgba(66, 184, 131, 0.1) !important;
+  border-color: #3498db !important;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1) !important;
 }
 
 /* 日期选择器面板 */
@@ -577,14 +577,14 @@ pre {
 }
 
 .ant-upload.ant-upload-select:hover {
-  border-color: #42b883 !important;
+  border-color: #3498db !important;
 }
 
 /* 警告框 */
 .ant-alert-success {
-  background-color: #f0f9eb !important;
-  border-color: #e1f3d8 !important;
-  color: #67c23a !important;
+  background-color: #ebf5ff !important;
+  border-color: #d6e4ff !important;
+  color: #3498db !important;
 }
 
 .ant-alert-warning {
@@ -631,22 +631,22 @@ pre {
 
 /* 标签页 */
 .ant-tabs-tab-active {
-  color: #42b883 !important;
+  color: #3498db !important;
 }
 
 .ant-tabs-ink-bar {
-  background-color: #42b883 !important;
+  background-color: #2c3e50 !important;
 }
 
 /* 步骤条 */
 .ant-process-icon {
-  background-color: #42b883 !important;
-  border-color: #42b883 !important;
+  background-color: #2c3e50 !important;
+  border-color: #3498db !important;
 }
 
 .ant-finish-icon {
-  background-color: #67c23a !important;
-  border-color: #67c23a !important;
+  background-color: #3498db !important;
+  border-color: #3498db !important;
 }
 
 /* 面包屑 */
@@ -655,13 +655,13 @@ pre {
 }
 
 .ant-breadcrumb a:hover {
-  color: #42b883 !important;
+  color: #3498db !important;
 }
 
 /* 分页 */
 .ant-pagination-item-active {
-  background-color: #42b883 !important;
-  border-color: #42b883 !important;
+  background-color: #2c3e50 !important;
+  border-color: #3498db !important;
 }
 
 .ant-pagination-item-active a {

@@ -1120,6 +1120,10 @@ button[type="submit"]:active {
 
 .control-button {
     position: fixed;
+    /* ✅ 使用 transform 定位，left/top 保持 0 */
+    left: 0;
+    top: 0;
+    transform: translate(0, 0);
     width: 80px;
     height: 80px;
     border-radius: 50%;
@@ -1134,6 +1138,10 @@ button[type="submit"]:active {
     user-select: none;
     font-size: 32px;
     color: white;
+    /* ✅ 现代化优化 */
+    will-change: transform;
+    contain: layout style paint;
+    touch-action: none;
 }
 
 .control-button::before {
@@ -1147,17 +1155,18 @@ button[type="submit"]:active {
 }
 
 .control-button:hover {
-    transform: scale(1.05);
+    transform: translate(var(--button-x, 0), var(--button-y, 0)) scale(1.05);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .control-button:active {
-    transform: scale(0.95);
+    transform: translate(var(--button-x, 0), var(--button-y, 0)) scale(0.95);
 }
 
 .control-button.dragging {
-    cursor: move;
-    opacity: 0.8;
+    cursor: grabbing;
+    opacity: 0.9;
+    transition: none;  /* ✅ 拖拽时禁用过渡 */
 }
 
 .control-button.recording {

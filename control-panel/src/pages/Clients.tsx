@@ -221,7 +221,7 @@ export default function Clients() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Title level={3}>客户端信息管理</Title>
+      <Title level={3}>会话管理</Title>
       
       {/* 统计卡片 */}
       {stats && (

@@ -56,6 +56,6 @@ class ServerAccessLog(Base):
     ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # 用户代理
     status_code: Mapped[int] = mapped_column(Integer, nullable=False)  # 状态码
-    response_time: Mapped[Optional[float]] = mapped_column(Integer, nullable=True)  # 响应时间
+    response_time: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 响应时间
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 详细信息
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())  # 请求时间

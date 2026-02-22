@@ -1,4 +1,4 @@
-import { AreaChartOutlined, BookOutlined, ClockCircleOutlined, CodeOutlined, DatabaseOutlined, DesktopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined } from '@ant-design/icons';
+import { BookOutlined, ClockCircleOutlined, CodeOutlined, DatabaseOutlined, DesktopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined } from '@ant-design/icons';
 import { Layout as AntLayout, Button, Menu, Space, Typography } from 'antd';
 import { useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
@@ -11,11 +11,11 @@ const menuItems = [
   { key: '/config/stt', label: <Link to="/config/stt">STT 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/tts', label: <Link to="/config/tts">TTS 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/srs', label: <Link to="/config/srs">SRS配置</Link>, icon: <BookOutlined /> },
-  { key: '/clients', label: <Link to="/clients">客户信息</Link>, icon: <DesktopOutlined /> },
   { key: '/session-config', label: <Link to="/session-config">会话配置</Link>, icon: <ClockCircleOutlined /> },
-  { key: '/monitor', label: <Link to="/monitor">系统监控</Link>, icon: <AreaChartOutlined /> },
-  { key: '/database-management', label: <Link to="/database-management">数据库管理</Link>, icon: <DatabaseOutlined /> },
+  { key: '/clients', label: <Link to="/clients">会话管理</Link>, icon: <DesktopOutlined /> },
+  { key: '/database-management', label: <Link to="/database-management">数据管理</Link>, icon: <DatabaseOutlined /> },
 ];
+
 
 
 export default function Layout() {

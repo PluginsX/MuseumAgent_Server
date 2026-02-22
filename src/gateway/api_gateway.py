@@ -18,6 +18,7 @@ from src.common.auth_utils import decode_access_token
 from src.api.auth_api import get_current_user
 from src.services.registry import service_registry
 from src.ws import agent_stream_router
+from src.common.access_log_manager import access_log_manager, AccessLogContext
 
 
 class APIGateway:
@@ -78,6 +79,26 @@ class APIGateway:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        
+        # 暂时注释掉访问日志中间件，以减少日志记录
+        # @self.app.middleware("http")
+        # async def access_log_middleware(request, call_next):
+        #     """访问日志中间件"""
+        #     # 构建日志记录
+        #     log_record = {
+        #         'request_type': request.method,
+        #         'endpoint': str(request.url.path),
+        #         'ip_address': request.client.host if request.client else None,
+        #         'user_agent': request.headers.get('user-agent'),
+        #         'status_code': 200,  # 默认状态码
+        #     }
+        #     
+        #     # 使用上下文管理器记录访问
+        #     with AccessLogContext(log_record):
+        #         response = await call_next(request)
+        #         # 更新状态码
+        #         log_record['status_code'] = response.status_code
+        #         return response
     
     def _register_services(self):
         """注册内部服务"""
@@ -411,7 +432,6 @@ class APIGateway:
         # 包含管理员API路由
         from src.api.auth_api import router as auth_router
         from src.api.config_api import router as config_router
-        from src.api.monitor_api import router as monitor_router
         from src.api.users_api import router as users_router
         from src.api.client_api import router as client_router
         from src.api.session_config_api import router as session_config_router
@@ -419,7 +439,6 @@ class APIGateway:
         
         self.app.include_router(auth_router)
         self.app.include_router(config_router)
-        self.app.include_router(monitor_router)
         self.app.include_router(users_router)
         self.app.include_router(client_router)
         self.app.include_router(session_config_router)

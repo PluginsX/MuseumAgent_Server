@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 
-from src.common.auth_utils import get_current_user
+import secrets
+from src.common.auth_utils import get_current_user, hash_password
 from src.db.database import get_db_session, get_engine
 from src.common.enhanced_logger import get_enhanced_logger
 
@@ -136,6 +137,19 @@ def create_record(
         inspector = inspect(engine)
         if table_name not in inspector.get_table_names():
             raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在")
+        
+        # 处理用户表的特殊情况
+        if table_name in ['admin_users', 'client_users']:
+            # 处理密码哈希
+            if 'password_hash' in record_data and record_data['password_hash']:
+                # 如果前端传递了password_hash，检查是否已经是哈希值
+                # 如果不是哈希值，进行哈希处理
+                if len(record_data['password_hash']) < 60:  # 哈希值通常较长
+                    record_data['password_hash'] = hash_password(record_data['password_hash'])
+            
+            # 为客户用户生成API-KEY
+            if table_name == 'client_users' and 'api_key' not in record_data:
+                record_data['api_key'] = f"museum_{secrets.token_urlsafe(32)}"
         
         # 构建插入语句
         columns = list(record_data.keys())
@@ -322,3 +336,37 @@ def clear_database(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.sys.error(f"Error clearing database: {str(e)}")
         raise HTTPException(status_code=500, detail=f"数据库清空失败: {str(e)}")
+
+
+@database_router.post("/tables/{table_name}/clear")
+def clear_table(
+    table_name: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """清空表记录"""
+    logger = get_enhanced_logger()
+    
+    try:
+        logger.sys.info(f"Clearing table {table_name}", {
+            "admin_user_id": current_user.get("user_id")
+        })
+        
+        # 验证表是否存在
+        engine = get_engine()
+        inspector = inspect(engine)
+        if table_name not in inspector.get_table_names():
+            raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在")
+        
+        # 执行清空操作
+        with engine.connect() as connection:
+            connection.execute(text(f"DELETE FROM {table_name}"))
+            connection.commit()
+        
+        logger.sys.info(f"Table {table_name} cleared successfully")
+        
+        return {"message": "表记录清空成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.sys.error(f"Error clearing table {table_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"清空表记录失败: {str(e)}")

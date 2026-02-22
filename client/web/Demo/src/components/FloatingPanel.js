@@ -1,14 +1,30 @@
 /**
  * 悬浮面板基类
+ * ✅ 重构版本：支持传入已有组件实例（单例模式）
  * 用于包装设置和聊天组件，提供全屏显示和关闭功能
  */
 
 import { createElement } from '../utils/dom.js';
 
 export class FloatingPanel {
-    constructor(ComponentClass, client, options = {}) {
-        this.ComponentClass = ComponentClass;
-        this.client = client;
+    constructor(componentOrInstance, options = {}) {
+        // ✅ 支持两种模式：
+        // 1. 传入组件实例（单例模式）
+        // 2. 传入组件类 + client（旧模式，向后兼容）
+        
+        if (typeof componentOrInstance === 'function') {
+            // 旧模式：传入组件类
+            this.ComponentClass = componentOrInstance;
+            this.component = null;
+            this.isExternalComponent = false;
+            this.client = options.client || null;
+        } else {
+            // 新模式：传入组件实例
+            this.component = componentOrInstance;
+            this.ComponentClass = null;
+            this.isExternalComponent = true;
+        }
+        
         this.options = {
             title: options.title || '',
             onClose: options.onClose || null,
@@ -16,7 +32,7 @@ export class FloatingPanel {
         };
         
         this.element = null;
-        this.component = null;
+        this.contentContainer = null;
         
         this.init();
     }
@@ -25,8 +41,35 @@ export class FloatingPanel {
      * 初始化
      */
     init() {
+        // ✅ 面板打开时禁用 Unity 输入
+        this.disableUnityInput();
+        
         this.createElement();
-        this.createComponent();
+        this.attachComponent();
+    }
+    
+    /**
+     * ✅ 禁用 Unity 输入
+     */
+    disableUnityInput() {
+        const canvas = document.querySelector('#unity-canvas');
+        if (canvas) {
+            canvas.style.pointerEvents = 'none';
+            canvas.setAttribute('tabindex', '-1');
+            console.log('[FloatingPanel] Unity 输入已禁用');
+        }
+    }
+    
+    /**
+     * ✅ 启用 Unity 输入
+     */
+    enableUnityInput() {
+        const canvas = document.querySelector('#unity-canvas');
+        if (canvas) {
+            canvas.style.pointerEvents = 'auto';
+            canvas.setAttribute('tabindex', '0');
+            console.log('[FloatingPanel] Unity 输入已启用');
+        }
     }
     
     /**
@@ -105,11 +148,36 @@ export class FloatingPanel {
     }
     
     /**
-     * 创建组件
+     * ✅ 附加组件（新旧模式兼容）
      */
-    createComponent() {
-        // 实例化组件
-        this.component = new this.ComponentClass(this.contentContainer, this.client);
+    attachComponent() {
+        if (this.isExternalComponent) {
+            // 新模式：使用已有组件实例
+            
+            // 1. 更新组件的 container 属性
+            if (this.component.container !== undefined) {
+                this.component.container = this.contentContainer;
+            }
+            
+            // 2. 如果组件有 show 方法，调用它（会触发重新渲染）
+            if (typeof this.component.show === 'function') {
+                this.component.show();
+            }
+            // 3. 否则，如果组件有 render 方法，调用它
+            else if (typeof this.component.render === 'function') {
+                this.component.render();
+            }
+            
+            // 4. 确保内容显示
+            if (this.contentContainer) {
+                this.contentContainer.style.display = 'flex';
+                this.contentContainer.style.flexDirection = 'column';
+                this.contentContainer.style.height = '100%';
+            }
+        } else {
+            // 旧模式：创建新组件实例
+            this.component = new this.ComponentClass(this.contentContainer, this.client);
+        }
     }
     
     /**
@@ -153,18 +221,29 @@ export class FloatingPanel {
     }
     
     /**
-     * 销毁
+     * ✅ 销毁（不销毁外部组件实例）
      */
     destroy() {
-        // 销毁组件
-        if (this.component && typeof this.component.destroy === 'function') {
-            this.component.destroy();
+        // ✅ 面板关闭时恢复 Unity 输入
+        this.enableUnityInput();
+        
+        // ✅ 如果是外部组件，只隐藏，不销毁
+        if (this.isExternalComponent) {
+            if (typeof this.component.hide === 'function') {
+                this.component.hide();
+            } else if (this.component.element && this.component.element.parentNode) {
+                this.component.element.parentNode.removeChild(this.component.element);
+            }
+        } else {
+            // 旧模式：销毁组件
+            if (this.component && typeof this.component.destroy === 'function') {
+                this.component.destroy();
+            }
         }
         
-        // 移除元素
+        // 移除面板元素
         if (this.element && this.element.parentNode) {
             this.element.parentNode.removeChild(this.element);
         }
     }
 }
-

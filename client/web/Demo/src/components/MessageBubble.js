@@ -23,6 +23,17 @@ export class MessageBubble {
     render() {
         const isSent = this.message.type === 'sent';
         
+        // ✅ 调试日志：检查消息类型
+        console.log('[MessageBubble] 渲染气泡:', {
+            id: this.message.id,
+            type: this.message.type,
+            isSent: isSent,
+            contentType: this.message.contentType,
+            content: typeof this.message.content === 'string' 
+                ? this.message.content.substring(0, 30) 
+                : this.message.content
+        });
+        
         // 根据消息类型添加不同的类名，实现视觉区分
         const typeClass = `message-${this.message.contentType}`;
         
