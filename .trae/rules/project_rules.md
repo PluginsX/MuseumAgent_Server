@@ -32,7 +32,7 @@
    - Api key: `sk-a7558f9302974d1891906107f6033939`
    # TTS // Aliyun WebSocket SDK
    - Base_url: `wss://dashscope.aliyuncs.com/api-ws/v1/inference`
-   - Model: `cosyvoice-v3-plus`
+   - Model: `cosyvoice-v3-flash`
    - Api key: `sk-a7558f9302974d1891906107f6033939`
    # STT // Aliyun WebSocket SDK
    - Base_url: `wss://dashscope.aliyuncs.com/api-ws/v1/inference`

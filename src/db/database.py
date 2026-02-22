@@ -24,8 +24,7 @@ def get_engine():
     if _engine is None:
         try:
             config = get_global_config()
-            kb = config.get("artifact_knowledge_base", {})
-            db_path = kb.get("app_db_path") or _default_db_path
+            db_path = _default_db_path
         except Exception:
             db_path = _default_db_path
         if not os.path.isabs(db_path):

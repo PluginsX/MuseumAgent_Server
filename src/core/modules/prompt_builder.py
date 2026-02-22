@@ -208,10 +208,17 @@ class PromptBuilder:
         return self.template_engine.render_functions_description(functions)
     
     def _format_retrieved_materials(self, rag_context: Dict[str, Any]) -> str:
-        """格式化检索材料（变量6）"""
+        """格式化检索到的材料（变量6）"""
         relevant_artifacts = rag_context.get("relevant_artifacts", [])
-        
         if not relevant_artifacts:
             return ""
         
-        return self.template_engine.render_rag_materials(relevant_artifacts)
+        # 格式化检索结果为可读文本
+        formatted_materials = []
+        for i, artifact in enumerate(relevant_artifacts, 1):
+            title = artifact.get("title", f"材料{i}")
+            content = artifact.get("content", "")
+            formatted_materials.append(f"【{title}】\n{content}")
+        
+        return "\n\n".join(formatted_materials)
+    

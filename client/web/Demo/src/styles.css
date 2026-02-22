@@ -551,7 +551,7 @@ button[type="submit"]:active {
 .collapsible-section {
     background: white;
     border-radius: 8px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     overflow: visible;
 }
@@ -1296,6 +1296,11 @@ button[type="submit"]:active {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-content: space-between;
+    align-items: stretch;
+    padding: 10px;
 }
 
 /* 响应式 */

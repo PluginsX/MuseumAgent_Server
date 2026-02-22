@@ -13,11 +13,9 @@ const ConfigSTT = lazy(() => import('./pages/ConfigSTT'));
 const ConfigTTS = lazy(() => import('./pages/ConfigTTS'));
 const ConfigSRS = lazy(() => import('./pages/ConfigSRS'));
 const Clients = lazy(() => import('./pages/Clients'));
-const ClientManagement = lazy(() => import('./pages/ClientManagement'));
 const SessionConfig = lazy(() => import('./pages/SessionConfig'));
 const Monitor = lazy(() => import('./pages/Monitor'));
-const Users = lazy(() => import('./pages/Users'));
-const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const DatabaseManagement = lazy(() => import('./pages/DatabaseManagement'));
 
 function Protected({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -100,9 +98,7 @@ export default function App() {
             <Route path="clients" element={<LazyLoad><Clients /></LazyLoad>} />
             <Route path="session-config" element={<LazyLoad><SessionConfig /></LazyLoad>} />
             <Route path="monitor" element={<LazyLoad><Monitor /></LazyLoad>} />
-            <Route path="users" element={<LazyLoad><Users /></LazyLoad>} />
-            <Route path="client-management" element={<LazyLoad><ClientManagement /></LazyLoad>} />
-            <Route path="audit-logs" element={<LazyLoad><AuditLogs /></LazyLoad>} />
+            <Route path="database-management" element={<LazyLoad><DatabaseManagement /></LazyLoad>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

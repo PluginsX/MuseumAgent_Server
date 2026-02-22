@@ -415,6 +415,7 @@ class APIGateway:
         from src.api.users_api import router as users_router
         from src.api.client_api import router as client_router
         from src.api.session_config_api import router as session_config_router
+        from src.api.database_api import database_router
         
         self.app.include_router(auth_router)
         self.app.include_router(config_router)
@@ -422,6 +423,7 @@ class APIGateway:
         self.app.include_router(users_router)
         self.app.include_router(client_router)
         self.app.include_router(session_config_router)
+        self.app.include_router(database_router)
         
         # 包含内部管理员API路由（仅内部使用）
         from src.api.internal_admin_api import internal_router

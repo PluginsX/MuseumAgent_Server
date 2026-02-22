@@ -52,6 +52,7 @@ export const configApi = {
   
   // 服务器配置
   getServer: () => http.get('/api/admin/config/server'),
+  updateServer: (data: any) => http.put('/api/admin/config/server', data),
 };
 
 // 系统监控API
@@ -116,4 +117,26 @@ export const sessionConfigApi = {
   resetDefaults: () => http.post('/api/admin/session-config/reset-defaults'),
   validate: (configData: Partial<SessionConfig>) => 
     http.post<{ is_valid: boolean; errors: string[] }>('/api/admin/session-config/validate', configData),
+};
+
+// 数据库管理API
+export const databaseApi = {
+  // 获取数据库表列表
+  getTables: () => http.get<{ name: string; rowCount: number }[]>('/api/admin/database/tables'),
+  // 获取表数据
+  getTableData: (tableName: string, params?: PaginationParams) => 
+    http.get<any[]>(`/api/admin/database/tables/${tableName}`, { params }),
+  // 创建记录
+  createRecord: (tableName: string, data: any) => 
+    http.post<any>(`/api/admin/database/tables/${tableName}`, data),
+  // 更新记录
+  updateRecord: (tableName: string, id: number, data: any) => 
+    http.put<any>(`/api/admin/database/tables/${tableName}/${id}`, data),
+  // 删除记录
+  deleteRecord: (tableName: string, id: number) => 
+    http.delete(`/api/admin/database/tables/${tableName}/${id}`),
+  // 初始化数据库
+  initializeDatabase: () => http.post('/api/admin/database/initialize'),
+  // 清空数据库
+  clearDatabase: () => http.post('/api/admin/database/clear'),
 };

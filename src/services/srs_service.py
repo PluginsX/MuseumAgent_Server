@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from src.common.enhanced_logger import get_enhanced_logger
-from src.common.config_utils import get_global_config
+from src.common.config_utils import get_global_config, register_config_listener
 
 
 class SRSService:
@@ -26,6 +26,19 @@ class SRSService:
         self.api_key = self.srs_config.get("api_key", "")
         self.timeout = self.srs_config.get("timeout", 300)
         self.search_params = self.srs_config.get("search_params", {})
+        
+        # 注册配置变更监听器
+        register_config_listener("semantic_retrieval", self.reload_config)
+    
+    def reload_config(self, new_config: dict) -> None:
+        """重新加载配置"""
+        self.logger.sys.info("SRS配置变更，正在重新加载...")
+        self.srs_config = new_config
+        self.base_url = self.srs_config.get("base_url", "")
+        self.api_key = self.srs_config.get("api_key", "")
+        self.timeout = self.srs_config.get("timeout", 300)
+        self.search_params = self.srs_config.get("search_params", {})
+        self.logger.sys.info("SRS配置重新加载完成")
     
     async def search_artifacts(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -97,78 +110,7 @@ class SRSService:
                 "data": None
             }
     
-    async def get_artifacts(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        获取资料列表接口
-        
-        Args:
-            request: 获取资料列表请求
-            
-        Returns:
-            资料列表
-        """
-        self.logger.info("开始SRS获取资料列表")
-        
-        try:
-            # 构建查询参数
-            params = {
-                "page": request.get("page", 1),
-                "size": request.get("size", 10),
-                "keyword": request.get("keyword", ""),
-                "category": request.get("category", "")
-            }
-            
-            # 过滤空参数
-            filtered_params = {k: v for k, v in params.items() if v}
-            
-            # 添加认证头
-            headers = {
-                "X-API-Key": self.api_key
-            }
-            
-            # 记录请求
-            self.logger.rag.info('SRS get artifacts list request sent', 
-                                   {'params': filtered_params})
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.base_url}/artifacts",
-                    params=filtered_params,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        
-                        self.logger.rag.info('SRS artifacts list response received', 
-                                               {'artifacts_count': len(result.get('artifacts', []))})
-                        
-                        return {
-                            "code": 200,
-                            "msg": "获取资料列表成功",
-                            "data": result,
-                            "timestamp": datetime.now().isoformat()
-                        }
-                    else:
-                        error_text = await response.text()
-                        
-                        self.logger.rag.error(f'Get artifacts list failed', 
-                                      {'status': response.status, 'error': error_text})
-                        
-                        return {
-                            "code": 500,
-                            "msg": f"获取资料列表失败: {error_text}",
-                            "data": None
-                        }
-        
-        except Exception as e:
-            self.logger.sys.error(f"获取SRS资料列表异常: {str(e)}")
-            return {
-                "code": 500,
-                "msg": f"获取SRS资料列表异常: {str(e)}",
-                "data": None
-            }
-    
+
     async def get_artifact_by_id(self, artifact_id: str) -> Dict[str, Any]:
         """
         根据ID获取资料接口

@@ -18,7 +18,7 @@ from src.common.auth_utils import (
     get_current_user
 )
 from src.db.database import get_db_session
-from src.db.models import AdminUser, ClientUser, APIKey, AuditLog
+from src.db.models import AdminUser, ClientUser
 from src.common.enhanced_logger import get_enhanced_logger
 
 
@@ -73,20 +73,17 @@ def verify_admin_token(token: str, db: Session) -> Optional[Dict[str, Any]]:
 
 
 def log_audit_action(db: Session, admin_user_id: Optional[int], action: str, ip_address: str, details: str = ""):
-    """记录审计日志"""
+    """记录审计日志（使用日志系统）"""
     try:
-        audit_log = AuditLog(
-            admin_user_id=admin_user_id,
-            action=action,
-            ip_address=ip_address,
-            details=details,
-            created_at=datetime.now()
-        )
-        db.add(audit_log)
-        db.commit()
+        logger = get_enhanced_logger()
+        logger.auth.info(f"Audit action: {action}", {
+            "admin_user_id": admin_user_id,
+            "ip_address": ip_address,
+            "details": details
+        })
     except Exception as e:
         logger = get_enhanced_logger()
-        logger.audit.error(f"Log audit action error: {str(e)}")
+        logger.sys.error(f"Log audit action error: {str(e)}")
 
 
 @internal_router.post("/admin/auth")
@@ -170,15 +167,9 @@ def create_client(request: ClientCreateRequest, current_user: dict = Depends(get
         
         # 为客户生成API密钥
         api_key_plaintext = f"museum_{secrets.token_urlsafe(32)}"
-        api_key_hash = hash_password(api_key_plaintext)
         
-        api_key = APIKey(
-            key_hash=api_key_hash,
-            client_user_id=new_user.id,
-            is_active=True,
-            remark=request.remark or f"API Key for {request.username}"
-        )
-        db.add(api_key)
+        # 直接设置ClientUser表中的api_key字段
+        new_user.api_key = api_key_plaintext
         db.commit()
         
         log_audit_action(db, admin_info["user_id"], "CLIENT_CREATE_SUCCESS", ip or "", f"Created client: {request.username}")
@@ -217,23 +208,11 @@ def reset_api_key(request: APIKeyResetRequest, current_user: dict = Depends(get_
             log_audit_action(db, admin_info["user_id"], "API_KEY_RESET_FAILED", ip or "", f"Client not found: {request.client_id}")
             raise HTTPException(status_code=404, detail="客户不存在")
         
-        # 删除旧的API密钥
-        old_api_key = db.query(APIKey).filter(APIKey.client_user_id == request.client_id).first()
-        if old_api_key:
-            db.delete(old_api_key)
-        
         # 生成新的API密钥
         new_api_key_plaintext = f"museum_{secrets.token_urlsafe(32)}"
-        new_api_key_hash = hash_password(new_api_key_plaintext)
         
-        new_api_key = APIKey(
-            key_hash=new_api_key_hash,
-            key_plaintext=new_api_key_plaintext,  # 存储明文API密钥
-            client_user_id=request.client_id,
-            is_active=True,
-            remark=f"Reset API Key for {client.username}"
-        )
-        db.add(new_api_key)
+        # 直接更新ClientUser表中的api_key字段
+        client.api_key = new_api_key_plaintext
         db.commit()
         
         log_audit_action(db, admin_info["user_id"], "API_KEY_RESET_SUCCESS", ip or "", f"Reset API key for client: {client.username}")
@@ -265,7 +244,7 @@ def get_audit_logs(
     ip: str = None,
     db: Session = Depends(get_db_session)
 ):
-    """获取审计日志"""
+    """获取审计日志（已迁移到日志系统）"""
     logger = get_enhanced_logger()
     
     # 验证管理员权限
@@ -276,56 +255,23 @@ def get_audit_logs(
     admin_info = current_user
     
     try:
-        query = db.query(AuditLog).order_by(desc(AuditLog.created_at))
+        log_audit_action(db, admin_info["user_id"], "AUDIT_LOG_ACCESS_SUCCESS", ip or "", f"Requested audit logs")
         
-        # 应用过滤条件
-        if start_time:
-            from datetime import datetime
-            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-            query = query.filter(AuditLog.created_at >= start_dt)
-        
-        if end_time:
-            from datetime import datetime
-            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-            query = query.filter(AuditLog.created_at <= end_dt)
-        
-        if admin_user_id:
-            query = query.filter(AuditLog.admin_user_id == admin_user_id)
-        
-        if client_user_id:
-            query = query.filter(AuditLog.client_user_id == client_user_id)
-        
-        if action:
-            query = query.filter(AuditLog.action.like(f"%{action}%"))
-        
-        # 分页
-        total = query.count()
-        logs = query.offset((page - 1) * size).limit(size).all()
-        
-        log_audit_action(db, admin_info["user_id"], "AUDIT_LOG_ACCESS_SUCCESS", ip or "", f"Retrieved {len(logs)} audit logs")
-        
+        # 审计日志已迁移到日志系统，返回空列表
         return {
             "code": 200,
             "data": {
-                "logs": [{
-                    "id": log.id,
-                    "admin_user_id": log.admin_user_id,
-                    "client_user_id": log.client_user_id,
-                    "action": log.action,
-                    "ip_address": log.ip_address,
-                    "details": log.details,
-                    "created_at": log.created_at.isoformat()
-                } for log in logs],
+                "logs": [],
                 "pagination": {
                     "page": page,
                     "size": size,
-                    "total": total,
-                    "pages": (total + size - 1) // size
+                    "total": 0,
+                    "pages": 0
                 }
             }
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.audit.error(f"Get audit logs error: {str(e)}")
+        logger.sys.error(f"Get audit logs error: {str(e)}")
         raise HTTPException(status_code=500, detail="获取审计日志失败")

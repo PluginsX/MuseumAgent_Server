@@ -5,7 +5,7 @@ from datetime import datetime
 
 from src.common.auth_utils import hash_password
 from src.db.database import SessionLocal, get_engine, init_db
-from src.db.models import AdminUser, ClientUser, APIKey
+from src.db.models import AdminUser, ClientUser
 
 
 def seed_admin():
@@ -33,26 +33,17 @@ def seed_admin():
         # 创建默认客户用户
         client_password = "Client@123"
         client_hash = hash_password(client_password)
+        # 为客户生成API密钥
+        client_api_key = f"museum_{secrets.token_urlsafe(32)}"
         client = ClientUser(
             username="client",
             email="client@museum-agent.local",
             password_hash=client_hash,
+            api_key=client_api_key,
             role="client",
             is_active=True,
         )
         db.add(client)
-        db.flush()  # 获取ID但不提交
-        
-        # 为客户创建API密钥
-        client_api_key = f"museum_{secrets.token_urlsafe(32)}"
-        client_api_key_hash = hash_password(client_api_key)
-        client_api_key_obj = APIKey(
-            key_hash=client_api_key_hash,
-            client_user_id=client.id,
-            is_active=True,
-            remark="Default client API key"
-        )
-        db.add(client_api_key_obj)
         
         db.commit()
         

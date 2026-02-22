@@ -14,7 +14,7 @@ import dashscope
 from dashscope.audio.tts_v2 import SpeechSynthesizer
 
 from src.common.enhanced_logger import get_enhanced_logger, Module
-from src.common.config_utils import get_global_config
+from src.common.config_utils import get_global_config, register_config_listener
 from src.services.interrupt_manager import get_interrupt_manager
 
 
@@ -31,6 +31,28 @@ class UnifiedTTSService:
         self.tts_base_url = None
         self.tts_api_key = None
         self.tts_model = None
+        self.tts_voice = None
+        self.tts_format = None
+        
+        # 注册配置变更监听器
+        register_config_listener("tts", self.reload_config)
+    
+    def reload_config(self, new_config: dict) -> None:
+        """重新加载配置"""
+        self.logger.sys.info("TTS配置变更，正在重新加载...")
+        self._tts_config = new_config
+        
+        # TTS客户端配置
+        self.tts_api_key = self._tts_config.get("api_key", "")
+        self.tts_model = self._tts_config.get("model", "cosyvoice-v3-plus")
+        self.tts_voice = self._tts_config.get("voice", "HanLi")
+        self.tts_format = self._tts_config.get("format", "PCM_16000HZ_MONO_16BIT")
+        
+        # 设置DashScope API密钥
+        if self.tts_api_key:
+            dashscope.api_key = self.tts_api_key
+        
+        self.logger.sys.info("TTS配置重新加载完成")
     
     def _ensure_config_loaded(self):
         """确保配置已加载"""

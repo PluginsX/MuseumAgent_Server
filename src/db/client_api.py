@@ -8,7 +8,7 @@ from sqlalchemy import and_
 
 from src.common.auth_utils import hash_password, verify_password
 from src.db.database import SessionLocal
-from src.db.models import ClientUser, APIKey
+from src.db.models import ClientUser
 from src.common.enhanced_logger import get_enhanced_logger
 
 
@@ -33,37 +33,24 @@ class ClientLocalAPI:
             # 从数据库查询
             with SessionLocal() as db:
                 if auth_type == "API_KEY":
-                    # 查找所有活跃的API密钥
-                    api_keys = db.query(APIKey).filter(
-                        APIKey.is_active == True
-                    ).all()
+                    # 直接在ClientUser表中查找API密钥
+                    user = db.query(ClientUser).filter(
+                        and_(ClientUser.api_key == auth_value, ClientUser.is_active == True)
+                    ).first()
                     
-                    # 遍历所有API密钥，使用verify_password验证
-                    api_key = None
-                    for key in api_keys:
-                        if verify_password(auth_value, key.key_hash):
-                            api_key = key
-                            break
-                    
-                    if api_key and api_key.client_user_id:
-                        # 现在API密钥关联到client_users表
-                        user = db.query(ClientUser).filter(
-                            and_(ClientUser.id == api_key.client_user_id, ClientUser.is_active == True)
-                        ).first()
-                        
-                        if user:
-                            result = {
-                                "user_id": user.id,
-                                "username": user.username,
-                                "role": user.role,
-                                "is_authenticated": True
-                            }
-                            # 缓存认证结果
-                            self.cache[cache_key] = {
-                                'data': result,
-                                'timestamp': datetime.now().timestamp()
-                            }
-                            return result
+                    if user:
+                        result = {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "is_authenticated": True
+                        }
+                        # 缓存认证结果
+                        self.cache[cache_key] = {
+                            'data': result,
+                            'timestamp': datetime.now().timestamp()
+                        }
+                        return result
                 elif auth_type == "ACCOUNT":
                     # 账号密码认证
                     # 首先在client_users表中查找

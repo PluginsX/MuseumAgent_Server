@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:;">
+    <title>MuseumAgent</title>
+    <link rel="icon" href="res/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+    <div id="app"></div>
+    
+    <!-- 使用 SDK 构建产物 -->
+    <script src="./lib/museum-agent-sdk.min.js"></script>
+    
+    <!-- 加载应用 -->
+    <script type="module" src="./src/app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """配置管理 API：LLM、Embedding、Server"""
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -51,26 +51,24 @@ def update_llm_config(
     body: LLMConfigUpdate,
     _: dict = Depends(get_current_user),
 ):
-    """更新 LLM 配置（写入 config.json，需重启生效）"""
-    import os
-    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    llm = data.setdefault("llm", {})
+    """更新 LLM 配置（写入 config.json，无需重启生效）"""
+    from src.common.config_utils import update_config_section
+    
+    # 准备更新的配置
+    update_data = {}
     if body.base_url is not None:
-        llm["base_url"] = body.base_url
+        update_data["base_url"] = body.base_url
     if body.api_key is not None and body.api_key.strip():
-        llm["api_key"] = body.api_key.strip()
+        update_data["api_key"] = body.api_key.strip()
     if body.model is not None:
-        llm["model"] = body.model
+        update_data["model"] = body.model
     if body.parameters is not None:
-        llm["parameters"] = {**(llm.get("parameters") or {}), **body.parameters}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    from src.common.config_utils import load_config
-    load_config()
+        update_data["parameters"] = body.parameters
+    
+    # 更新配置并通知监听器
+    update_config_section("llm", update_data)
+    
+    # 返回更新后的配置（API Key 脱敏）
     llm = get_global_config().get("llm", {}).copy()
     if llm.get("api_key"):
         llm["api_key"] = _mask_api_key(llm["api_key"])
@@ -78,11 +76,61 @@ def update_llm_config(
 
 
 # ---------- Server ----------
+class ServerConfigUpdate(BaseModel):
+    host: Optional[str] = None
+    port: Optional[int] = None
+    reload: Optional[bool] = None
+    cors_allow_origins: Optional[List[str]] = None
+    request_limit: Optional[int] = None
+    request_timeout: Optional[int] = None
+    ssl_enabled: Optional[bool] = None
+    ssl_cert_file: Optional[str] = None
+    ssl_key_file: Optional[str] = None
+    debug: Optional[bool] = None
+
 @router.get("/server")
 def get_server_config(_: dict = Depends(get_current_user)):
     """获取服务器配置"""
     cfg = get_global_config()
     return cfg.get("server", {})
+
+@router.put("/server")
+def update_server_config(
+    body: ServerConfigUpdate,
+    _: dict = Depends(get_current_user),
+):
+    """更新服务器配置（写入 config.json，需重启生效）"""
+    from src.common.config_utils import update_config_section
+    
+    # 准备更新的配置
+    update_data = {}
+    if body.host is not None:
+        update_data["host"] = body.host
+    if body.port is not None:
+        update_data["port"] = body.port
+    if body.reload is not None:
+        update_data["reload"] = body.reload
+    if body.cors_allow_origins is not None:
+        update_data["cors_allow_origins"] = body.cors_allow_origins
+    if body.request_limit is not None:
+        update_data["request_limit"] = body.request_limit
+    if body.request_timeout is not None:
+        update_data["request_timeout"] = body.request_timeout
+    if body.ssl_enabled is not None:
+        update_data["ssl_enabled"] = body.ssl_enabled
+    if body.ssl_cert_file is not None:
+        update_data["ssl_cert_file"] = body.ssl_cert_file
+    if body.ssl_key_file is not None:
+        update_data["ssl_key_file"] = body.ssl_key_file
+    if body.debug is not None:
+        update_data["debug"] = body.debug
+    
+    # 更新配置并通知监听器
+    update_config_section("server", update_data)
+    
+    # 返回更新后的配置
+    server_config = get_global_config().get("server", {})
+    return server_config
 
 
 # ---------- SRS (SemanticRetrievalSystem) ----------
@@ -132,26 +180,22 @@ def update_srs_config(
     body: SRSConfigUpdate,
     _: dict = Depends(get_current_user),
 ):
-    """更新 SRS 配置（写入 config.json，需重启生效）"""
-    import os
-    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    srs = data.setdefault("semantic_retrieval", {})
+    """更新 SRS 配置（写入 config.json，无需重启生效）"""
+    from src.common.config_utils import update_config_section
+    
+    # 准备更新的配置
+    update_data = {}
     if body.base_url is not None:
-        srs["base_url"] = body.base_url
+        update_data["base_url"] = body.base_url
     if body.api_key is not None:
-        srs["api_key"] = body.api_key
+        update_data["api_key"] = body.api_key
     if body.timeout is not None:
-        srs["timeout"] = body.timeout
+        update_data["timeout"] = body.timeout
     if body.search_params is not None:
-        srs["search_params"] = {**(srs.get("search_params") or {}), **body.search_params}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    from src.common.config_utils import load_config
-    load_config()
+        update_data["search_params"] = body.search_params
+    
+    # 更新配置并通知监听器
+    update_config_section("semantic_retrieval", update_data)
     
     # 尝试重新加载语义检索处理器的配置
     try:
@@ -193,26 +237,22 @@ def update_stt_config(
     body: STTConfigUpdate,
     _: dict = Depends(get_current_user),
 ):
-    """更新 STT 配置（写入 config.json，需重启生效）"""
-    import os
-    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    stt = data.setdefault("stt", {})
+    """更新 STT 配置（写入 config.json，无需重启生效）"""
+    from src.common.config_utils import update_config_section
+    
+    # 准备更新的配置
+    update_data = {}
     if body.base_url is not None:
-        stt["base_url"] = body.base_url
+        update_data["base_url"] = body.base_url
     if body.api_key is not None:
-        stt["api_key"] = body.api_key
+        update_data["api_key"] = body.api_key
     if body.model is not None:
-        stt["model"] = body.model
+        update_data["model"] = body.model
     if body.parameters is not None:
-        stt["parameters"] = {**(stt.get("parameters") or {}), **body.parameters}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    from src.common.config_utils import load_config
-    load_config()
+        update_data["parameters"] = body.parameters
+    
+    # 更新配置并通知监听器
+    update_config_section("stt", update_data)
     
     stt = get_global_config().get("stt", {}).copy()
     if "api_key" in stt and stt["api_key"]:
@@ -246,26 +286,22 @@ def update_tts_config(
     body: TTSConfigUpdate,
     _: dict = Depends(get_current_user),
 ):
-    """更新 TTS 配置（写入 config.json，需重启生效）"""
-    import os
-    from src.common.config_utils import DEFAULT_JSON_CONFIG_PATH
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    tts = data.setdefault("tts", {})
+    """更新 TTS 配置（写入 config.json，无需重启生效）"""
+    from src.common.config_utils import update_config_section
+    
+    # 准备更新的配置
+    update_data = {}
     if body.base_url is not None:
-        tts["base_url"] = body.base_url
+        update_data["base_url"] = body.base_url
     if body.api_key is not None:
-        tts["api_key"] = body.api_key
+        update_data["api_key"] = body.api_key
     if body.model is not None:
-        tts["model"] = body.model
+        update_data["model"] = body.model
     if body.parameters is not None:
-        tts["parameters"] = {**(tts.get("parameters") or {}), **body.parameters}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    from src.common.config_utils import load_config
-    load_config()
+        update_data["parameters"] = body.parameters
+    
+    # 更新配置并通知监听器
+    update_config_section("tts", update_data)
     
     tts = get_global_config().get("tts", {}).copy()
     if "api_key" in tts and tts["api_key"]:

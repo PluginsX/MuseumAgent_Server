@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-配置读取工具 - 加载JSON/INI配置，提供全局配置访问接口
+配置管理工具 - 加载JSON/INI配置，提供全局配置访问和更新接口
+支持配置变更通知机制
 """
 import json
 import os
 from configparser import ConfigParser
-from typing import Any, Optional
+from typing import Any, Optional, Callable, Dict, List
 
 # 全局配置变量
 GLOBAL_CONFIG: Optional[dict] = None
@@ -14,6 +15,9 @@ GLOBAL_INI_CONFIG: Optional[ConfigParser] = None
 # 默认配置文件路径（相对于项目根目录）
 DEFAULT_JSON_CONFIG_PATH = "./config/config.json"
 DEFAULT_INI_CONFIG_PATH = "./config/config.ini"
+
+# 配置变更监听器
+_config_listeners: Dict[str, List[Callable[[dict], None]]] = {}
 
 
 def load_config(
@@ -57,7 +61,7 @@ def load_config(
         ) from e
     
     # 校验必需配置项
-    required_keys = ["server", "llm", "artifact_knowledge_base", "response"]
+    required_keys = ["server", "llm", "response"]
     for key in required_keys:
         if key not in GLOBAL_CONFIG:
             raise ValueError(f"JSON配置缺少必需项: {key}")
@@ -122,3 +126,94 @@ def get_config_by_key(*keys: str) -> Any:
         else:
             raise KeyError(f"配置项不存在: {' -> '.join(keys)}")
     return value
+
+
+def update_config_section(section: str, config: dict) -> None:
+    """
+    更新指定配置 section
+    
+    Args:
+        section: 配置 section 名称
+        config: 新的配置内容
+    
+    Raises:
+        FileNotFoundError: 配置文件不存在
+        json.JSONDecodeError: JSON格式错误
+    """
+    global GLOBAL_CONFIG
+    
+    if GLOBAL_CONFIG is None:
+        raise RuntimeError("全局配置未加载，请先调用 load_config()")
+    
+    # 解析相对路径为绝对路径（相对于项目根目录）
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    json_full_path = os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
+    
+    # 读取当前配置
+    with open(json_full_path, "r", encoding="utf-8") as f:
+        current_config = json.load(f)
+    
+    # 更新指定 section
+    current_config[section] = {**current_config.get(section, {}), **config}
+    
+    # 写回配置文件
+    with open(json_full_path, "w", encoding="utf-8") as f:
+        json.dump(current_config, f, ensure_ascii=False, indent=2)
+    
+    # 重新加载配置
+    load_config()
+    
+    # 通知监听器
+    notify_config_change(section)
+
+
+def register_config_listener(section: str, listener: Callable[[dict], None]) -> None:
+    """
+    注册配置变更监听器
+    
+    Args:
+        section: 监听的配置 section 名称
+        listener: 配置变更时调用的回调函数
+    """
+    if section not in _config_listeners:
+        _config_listeners[section] = []
+    _config_listeners[section].append(listener)
+
+
+def unregister_config_listener(section: str, listener: Callable[[dict], None]) -> None:
+    """
+    注销配置变更监听器
+    
+    Args:
+        section: 监听的配置 section 名称
+        listener: 要注销的回调函数
+    """
+    if section in _config_listeners:
+        _config_listeners[section].remove(listener)
+
+
+def notify_config_change(section: str) -> None:
+    """
+    通知配置变更
+    
+    Args:
+        section: 变更的配置 section 名称
+    """
+    if section in _config_listeners:
+        section_config = get_global_config().get(section, {})
+        for listener in _config_listeners[section]:
+            try:
+                listener(section_config)
+            except Exception as e:
+                print(f"配置变更通知失败: {e}")
+
+
+def get_config_file_path() -> str:
+    """
+    获取配置文件路径
+    
+    Returns:
+        配置文件绝对路径
+    """
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))

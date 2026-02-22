@@ -1,4 +1,4 @@
-import { Button, Card, Divider, Form, Input, InputNumber, message, Space, Switch, Typography } from 'antd';
+import { Button, Card, Form, Input, message, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { configApi } from '../api/client';
 
@@ -6,79 +6,92 @@ export default function ConfigTTS() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string>(''); // 测试结果状态
-  const [showApiKey, setShowApiKey] = useState(true); // 默认显示明文密钥
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [initialConfig, setInitialConfig] = useState<string>('');
+  const [testResult, setTestResult] = useState<'unknown' | 'success' | 'error'>('unknown');
+
+  // 监听配置修改
+  const handleConfigChange = (value: string) => {
+    if (initialConfig && value !== initialConfig) {
+      setHasUnsavedChanges(true);
+    } else {
+      setHasUnsavedChanges(false);
+    }
+  };
   
   useEffect(() => {
-    console.log('ConfigTTS component mounted, loading config...');
     const loadConfig = async () => {
       try {
+        console.log('Loading TTS config...');
         console.log('Calling configApi.getTTS()...');
-        const r = await configApi.getTTS();
-        console.log('API response received:', r);
-        const d = r.data.data as unknown as Record<string, unknown> || {};
-        console.log('Config data:', d);
+        const response = await configApi.getTTS();
+        console.log('API response received:', response);
         
-        if (d.api_key) {
-          console.log('API Key from API:', d.api_key);
-          console.log('API Key type:', typeof d.api_key);
-          console.log('API Key length:', (d.api_key as string).length);
+        // 尝试从不同的位置获取配置数据
+        let data: Record<string, unknown> = {};
+        
+        // 检查response是否是一个对象
+        if (typeof response === 'object' && response !== null) {
+          // 检查是否有data字段（axios响应格式）
+          if ('data' in response && typeof response.data === 'object' && response.data !== null) {
+            const responseData = response.data as any;
+            console.log('Response data:', responseData);
+            
+            // 直接使用responseData作为配置数据
+            data = { ...responseData };
+            console.log('Config data from response.data:', data);
+          } else {
+            console.log('No data field found in response');
+          }
+        } else {
+          console.error('Invalid API response format:', response);
         }
         
-        // 设置默认值
-        const parameters = d.parameters as Record<string, number | boolean | string> || {};
-        
-        form.setFieldsValue({
-          base_url: d.base_url,
-          api_key: d.api_key,
-          model: d.model,
-          voice: parameters.voice !== undefined ? parameters.voice : 'zhimiao',
-          speech_rate: parameters.speech_rate !== undefined ? parameters.speech_rate : 0,
-          pitch: parameters.pitch !== undefined ? parameters.pitch : 0,
-          volume: parameters.volume !== undefined ? parameters.volume : 0,
-          format: parameters.format !== undefined ? parameters.format : 'pcm',
-          sample_rate: parameters.sample_rate !== undefined ? parameters.sample_rate : 24000,
-          enable_subtitle: parameters.enable_subtitle !== undefined ? parameters.enable_subtitle : false,
-        });
-        
-        // 验证表单值是否设置成功
-        setTimeout(() => {
-          const formValues = form.getFieldsValue();
-          console.log('Form values after setting:', formValues);
-          if (formValues.api_key) {
-            console.log('API Key in form:', formValues.api_key);
-          }
-        }, 100);
-        
+        // 将配置数据转换为JSON字符串，用于显示在文本框中
+        const jsonString = JSON.stringify(data, null, 2);
+        form.setFieldsValue({ config: jsonString });
+        setInitialConfig(jsonString); // 保存初始配置
+        setHasUnsavedChanges(false); // 重置未保存修改状态
+        console.log('Form values set:', jsonString);
       } catch (error) {
         console.error('Failed to load TTS config:', error);
+        message.error('加载配置失败');
       }
     };
     
     loadConfig();
   }, [form]);
   
-  const onFinish = async (values: Record<string, unknown>) => {
+  const onFinish = async (values: { config: string }) => {
     setLoading(true);
     try {
-      await configApi.updateTTS({
-        base_url: values.base_url as string,
-        api_key: values.api_key as string,
-        model: values.model as string,
-        parameters: {
-          voice: values.voice as string,
-          speech_rate: values.speech_rate as number,
-          pitch: values.pitch as number,
-          volume: values.volume as number,
-          format: values.format as string,
-          sample_rate: values.sample_rate as number,
-          enable_subtitle: values.enable_subtitle as boolean,
-        },
-      });
-      message.success('保存成功，重启服务后生效');
+      console.log('Saving TTS config:', values);
+      
+      // 解析JSON字符串为对象
+      let configData: Record<string, unknown> = {};
+      try {
+        configData = JSON.parse(values.config);
+        console.log('Parsed config data:', configData);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', parseError);
+        message.error('JSON格式错误，请检查配置内容');
+        alert('JSON格式错误，请检查配置内容');
+        return;
+      }
+      
+      console.log('Calling configApi.updateTTS...');
+      const response = await configApi.updateTTS(configData as any);
+      console.log('API response:', response);
+      console.log('Calling message.success...');
+      message.success('保存成功');
+      console.log('message.success called');
+      alert('保存成功');
     } catch (e: unknown) {
+      console.log('Error caught:', e);
       const err = e as { response?: { data?: { detail?: string } } };
-      message.error(err.response?.data?.detail || '保存失败');
+      const errorMessage = err.response?.data?.detail || '保存失败';
+      message.error(errorMessage);
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -86,26 +99,77 @@ export default function ConfigTTS() {
   
   const testConnection = async () => {
     const values = form.getFieldsValue();
-    if (!values.base_url || !values.api_key || !values.model) {
-      message.warning('请先填写 Base URL、API Key 和 Model');
+    if (!values.config) {
+      message.warning('请先填写配置内容');
       return;
     }
-    setTesting(true);
-    setTestResult(''); // 清空之前的测试结果
+    
     try {
-      const { data } = await configApi.validateTTS({
-        base_url: values.base_url as string,
-        api_key: values.api_key as string,
-        model: values.model as string,
+      // 解析JSON字符串为对象
+      const configData = JSON.parse(values.config);
+      if (!configData.base_url || !configData.api_key || !configData.model) {
+        message.warning('请先填写 Base URL、API Key 和 Model');
+        return;
+      }
+      
+      setTesting(true);
+      console.log('Testing TTS connection...');
+      
+      // 异步执行测试连接，不阻塞主线程
+      const response = await configApi.validateTTS({
+        base_url: configData.base_url as string,
+        api_key: configData.api_key as string,
+        model: configData.model as string,
       });
-      const result = (data as { valid?: boolean; message?: string });
-      setTestResult(result.message || '连接成功');
-      message.success(result.message || '连接成功');
+      
+      console.log('TTS validation response:', response);
+      
+      // 处理响应数据，使用类型断言绕过TypeScript类型检查
+      let isValid = false;
+      let messageText = '连接失败';
+      
+      try {
+        // 检查直接响应对象
+        const responseAny = response as any;
+        if (responseAny.valid !== undefined) {
+          isValid = responseAny.valid;
+          messageText = responseAny.message || (isValid ? '连接成功' : '连接失败');
+        } 
+        // 检查response.data
+        else if (responseAny.data && responseAny.data.valid !== undefined) {
+          isValid = responseAny.data.valid;
+          messageText = responseAny.data.message || (isValid ? '连接成功' : '连接失败');
+        } 
+        // 检查response.data.data
+        else if (responseAny.data && responseAny.data.data && responseAny.data.data.valid !== undefined) {
+          isValid = responseAny.data.data.valid;
+          messageText = responseAny.data.data.message || (isValid ? '连接成功' : '连接失败');
+        }
+      } catch (e) {
+        console.error('Error processing validation response:', e);
+      }
+      
+      console.log('TTS validation result:', { isValid, messageText });
+      
+      if (isValid) {
+        message.success(messageText);
+        setTestResult('success');
+      } else {
+        message.error(messageText);
+        setTestResult('error');
+      }
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } };
-      const errorMsg = err.response?.data?.message || '连接失败';
-      setTestResult(errorMsg);
-      message.error(errorMsg);
+      if (e instanceof SyntaxError) {
+        console.error('Failed to parse JSON:', e);
+        message.error('JSON格式错误，请检查配置内容');
+        setTestResult('error');
+      } else {
+        console.error('TTS validation error:', e);
+        const err = e as { response?: { data?: { message?: string } } };
+        const errorMsg = err.response?.data?.message || '连接失败';
+        message.error(errorMsg);
+        setTestResult('error');
+      }
     } finally {
       setTesting(false);
     }
@@ -115,80 +179,40 @@ export default function ConfigTTS() {
     <div>
       <Card title="TTS 配置">
         <Form form={form} layout="vertical" onFinish={onFinish}>
-          <Form.Item name="base_url" label="Base URL" rules={[{ required: true }]}>
-            <Input placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/inference" />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Input 
-                type={showApiKey ? "text" : "password"}
-                placeholder="请输入完整的API Key"
-                autoComplete="off"
-                spellCheck="false"
-                style={{ flexGrow: 1 }}
-              />
-              <Button 
-                onClick={() => setShowApiKey(!showApiKey)}
-              >
-                {showApiKey ? '隐藏' : '显示'}
-              </Button>
-              <Button 
-                onClick={() => {
-                  const value = form.getFieldValue('api_key');
-                  if (value) {
-                    navigator.clipboard.writeText(value as string);
-                    message.success('已复制到剪贴板');
-                  }
-                }}
-              >
-                复制
-              </Button>
-            </div>
-          </Form.Item>
-          <Form.Item name="model" label="Model" rules={[{ required: true }]}>
-            <Input placeholder="cosyvoice-v3-plus" />
-          </Form.Item>
-          
-          <Divider orientation="left">语音参数</Divider>
-          
-          <Form.Item name="voice" label="Voice">
-            <Input placeholder="zhimiao" />
-          </Form.Item>
-          <Form.Item name="speech_rate" label="Speech Rate">
-            <InputNumber min={-500} max={500} step={50} defaultValue={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="pitch" label="Pitch">
-            <InputNumber min={-500} max={500} step={50} defaultValue={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="volume" label="Volume">
-            <InputNumber min={-500} max={500} step={50} defaultValue={0} style={{ width: '100%' }} />
-          </Form.Item>
-          
-          <Divider orientation="left">音频参数</Divider>
-          
-          <Form.Item name="format" label="Format">
-            <Input placeholder="pcm" />
-          </Form.Item>
-          <Form.Item name="sample_rate" label="Sample Rate">
-            <InputNumber min={8000} max={48000} step={8000} defaultValue={24000} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="enable_subtitle" label="启用字幕" valuePropName="checked">
-            <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          <Form.Item name="config" label="配置内容（JSON格式）">
+            <Input.TextArea 
+              rows={15} 
+              placeholder="请输入JSON格式的配置内容"
+              spellCheck={false}
+              style={{ fontFamily: 'monospace' }}
+              onChange={(e) => handleConfigChange(e.target.value)}
+            />
           </Form.Item>
           
           <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={loading}>
-                保存
-              </Button>
-              <Button onClick={testConnection} loading={testing}>
-                测试连接
-              </Button>
-              {testResult && (
-                <Typography.Text type={testResult.includes('成功') || testResult.includes('valid') ? 'success' : 'danger'}>
-                  {testResult}
-                </Typography.Text>
-              )}
+            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+              <Space style={{ flex: 1, justifyContent: 'space-between' }}>
+                <Button type="primary" htmlType="submit" loading={loading}>
+                  保存配置
+                </Button>
+                {hasUnsavedChanges && (
+                  <Typography.Text type="warning" style={{ marginLeft: 8 }}>
+                    有未保存的修改
+                  </Typography.Text>
+                )}
+              </Space>
+              <Space>
+                {testing ? (
+                  <Typography.Text style={{ marginRight: 8 }}>测试中...</Typography.Text>
+                ) : testResult === 'success' ? (
+                  <Typography.Text type="success" style={{ marginRight: 8 }}>连接正常</Typography.Text>
+                ) : testResult === 'error' ? (
+                  <Typography.Text type="danger" style={{ marginRight: 8 }}>连接失败</Typography.Text>
+                ) : null}
+                <Button onClick={testConnection} loading={testing}>
+                  测试连接
+                </Button>
+              </Space>
             </Space>
           </Form.Item>
         </Form>

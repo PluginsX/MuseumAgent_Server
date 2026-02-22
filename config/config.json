@@ -1,14 +1,14 @@
 {
   "server": {
     "host": "0.0.0.0",
-    "port": 8001,
+    "port": 12301,
     "reload": false,
     "cors_allow_origins": [
       "*"
     ],
     "request_limit": 200,
     "request_timeout": 30,
-    "ssl_enabled": true,
+    "ssl_enabled": false,
     "ssl_cert_file": "./config/SSL/www.soulflaw.com_nginx/www.soulflaw.com_bundle.pem",
     "ssl_key_file": "./config/SSL/www.soulflaw.com_nginx/www.soulflaw.com.key"
   },
@@ -16,12 +16,12 @@
     "api_type": "openai_compatible",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "qwen-turbo",
+    "model": "qwen-plus",
     "parameters": {
-      "temperature": 0.1,
+      "temperature": 0.2,
       "max_tokens": 1024,
-      "top_p": 0.1,
-      "stream": false,
+      "top_p": 0.9,
+      "stream": true,
       "presence_penalty": 0,
       "frequency_penalty": 0,
       "n": 1,
@@ -33,39 +33,48 @@
     "prompt_templates": {
       "system_message": {
         "template": "{role_description}\n\n{response_requirements}\n\n{scene_description}\n\n当前场景下支持以下功能：\n{functions_description}",
-        "variables": ["role_description", "response_requirements", "scene_description", "functions_description"],
+        "variables": [
+          "role_description",
+          "response_requirements",
+          "scene_description",
+          "functions_description"
+        ],
         "description": "系统消息模板，定义智能体的角色、职责和能力"
       },
       "user_message_with_rag": {
         "template": "用户的问题是：{user_input}\n\n相关的资料包括：\n{retrieved_materials}",
-        "variables": ["user_input", "retrieved_materials"],
+        "variables": [
+          "user_input",
+          "retrieved_materials"
+        ],
         "description": "带RAG检索的用户消息模板"
       },
       "user_message_without_rag": {
         "template": "用户的问题是：{user_input}",
-        "variables": ["user_input"],
+        "variables": [
+          "user_input"
+        ],
         "description": "不带RAG检索的用户消息模板"
       },
       "function_item_format": {
         "template": "• {name}: {description}",
-        "variables": ["name", "description"],
+        "variables": [
+          "name",
+          "description"
+        ],
         "description": "单个函数的格式化模板"
       },
       "rag_material_format": {
         "template": "【{title}】\n{content}",
-        "variables": ["title", "content"],
+        "variables": [
+          "title",
+          "content"
+        ],
         "description": "单条RAG材料的格式化模板"
       }
     }
   },
-  "artifact_knowledge_base": {
-    "type": "sqlite",
-    "path": "./data/museum_artifact.db",
-    "app_db_path": "./data/museum_agent_app.db",
-    "chroma_path": "./data/chroma_db",
-    "table_name": "museum_artifact_info",
-    "valid_operations": []
-  },
+
   "response": {
     "success_code": 200,
     "fail_code": 400,
@@ -106,13 +115,14 @@
   "tts": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "cosyvoice-v3-flash",
-    "voice": "cosyvoice-v3-flash-bailian-06706127c4f34cc4977ed764ad44351b",
+    "model": "cosyvoice-v2",
+    "voice": "longxiaochun_v2",
     "format": "PCM_16000HZ_MONO_16BIT"
   },
   "stt": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "paraformer-realtime-v2"
+    "model": "paraformer-realtime-v2",
+    "parameters": {}
   }
 }

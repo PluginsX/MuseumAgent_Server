@@ -5,30 +5,8 @@
 import re
 from typing import List, Tuple
 
-# 文物ID格式：数字/字母组合，长度1-50
-ARTIFACT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,50}$")
-
 # 场景类型合法值
 VALID_SCENE_TYPES = ("study", "leisure", "public")
-
-
-def validate_artifact_id(artifact_id: str) -> Tuple[bool, str]:
-    """
-    校验文物ID格式
-    
-    Args:
-        artifact_id: 文物ID字符串
-    
-    Returns:
-        (是否合法, 错误信息)，合法时错误信息为空字符串
-    """
-    if not artifact_id or not isinstance(artifact_id, str):
-        return False, "文物ID不能为空"
-    
-    if not ARTIFACT_ID_PATTERN.match(artifact_id):
-        return False, "文物ID格式不合法，应为字母、数字、下划线或连字符组合，长度1-50"
-    
-    return True, ""
 
 
 def validate_operation(

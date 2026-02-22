@@ -1,4 +1,4 @@
-import { AreaChartOutlined, BookOutlined, ClockCircleOutlined, CodeOutlined, DesktopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
+import { AreaChartOutlined, BookOutlined, ClockCircleOutlined, CodeOutlined, DatabaseOutlined, DesktopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined } from '@ant-design/icons';
 import { Layout as AntLayout, Button, Menu, Space, Typography } from 'antd';
 import { useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { Link, Outlet, useNavigate } from 'react-router-dom';
 const { Header, Sider, Content } = AntLayout;
 
 const menuItems = [
-  { key: '/', label: <Link to="/">仪表盘</Link>, icon: <SettingOutlined /> },
+  { key: '/', label: <Link to="/">服务器配置</Link>, icon: <SettingOutlined /> },
   { key: '/config/llm', label: <Link to="/config/llm">LLM 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/stt', label: <Link to="/config/stt">STT 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/tts', label: <Link to="/config/tts">TTS 配置</Link>, icon: <CodeOutlined /> },
@@ -14,10 +14,9 @@ const menuItems = [
   { key: '/clients', label: <Link to="/clients">客户信息</Link>, icon: <DesktopOutlined /> },
   { key: '/session-config', label: <Link to="/session-config">会话配置</Link>, icon: <ClockCircleOutlined /> },
   { key: '/monitor', label: <Link to="/monitor">系统监控</Link>, icon: <AreaChartOutlined /> },
-  { key: '/users', label: <Link to="/users">用户管理</Link>, icon: <TeamOutlined /> },
-  { key: '/client-management', label: <Link to="/client-management">客户管理</Link>, icon: <TeamOutlined /> },
-  { key: '/audit-logs', label: <Link to="/audit-logs">审计日志</Link>, icon: <BookOutlined /> },
+  { key: '/database-management', label: <Link to="/database-management">数据库管理</Link>, icon: <DatabaseOutlined /> },
 ];
+
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);

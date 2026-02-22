@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 
 from src.common.enhanced_logger import get_enhanced_logger
-from src.common.config_utils import get_global_config
+from src.common.config_utils import get_global_config, register_config_listener
 from src.services.interrupt_manager import get_interrupt_manager
 
 
@@ -28,6 +28,19 @@ class LLMService:
         self.api_key = self.llm_config.get("api_key", "")
         self.model = self.llm_config.get("model", "qwen-turbo")
         self.parameters = self.llm_config.get("parameters", {})
+        
+        # 注册配置变更监听器
+        register_config_listener("llm", self.reload_config)
+    
+    def reload_config(self, new_config: dict) -> None:
+        """重新加载配置"""
+        self.logger.sys.info("LLM配置变更，正在重新加载...")
+        self.llm_config = new_config
+        self.base_url = self.llm_config.get("base_url", "")
+        self.api_key = self.llm_config.get("api_key", "")
+        self.model = self.llm_config.get("model", "qwen-turbo")
+        self.parameters = self.llm_config.get("parameters", {})
+        self.logger.sys.info("LLM配置重新加载完成")
     
     async def chat_completion(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

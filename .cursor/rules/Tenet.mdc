@@ -33,11 +33,11 @@ alwaysApply: true
 11. 服务端需要的外部服务接口
    # LLM // HTTPS API
    - Base_url: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-   - Model: `qwen-turbo`
+   - Model: `qwen-plus`
    - Api key: `sk-a7558f9302974d1891906107f6033939`
    # TTS // Aliyun WebSocket SDK
    - Base_url: `wss://dashscope.aliyuncs.com/api-ws/v1/inference`
-   - Model: `cosyvoice-v3-plus`
+   - Model: `cosyvoice-v2`
    - Api key: `sk-a7558f9302974d1891906107f6033939`
    # STT // Aliyun WebSocket SDK
    - Base_url: `wss://dashscope.aliyuncs.com/api-ws/v1/inference`

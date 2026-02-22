@@ -158,13 +158,10 @@ def list_client_users(
     total = q.count()
     users = q.offset((page - 1) * size).limit(size).all()
     
-    # 获取每个客户的API密钥
-    from src.db.models import APIKey
     responses = []
     for u in users:
-        # 查找客户的API密钥
-        api_key = db.query(APIKey).filter(APIKey.client_user_id == u.id).first()
-        api_key_str = api_key.key_plaintext if api_key else "未生成"
+        # 直接从ClientUser表获取API密钥
+        api_key_str = u.api_key if u.api_key else "未生成"
         
         responses.append(ClientUserResponse(
             id=u.id, 
@@ -190,10 +187,15 @@ def create_client_user(
         raise HTTPException(status_code=400, detail="用户名已存在")
     if body.email and db.query(ClientUser).filter(ClientUser.email == body.email).first():
         raise HTTPException(status_code=400, detail="邮箱已存在")
+    # 生成API密钥
+    import secrets
+    api_key = secrets.token_urlsafe(32)
+    
     user = ClientUser(
         username=body.username,
         email=body.email,
         password_hash=hash_password(body.password),
+        api_key=api_key,
         role=body.role,
     )
     db.add(user)
