@@ -74,7 +74,6 @@
       }
     }
   },
-
   "response": {
     "success_code": 200,
     "fail_code": 400,
@@ -113,10 +112,10 @@
     }
   },
   "tts": {
-    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "cosyvoice-v2",
-    "voice": "longxiaochun_v2",
+    "model": "cosyvoice-v1",
+    "voice": "zhixiaomei",
     "format": "PCM_16000HZ_MONO_16BIT"
   },
   "stt": {

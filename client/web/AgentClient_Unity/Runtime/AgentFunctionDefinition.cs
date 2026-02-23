@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using System.Collections.Generic;
 using Museum.Debug;
+using LitJson;
 
 // 参数类型枚举
 public enum ParameterType
@@ -202,45 +203,51 @@ public class FunctionDefinition
         }
     }
 
-    // 转换为OpenAI格式
-    public string ToOpenAIFunction()
+    // 转换为函数定义对象
+    public Dictionary<string, object> ToFunctionObject()
     {
-        // 构建函数定义的JSON字符串
-        System.Text.StringBuilder sb = new System.Text.StringBuilder();
-        sb.Append("{");
-        sb.Append($"\"name\":\"{functionName}\",");
-        sb.Append($"\"description\":\"{functionDescription}\",");
-        sb.Append("\"parameters\":{");
-        sb.Append("\"type\":\"object\",");
-        sb.Append("\"properties\":{");
-
-        // 构建properties
-        for (int i = 0; i < parameters.Count; i++)
+        Dictionary<string, object> functionObj = new Dictionary<string, object>();
+        functionObj["name"] = functionName;
+        functionObj["description"] = functionDescription;
+        
+        Dictionary<string, object> parametersObj = new Dictionary<string, object>();
+        parametersObj["type"] = "object";
+        
+        Dictionary<string, object> propertiesObj = new Dictionary<string, object>();
+        List<string> requiredParams = new List<string>();
+        
+        foreach (var param in parameters)
         {
-            var param = parameters[i];
-            sb.Append($"\"{param.name}\":{{");
-            sb.Append($"\"type\":\"{GetJsonTypeName(param.type)}\",");
-            sb.Append($"\"description\":\"{param.description}\"");
-
+            Dictionary<string, object> paramObj = new Dictionary<string, object>();
+            paramObj["type"] = GetJsonTypeName(param.type);
+            paramObj["description"] = param.description;
+            
             // 处理Vector3等复合类型（object类型）
-            if (param.type == ParameterType.Object && param.name.ToLower().Contains("vector3") || param.description.ToLower().Contains("vector3") || param.description.ToLower().Contains("三维坐标"))
+            if (param.type == ParameterType.Object && 
+                (param.name.ToLower().Contains("vector3") || 
+                 param.description.ToLower().Contains("vector3") || 
+                 param.description.ToLower().Contains("三维坐标")))
             {
                 // 为Vector3添加x/y/z子参数
-                sb.Append(",\"properties\":{");
-                sb.Append("\"x\":{");
-                sb.Append("\"type\":\"number\",");
-                sb.Append("\"description\":\"X轴坐标值\"");
-                sb.Append("},");
-                sb.Append("\"y\":{");
-                sb.Append("\"type\":\"number\",");
-                sb.Append("\"description\":\"Y轴坐标值\"");
-                sb.Append("},");
-                sb.Append("\"z\":{");
-                sb.Append("\"type\":\"number\",");
-                sb.Append("\"description\":\"Z轴坐标值\"");
-                sb.Append("}");
-                sb.Append("},");
-                sb.Append("\"required\":[\"x\",\"y\",\"z\"]");
+                Dictionary<string, object> vectorProperties = new Dictionary<string, object>();
+                
+                Dictionary<string, object> xParam = new Dictionary<string, object>();
+                xParam["type"] = "number";
+                xParam["description"] = "X轴坐标值";
+                vectorProperties["x"] = xParam;
+                
+                Dictionary<string, object> yParam = new Dictionary<string, object>();
+                yParam["type"] = "number";
+                yParam["description"] = "Y轴坐标值";
+                vectorProperties["y"] = yParam;
+                
+                Dictionary<string, object> zParam = new Dictionary<string, object>();
+                zParam["type"] = "number";
+                zParam["description"] = "Z轴坐标值";
+                vectorProperties["z"] = zParam;
+                
+                paramObj["properties"] = vectorProperties;
+                paramObj["required"] = new List<string> { "x", "y", "z" };
             }
             else
             {
@@ -248,48 +255,34 @@ public class FunctionDefinition
                 if (param.type == ParameterType.Number || param.type == ParameterType.Integer)
                 {
                     if (param.min != float.MinValue)
-                        sb.Append($",\"minimum\":{param.min}");
+                        paramObj["minimum"] = param.min;
                     if (param.max != float.MaxValue)
-                        sb.Append($",\"maximum\":{param.max}");
+                        paramObj["maximum"] = param.max;
                 }
 
                 // 添加枚举选项
                 if (!string.IsNullOrEmpty(param.enumOptions))
                 {
-                    sb.Append(",\"enum\":[");
+                    List<string> enumList = new List<string>();
                     string[] options = param.enumOptions.Split(',');
-                    for (int j = 0; j < options.Length; j++)
+                    foreach (var option in options)
                     {
-                        sb.Append($"\"{options[j].Trim()}\"");
-                        if (j < options.Length - 1)
-                            sb.Append(",");
+                        enumList.Add(option.Trim());
                     }
-                    sb.Append("]");
+                    paramObj["enum"] = enumList;
                 }
             }
-
-            sb.Append("}");
-            if (i < parameters.Count - 1)
-                sb.Append(",");
-        }
-
-        sb.Append("},");
-
-        // 构建required
-        sb.Append("\"required\":[");
-        List<string> requiredParams = new List<string>();
-        foreach (var param in parameters)
-        {
+            
+            propertiesObj[param.name] = paramObj;
             if (param.required)
-                requiredParams.Add($"\"{param.name}\"");
+                requiredParams.Add(param.name);
         }
-        sb.Append(string.Join(",", requiredParams));
-        sb.Append("]");
-
-        sb.Append("}");
-        sb.Append("}");
-
-        return sb.ToString();
+        
+        parametersObj["properties"] = propertiesObj;
+        parametersObj["required"] = requiredParams;
+        functionObj["parameters"] = parametersObj;
+        
+        return functionObj;
     }
 
     // 获取JSON类型名
@@ -345,28 +338,25 @@ public class AgentFunctionDefinition : MonoBehaviour
         InitializeAllFunctions();
     }
 
-    // 获取所有函数的OpenAI格式
-    public string GetAllOpenAIFunctionsJsonStr()
+    // 获取所有函数的定义列表
+    public List<object> GetAllFunctions()
     {
-        System.Text.StringBuilder sb = new System.Text.StringBuilder();
-        sb.Append("{");
-        sb.Append("\"functions\":[");
-
-        for (int i = 0; i < functions.Count; i++)
+        List<object> functionList = new List<object>();
+        foreach (var func in functions)
         {
-            var func = functions[i];
             if (func != null)
             {
-                sb.Append(func.ToOpenAIFunction());
-                if (i < functions.Count - 1)
-                    sb.Append(",");
+                functionList.Add(func.ToFunctionObject());
             }
         }
+        return functionList;
+    }
 
-        sb.Append("]");
-        sb.Append("}");
-
-        return sb.ToString();
+    // 获取所有OpenAI格式函数定义的JSON字符串
+    public string GetAllOpenAIFunctionsJsonStr()
+    {
+        List<object> functionList = GetAllFunctions();
+        return JsonMapper.ToJson(functionList);
     }
 
     // 根据名称查找函数
@@ -392,12 +382,10 @@ public class AgentFunctionDefinition : MonoBehaviour
     {
         try
         {
-            // 这里需要实现函数调用的解析和执行逻辑
-            // 暂时使用简单的实现，后续可以根据需要进行扩展
-            
             // 解析JSON字符串，提取函数名和参数
-            string functionName = ExtractFunctionName(functionCallJson);
-            Dictionary<string, object> paramsDict = ExtractParameters(functionCallJson);
+            JsonData data = JsonMapper.ToObject(functionCallJson);
+            string functionName = data["name"].ToString();
+            Dictionary<string, object> paramsDict = ExtractParameters(data["parameters"]);
             
             // 查找对应的函数定义
             FunctionDefinition function = FindFunction(functionName);
@@ -419,38 +407,147 @@ public class AgentFunctionDefinition : MonoBehaviour
             else
             {
                 Log.Print("AgentFunctionDefinition", "error", $"未找到函数定义: {functionName}");
+                
+                // 构建错误结果JSON
+                string errorJson = BuildErrorResultJson(functionName, "未找到函数定义");
+                if (AgentBridge.Instance != null)
+                {
+                    AgentBridge.Instance.NotifyFunctionExecuteResult(errorJson);
+                }
             }
         }
         catch (Exception e)
         {
             Log.Print("AgentFunctionDefinition", "error", $"处理函数调用错误: {e.Message}");
+            
+            // 构建错误结果JSON
+            string errorJson = BuildErrorResultJson("unknown", e.Message);
+            if (AgentBridge.Instance != null)
+            {
+                AgentBridge.Instance.NotifyFunctionExecuteResult(errorJson);
+            }
         }
     }
     
-    // 从JSON字符串中提取函数名
-    private string ExtractFunctionName(string json)
+    // 提取函数名
+    public string ExtractFunctionName(string functionCallJson)
     {
-        // 简单的字符串解析，实际项目中可能需要使用更复杂的JSON解析
-        int nameStart = json.IndexOf("\"name\":\"") + 7;
-        int nameEnd = json.IndexOf('"', nameStart);
-        return json.Substring(nameStart, nameEnd - nameStart);
+        try
+        {
+            JsonData data = JsonMapper.ToObject(functionCallJson);
+            return data["name"].ToString();
+        }
+        catch (Exception e)
+        {
+            Log.Print("AgentFunctionDefinition", "error", $"提取函数名失败: {e.Message}");
+            return string.Empty;
+        }
+    }
+
+    // 提取参数
+    public Dictionary<string, object> ExtractParameters(string functionCallJson)
+    {
+        try
+        {
+            JsonData data = JsonMapper.ToObject(functionCallJson);
+            return ExtractParameters(data["parameters"]);
+        }
+        catch (Exception e)
+        {
+            Log.Print("AgentFunctionDefinition", "error", $"提取参数失败: {e.Message}");
+            return new Dictionary<string, object>();
+        }
+    }
+
+    // 从JsonData中提取参数
+    private Dictionary<string, object> ExtractParameters(JsonData paramsData)
+    {
+        Dictionary<string, object> parameters = new Dictionary<string, object>();
+        try
+        {
+            if (paramsData.IsObject)
+            {
+                IDictionary<string, JsonData> dict = paramsData as IDictionary<string, JsonData>;
+                if (dict != null)
+                {
+                    foreach (string key in dict.Keys)
+                    {
+                        JsonData value = paramsData[key];
+                        parameters[key] = ConvertJsonDataToObject(value);
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Log.Print("AgentFunctionDefinition", "error", $"提取参数失败: {e.Message}");
+        }
+        return parameters;
     }
     
-    // 从JSON字符串中提取参数
-    private Dictionary<string, object> ExtractParameters(string json)
+    // 将JsonData转换为.NET对象
+    private object ConvertJsonDataToObject(JsonData data)
     {
-        // 简单的字符串解析，实际项目中可能需要使用更复杂的JSON解析
-        Dictionary<string, object> paramsDict = new Dictionary<string, object>();
-        
-        // 这里需要实现参数解析逻辑
-        // 暂时返回空字典
-        return paramsDict;
+        if (data.IsString)
+            return data.ToString();
+        if (data.IsBoolean)
+            return (bool)data;
+        if (data.IsInt)
+            return (int)data;
+        if (data.IsLong)
+            return (long)data;
+        if (data.IsDouble)
+            return (double)data;
+        if (data.IsArray)
+        {
+            List<object> list = new List<object>();
+            for (int i = 0; i < data.Count; i++)
+            {
+                list.Add(ConvertJsonDataToObject(data[i]));
+            }
+            return list;
+        }
+        if (data.IsObject)
+        {
+            Dictionary<string, object> dict = new Dictionary<string, object>();
+            IDictionary<string, JsonData> jsonDict = data as IDictionary<string, JsonData>;
+            if (jsonDict != null)
+            {
+                foreach (string key in jsonDict.Keys)
+                {
+                    dict[key] = ConvertJsonDataToObject(data[key]);
+                }
+            }
+            return dict;
+        }
+        return data.ToString();
     }
     
     // 构建结果JSON
     private string BuildResultJson(string functionName, object result)
     {
-        // 构建结果JSON字符串
-        return $"{{\"function\":\"{functionName}\",\"result\":\"{result}\"}}";
+        Dictionary<string, object> resultData = new Dictionary<string, object>
+        {
+            { "requestId", Guid.NewGuid().ToString() },
+            { "functionName", functionName },
+            { "success", !(result is string && ((string)result).Contains("错误")) },
+            { "result", result },
+            { "error", null }
+        };
+        return JsonMapper.ToJson(resultData);
+    }
+    
+    // 构建错误结果JSON
+    private string BuildErrorResultJson(string functionName, string errorMessage)
+    {
+        Dictionary<string, object> resultData = new Dictionary<string, object>
+        {
+            { "requestId", Guid.NewGuid().ToString() },
+            { "functionName", functionName },
+            { "success", false },
+            { "result", null },
+            { "error", errorMessage }
+        };
+        return JsonMapper.ToJson(resultData);
     }
 }
