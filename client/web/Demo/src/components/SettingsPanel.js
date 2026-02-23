@@ -154,18 +154,168 @@ export class SettingsPanel {
             vad: true
         };
         
-        // ✅ 配置更新开关状态（手动标记哪些配置需要更新）
-        this.updateSwitches = {
-            basic: false,      // 基本配置（requireTTS, enableSRS）
-            role: false,       // 角色配置（roleDescription, responseRequirements）
-            scene: false,      // 场景配置（sceneDescription）
-            functions: false   // 函数定义（functionCalling）
-            // VAD 配置不需要发送到服务器，所以不需要开关
-        };
+        // 使用SDK内置的更新标记机制，不再需要本地维护更新开关
+        // this.updateSwitches 已被SDK的 pendingUpdates 替代
         
         // 如果是在 FloatingPanel 中使用，立即渲染
         if (!this.isStandalone && this.container) {
             this.render();
+        }
+        
+        // 订阅客户端配置变化事件
+        this.subscribeToClientEvents();
+    }
+    
+    /**
+     * 订阅客户端配置变化事件
+     */
+    subscribeToClientEvents() {
+        console.log('[SettingsPanel] 订阅客户端配置变化事件');
+        
+        try {
+            // 尝试订阅可能的配置更新事件
+            const eventNames = ['configUpdated', 'contextUpdated', 'updateContext', 'settingsChanged'];
+            
+            eventNames.forEach(eventName => {
+                try {
+                    this.client.on(eventName, () => {
+                        console.log(`[SettingsPanel] 收到客户端配置更新事件: ${eventName}`);
+                        this.refreshConfig();
+                    });
+                    console.log(`[SettingsPanel] 已订阅事件: ${eventName}`);
+                } catch (error) {
+                    console.warn(`[SettingsPanel] 无法订阅事件 ${eventName}:`, error);
+                }
+            });
+        } catch (error) {
+            console.error('[SettingsPanel] 订阅客户端事件失败:', error);
+        }
+    }
+    
+    /**
+     * 刷新配置，从客户端读取最新配置并更新界面
+     */
+    refreshConfig() {
+        console.log('[SettingsPanel] 刷新配置');
+        
+        try {
+            // 从客户端读取最新配置
+            const defaultFunctionCalling = [
+                {
+                    name: "move_to_position",
+                    description: "移动宠物到屏幕指定位置",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            x: {
+                                type: "number",
+                                description: "X坐标（像素）"
+                            },
+                            y: {
+                                type: "number",
+                                description: "Y坐标（像素）"
+                            },
+                            duration: {
+                                type: "number",
+                                description: "移动持续时间（毫秒）"
+                            }
+                        },
+                        required: ["x", "y"]
+                    }
+                }
+            ];
+            
+            // 更新本地配置
+            this.config = {
+                platform: this.client.config.platform || 'WEB',
+                requireTTS: this.client.config.requireTTS !== false,
+                enableSRS: this.client.config.enableSRS !== false,
+                autoPlay: this.client.config.autoPlay !== false,
+                vadEnabled: this.client.vadEnabled !== false,
+                functionCalling: this.client.config.functionCalling.length > 0 ? this.client.config.functionCalling : defaultFunctionCalling,
+                vadParams: this.client.config.vadParams || {
+                    silenceThreshold: 0.005,
+                    silenceDuration: 500,
+                    speechThreshold: 0.015,
+                    minSpeechDuration: 150,
+                    preSpeechPadding: 100,
+                    postSpeechPadding: 200
+                },
+                // 智能体角色配置
+                roleDescription: this.client.config.roleDescription || '你叫韩立，辽宁省博物馆智能讲解员，男性。性格热情、阳光、开朗、健谈、耐心。你精通辽博的历史文物、展览背景、文化知识，擅长用通俗的语言讲解复杂的知识。只回答与辽宁省博物馆、文物、历史文化、参观导览相关的内容，保持专业又友好的讲解员形象。',
+                responseRequirements: this.client.config.responseRequirements || '基于当前所处的场景以及场景的内容，综合相关材料，回答用户的提问。同时你要分析用户的需求！在合适的时机选择合适函数，传入合适的参数返回函数调用响应，调用函数也必须要有语言回答内容！',
+                // 场景描述
+                sceneDescription: this.client.config.sceneDescription || '当前所处的是"卷体夔纹蟠龙盖罍展示场景"，主要内容为该青铜器表面包含的各种纹样的图形和寓意展示，以及各部分组成结构的造型寓意。'
+            };
+            
+            console.log('[SettingsPanel] 配置已更新:', this.config);
+            
+            // 重新渲染界面
+            this.reRender();
+            
+            // 更新状态指示器
+            this.updateStatusIndicators();
+        } catch (error) {
+            console.error('[SettingsPanel] 刷新配置失败:', error);
+        }
+    }
+    
+    /**
+     * 重新渲染界面
+     */
+    reRender() {
+        console.log('[SettingsPanel] 重新渲染界面');
+        
+        try {
+            // 找到所有内容区域
+            const container = this.element || this.container;
+            if (container) {
+                // 清空现有内容
+                const sections = container.querySelectorAll('.settings-section');
+                sections.forEach(section => {
+                    const contentWrapper = section.querySelector('.section-content');
+                    if (contentWrapper) {
+                        contentWrapper.innerHTML = '';
+                    }
+                });
+                
+                // 重新渲染每个展开的区域
+                Object.keys(this.collapsedSections).forEach(sectionId => {
+                    if (!this.collapsedSections[sectionId]) {
+                        const section = container.querySelector(`[data-section-id="${sectionId}"]`);
+                        if (section) {
+                            const contentWrapper = section.querySelector('.section-content');
+                            if (contentWrapper) {
+                                let content;
+                                switch (sectionId) {
+                                    case 'basic':
+                                        content = this.renderBasicSettings();
+                                        break;
+                                    case 'role':
+                                        content = this.renderRoleSettings();
+                                        break;
+                                    case 'scene':
+                                        content = this.renderSceneSettings();
+                                        break;
+                                    case 'functions':
+                                        content = this.renderFunctionsSettings();
+                                        break;
+                                    case 'vad':
+                                        content = this.renderVADSettings();
+                                        break;
+                                }
+                                if (content) {
+                                    contentWrapper.appendChild(content);
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                console.log('[SettingsPanel] 界面已重新渲染');
+            }
+        } catch (error) {
+            console.error('[SettingsPanel] 重新渲染界面失败:', error);
         }
     }
 
@@ -222,6 +372,30 @@ export class SettingsPanel {
      * 渲染内容部分（可复用）
      */
     renderContent(container) {
+        // 添加更新状态指示器的样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .update-status-indicator {
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 500;
+                transition: all 0.3s ease;
+            }
+            
+            .update-status-indicator.pending {
+                background-color: #ffdddd;
+                color: #d8000c;
+                border: 1px solid #ffbaba;
+            }
+            
+            .update-status-indicator.submitted {
+                background-color: #ddffdd;
+                color: #4f8a10;
+                border: 1px solid #b6d7a8;
+            }
+        `;
+        document.head.appendChild(style);
 
         // 1. 客户端基本信息
         const basicSection = this.renderCollapsibleSection(
@@ -296,47 +470,28 @@ export class SettingsPanel {
         leftArea.appendChild(toggleIcon);
         leftArea.appendChild(titleElement);
 
-        // ✅ 右侧区域（更新开关）- 仅对需要发送到服务器的配置显示
+        // ✅ 右侧区域（更新状态指示器）- 仅对需要发送到服务器的配置显示
         const rightArea = createElement('div', {
             className: 'section-header-right'
         });
 
-        // 只有 basic, role, scene, functions 需要更新开关（VAD 是客户端本地配置）
-        if (this.updateSwitches.hasOwnProperty(id)) {
-            const switchLabel = createElement('label', {
-                className: 'update-switch-label'
+        // 只有 basic, role, scene, functions 需要更新状态指示（VAD 是客户端本地配置）
+        const updatableSections = ['basic', 'role', 'scene', 'functions'];
+        if (updatableSections.includes(id)) {
+            // 创建状态指示器
+            const statusIndicator = createElement('div', {
+                className: 'update-status-indicator'
             });
 
-            const switchInput = createElement('input', {
-                type: 'checkbox',
-                className: 'update-switch'
-            });
-            switchInput.checked = this.updateSwitches[id];
+            // 获取当前更新状态
+            const updateMarks = this.client.getUpdateMarks();
+            const isPending = updateMarks[id] || false;
 
-            // 阻止事件冒泡，避免触发折叠/展开
-            switchLabel.addEventListener('click', (e) => {
-                e.stopPropagation();
-            });
+            // 设置状态文本
+            statusIndicator.textContent = isPending ? '未提交' : '已提交';
+            statusIndicator.className = `update-status-indicator ${isPending ? 'pending' : 'submitted'}`;
 
-            switchInput.addEventListener('change', (e) => {
-                this.updateSwitches[id] = e.target.checked;
-                console.log(`[SettingsPanel] 配置更新开关 [${id}]:`, e.target.checked);
-            });
-
-            const switchSlider = createElement('span', {
-                className: 'update-switch-slider'
-            });
-
-            const switchText = createElement('span', {
-                className: 'update-switch-text',
-                textContent: '更新'
-            });
-
-            switchLabel.appendChild(switchInput);
-            switchLabel.appendChild(switchSlider);
-            switchLabel.appendChild(switchText);
-
-            rightArea.appendChild(switchLabel);
+            rightArea.appendChild(statusIndicator);
         }
 
         header.appendChild(leftArea);
@@ -818,22 +973,14 @@ export class SettingsPanel {
         } else {
             this.config[key] = value;
             
-            // ✅ 使用 SDK 的配置管理（自动保存）
+            // ✅ 使用 SDK 的配置管理（自动保存 + 自动标记更新）
             this.client.updateConfig(key, value);
-            
-            // 更新开关状态
-            if (key === 'requireTTS' || key === 'enableSRS') {
-                this._autoEnableUpdateSwitch('basic');
-            } else if (key === 'functionCalling') {
-                this._autoEnableUpdateSwitch('functions');
-            } else if (key === 'roleDescription' || key === 'responseRequirements') {
-                this._autoEnableUpdateSwitch('role');
-            } else if (key === 'sceneDescription') {
-                this._autoEnableUpdateSwitch('scene');
-            }
         }
 
         console.log('[SettingsPanel] 配置已更新并自动保存');
+        
+        // 更新状态指示器
+        this.updateStatusIndicators();
     }
 
     /**
@@ -914,55 +1061,49 @@ export class SettingsPanel {
      * 只返回开关打开的配置项
      */
     getPendingUpdates() {
-        const updates = {};
-
-        // 基本配置
-        if (this.updateSwitches.basic) {
-            updates.require_tts = this.config.requireTTS;
-            updates.enable_srs = this.config.enableSRS;
-        }
-
-        // 角色配置
-        if (this.updateSwitches.role) {
-            updates.system_prompt = {
-                role_description: this.config.roleDescription || '',
-                response_requirements: this.config.responseRequirements || ''
-            };
-        }
-
-        // 场景配置
-        if (this.updateSwitches.scene) {
-            updates.scene_context = {
-                scene_description: this.config.sceneDescription || ''
-            };
-        }
-
-        // 函数定义
-        if (this.updateSwitches.functions) {
-            updates.function_calling = this.config.functionCalling;
-        }
-
-        return updates;
+        // 使用SDK内置的方法获取待更新配置
+        return this.client.getPendingUpdates();
     }
 
     /**
      * ✅ 清除所有更新开关（发送成功后调用）
      */
     clearUpdateSwitches() {
-        for (const key in this.updateSwitches) {
-            this.updateSwitches[key] = false;
-        }
+        // 使用SDK内置的方法清除更新标记
+        this.client.clearUpdateMarks();
         
-        // ✅ 更新 UI 中的开关状态（支持独立模式和容器模式）
-        const container = this.element || this.container;
-        if (container) {
-            const switches = container.querySelectorAll('.update-switch');
-            switches.forEach(sw => {
-                sw.checked = false;
-            });
-        }
+        // 更新状态指示器
+        this.updateStatusIndicators();
         
         console.log('[SettingsPanel] 所有更新开关已清除');
+    }
+    
+    /**
+     * 更新所有状态指示器
+     */
+    updateStatusIndicators() {
+        const container = this.element || this.container;
+        if (!container) return;
+        
+        // 获取所有状态指示器
+        const indicators = container.querySelectorAll('.update-status-indicator');
+        const updateMarks = this.client.getUpdateMarks();
+        
+        indicators.forEach(indicator => {
+            // 获取对应的部分ID
+            const section = indicator.closest('.settings-section');
+            if (section) {
+                const sectionId = section.getAttribute('data-section-id');
+                if (sectionId) {
+                    // 获取当前更新状态
+                    const isPending = updateMarks[sectionId] || false;
+                    
+                    // 更新状态文本和样式
+                    indicator.textContent = isPending ? '未提交' : '已提交';
+                    indicator.className = `update-status-indicator ${isPending ? 'pending' : 'submitted'}`;
+                }
+            }
+        });
     }
 
     /**

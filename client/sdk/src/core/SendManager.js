@@ -4,11 +4,12 @@
  */
 
 export class SendManager {
-    constructor(wsClient, sessionId, clientConfig, settingsPanel = null) {
+    constructor(wsClient, sessionId, clientConfig, settingsPanel = null, client = null) {
         this.wsClient = wsClient;
         this.sessionId = sessionId;
         this.clientConfig = clientConfig;  // ✅ 保存客户端配置引用
         this.settingsPanel = settingsPanel;  // ✅ 保存设置面板引用
+        this.client = client;  // ✅ 保存客户端实例引用
         
         // 当前语音流
         this.currentVoiceStream = null;
@@ -68,25 +69,68 @@ export class SendManager {
      * @private
      */
     _buildUpdateSession() {
-        // 如果没有设置面板引用，返回空对象（不更新任何配置）
-        if (!this.settingsPanel) {
-            return {};
-        }
-        
-        // 获取需要更新的配置（差异更新）
-        const updates = this.settingsPanel.getPendingUpdates();
-        
-        // 如果有更新，发送后自动关闭开关
-        if (Object.keys(updates).length > 0) {
-            console.log('[SendManager] 携带配置更新:', updates);
+        // 如果有客户端实例，使用客户端的内部标记机制
+        if (this.client) {
+            // 获取需要更新的配置（差异更新）
+            const updates = this.client.getPendingUpdates();
             
-            // ✅ 发送成功后自动关闭所有更新开关
-            setTimeout(() => {
-                this.settingsPanel.clearUpdateSwitches();
-            }, 100);
+            // 如果有更新，发送后自动清除标记
+            if (Object.keys(updates).length > 0) {
+                console.log('[SendManager] 携带配置更新:', updates);
+                
+                // ✅ 发送成功后自动清除更新标记
+                setTimeout(() => {
+                    this.client.clearUpdateMarks();
+                }, 100);
+            }
+            
+            return updates;
+        } else if (this.settingsPanel) {
+            // 保持向后兼容：如果有设置面板引用，使用设置面板的待更新配置
+            const updates = this.settingsPanel.getPendingUpdates();
+            
+            // 如果有更新，发送后自动关闭开关
+            if (Object.keys(updates).length > 0) {
+                console.log('[SendManager] 携带配置更新（设置面板）:', updates);
+                
+                // ✅ 发送成功后自动关闭所有更新开关
+                setTimeout(() => {
+                    this.settingsPanel.clearUpdateSwitches();
+                }, 100);
+            }
+            
+            return updates;
+        } else {
+            // 如果没有客户端实例和设置面板引用，返回所有可能的上下文配置
+            const updates = {};
+            
+            // 检查并添加上下文相关配置
+            if (this.clientConfig.sceneDescription) {
+                updates.sceneContext = {
+                    description: this.clientConfig.sceneDescription
+                };
+            }
+            
+            if (this.clientConfig.roleDescription || this.clientConfig.responseRequirements) {
+                updates.systemPrompt = {};
+                if (this.clientConfig.roleDescription) {
+                    updates.systemPrompt.role_description = this.clientConfig.roleDescription;
+                }
+                if (this.clientConfig.responseRequirements) {
+                    updates.systemPrompt.response_requirements = this.clientConfig.responseRequirements;
+                }
+            }
+            
+            if (this.clientConfig.functionCalling) {
+                updates.functionCalling = this.clientConfig.functionCalling;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+                console.log('[SendManager] 携带上下文配置更新（无客户端实例）:', updates);
+            }
+            
+            return updates;
         }
-        
-        return updates;
     }
 
     /**

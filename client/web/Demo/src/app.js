@@ -304,4 +304,80 @@ document.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
 });
 
+// UnityAgentBridge对象，用于接收Unity的调用
+window.UnityAgentBridge = {
+    // 存储Unity实例
+    unityInstance: null,
+    
+    // 注册Unity实例到JS环境
+    registerUnityInstance: function(gameObjectName) {
+        console.log('[UnityAgentBridge] 注册Unity实例:', gameObjectName);
+        this.unityInstance = window.unityInstance;
+        console.log('[UnityAgentBridge] Unity实例已注册:', this.unityInstance ? '成功' : '失败');
+    },
+    
+    // 接收Unity发送的上下文更新
+    updateContext: function(contextJson) {
+        console.log('[UnityAgentBridge] 接收上下文更新:', contextJson);
+        try {
+            // 解析上下文数据
+            const contextData = JSON.parse(contextJson);
+            console.log('[UnityAgentBridge] 解析后的上下文数据:', contextData);
+            
+            // 更新智能体客户端的上下文
+            if (window.app && window.app.client) {
+                console.log('[UnityAgentBridge] 更新智能体客户端上下文');
+                try {
+                    // 调用SDK的updateContext方法
+                    window.app.client.updateContext(contextData);
+                    console.log('[UnityAgentBridge] 上下文更新成功');
+                } catch (error) {
+                    console.error('[UnityAgentBridge] 更新上下文失败:', error);
+                }
+            } else {
+                console.warn('[UnityAgentBridge] 智能体客户端未初始化');
+            }
+        } catch (error) {
+            console.error('[UnityAgentBridge] 解析上下文数据失败:', error);
+        }
+    },
+    
+    // 接收Unity回传的函数执行结果
+    notifyFunctionResult: function(resultJson) {
+        console.log('[UnityAgentBridge] 接收函数执行结果:', resultJson);
+        try {
+            // 解析结果数据
+            const resultData = JSON.parse(resultJson);
+            console.log('[UnityAgentBridge] 解析后的函数执行结果:', resultData);
+            
+            // 处理函数执行结果
+            if (window.app && window.app.client) {
+                console.log('[UnityAgentBridge] 处理函数执行结果');
+                // 这里需要根据智能体客户端的API来处理函数执行结果
+                // 暂时打印日志，后续根据实际API进行修改
+            } else {
+                console.warn('[UnityAgentBridge] 智能体客户端未初始化');
+            }
+        } catch (error) {
+            console.error('[UnityAgentBridge] 解析函数执行结果失败:', error);
+        }
+    },
+    
+    // 接收Unity转发的用户消息
+    forwardUserMessage: function(message) {
+        console.log('[UnityAgentBridge] 接收转发的用户消息:', message);
+        try {
+            // 处理转发的用户消息
+            if (window.app && window.app.client) {
+                console.log('[UnityAgentBridge] 发送用户消息');
+                window.app.client.sendMessage(message);
+            } else {
+                console.warn('[UnityAgentBridge] 智能体客户端未初始化');
+            }
+        } catch (error) {
+            console.error('[UnityAgentBridge] 处理用户消息失败:', error);
+        }
+    }
+};
+
 export default App;

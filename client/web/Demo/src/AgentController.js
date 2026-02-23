@@ -179,6 +179,24 @@ export class AgentController extends EventTarget {
             };
             console.log('[AgentController] 创建接收消息（函数）:', message);
             this.addMessage(message);
+            
+            // 转发函数调用给Unity
+            try {
+                console.log('[AgentController] 转发函数调用给Unity');
+                // 检查Unity实例是否存在
+                if (window.unityInstance) {
+                    // 将函数调用数据转换为JSON字符串
+                    const functionCallJson = JSON.stringify(data);
+                    console.log('[AgentController] 发送函数调用给Unity:', functionCallJson);
+                    // 调用Unity的OnFunctionCall方法
+                    window.unityInstance.SendMessage('AgentBridge', 'OnFunctionCall', functionCallJson);
+                    console.log('[AgentController] 函数调用已发送给Unity');
+                } else {
+                    console.warn('[AgentController] Unity实例未初始化，无法转发函数调用');
+                }
+            } catch (error) {
+                console.error('[AgentController] 转发函数调用给Unity失败:', error);
+            }
         });
         
         // 录音完成（更新语音消息的时长和音频数据）

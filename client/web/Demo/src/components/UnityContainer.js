@@ -114,24 +114,29 @@ export class UnityContainer {
         
         try {
             // 动态加载 Unity loader
+            console.log('[UnityContainer] 开始加载 Unity Loader...');
             await this.loadUnityLoader();
+            console.log('[UnityContainer] Unity Loader 加载完成');
             
             // 配置 Unity
             const buildUrl = 'unity/Build';
             const config = {
-                dataUrl: buildUrl + '/build.data.unityweb',
-                frameworkUrl: buildUrl + '/build.framework.js.unityweb',
-                codeUrl: buildUrl + '/build.wasm.unityweb',
+                dataUrl: buildUrl + '/build.data',
+                frameworkUrl: buildUrl + '/build.framework.js',
+                codeUrl: buildUrl + '/build.wasm',
                 streamingAssetsUrl: 'unity/StreamingAssets',
                 companyName: 'SoulFlaw',
                 productName: 'Museum',
                 productVersion: '0.1.0'
             };
+            console.log('[UnityContainer] Unity 配置:', config);
             
             // 创建 Unity 实例
             const progressBarFull = document.getElementById('unity-progress-bar-full');
+            console.log('[UnityContainer] 开始创建 Unity 实例...');
             
             this.unityInstance = await createUnityInstance(this.unityCanvas, config, (progress) => {
+                console.log('[UnityContainer] Unity 加载进度:', Math.round(progress * 100) + '%');
                 if (progressBarFull) {
                     progressBarFull.style.width = (100 * progress) + '%';
                 }
@@ -139,20 +144,36 @@ export class UnityContainer {
             
             // 保存到全局变量（供 Unity 调用）
             window.unityInstance = this.unityInstance;
+            console.log('[UnityContainer] Unity 实例已保存到全局变量:', window.unityInstance ? '成功' : '失败');
             
             // 隐藏加载提示
             const loadingBar = document.getElementById('unity-loading-bar');
             if (loadingBar) {
                 loadingBar.style.display = 'none';
+                console.log('[UnityContainer] 加载提示已隐藏');
             }
             
-            console.log('[UnityContainer] Unity 加载完成');
+            console.log('[UnityContainer] Unity 加载完成，实例状态:', this.unityInstance ? '已创建' : '未创建');
+            
+            // 尝试调用 Unity 的 RegisterToJS 方法
+            if (this.unityInstance) {
+                console.log('[UnityContainer] 尝试调用 Unity 的 RegisterToJS 方法...');
+                try {
+                    this.unityInstance.SendMessage('AgentBridge', 'RegisterToJS');
+                    console.log('[UnityContainer] 已调用 Unity 的 RegisterToJS 方法');
+                } catch (error) {
+                    console.warn('[UnityContainer] 调用 RegisterToJS 方法失败:', error);
+                    console.warn('[UnityContainer] 可能是因为 Unity 场景中没有 AgentBridge 对象，或对象名称不正确');
+                }
+            }
             
         } catch (error) {
             console.error('[UnityContainer] Unity 加载失败:', error);
+            console.error('[UnityContainer] 错误详情:', error.stack);
             alert('Unity 加载失败: ' + error.message);
         } finally {
             this.isLoading = false;
+            console.log('[UnityContainer] Unity 加载过程结束，isLoading:', this.isLoading);
         }
     }
     
@@ -163,22 +184,37 @@ export class UnityContainer {
         return new Promise((resolve, reject) => {
             // 检查是否已加载
             if (window.createUnityInstance) {
+                console.log('[UnityContainer] Unity Loader 已加载，直接使用');
                 resolve();
                 return;
             }
             
+            console.log('[UnityContainer] 开始加载 Unity Loader...');
+            
             // 动态加载脚本
             const script = document.createElement('script');
             script.src = 'unity/Build/build.loader.js';
+            console.log('[UnityContainer] Unity Loader 脚本路径:', script.src);
+            
             script.onload = () => {
                 console.log('[UnityContainer] Unity Loader 加载完成');
+                console.log('[UnityContainer] createUnityInstance 函数是否存在:', typeof window.createUnityInstance === 'function');
                 resolve();
             };
+            
             script.onerror = () => {
+                console.error('[UnityContainer] Unity Loader 加载失败');
                 reject(new Error('无法加载 Unity Loader'));
             };
             
+            script.onabort = () => {
+                console.error('[UnityContainer] Unity Loader 加载被中止');
+                reject(new Error('Unity Loader 加载被中止'));
+            };
+            
+            console.log('[UnityContainer] 正在添加 Unity Loader 脚本到文档...');
             document.body.appendChild(script);
+            console.log('[UnityContainer] Unity Loader 脚本已添加到文档');
         });
     }
     

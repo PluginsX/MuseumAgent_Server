@@ -84,6 +84,14 @@ export class MuseumAgentClient {
         this.audioChunks = [];
         this.recordingStartTime = null;
         
+        // 配置更新标记
+        this.pendingUpdates = {
+            basic: false,      // 基本配置（requireTTS, enableSRS）
+            role: false,       // 角色配置（roleDescription, responseRequirements）
+            scene: false,      // 场景配置（sceneDescription）
+            functions: false   // 函数定义（functionCalling）
+        };
+        
         // 绑定回调
         this._bindCallbacks(config);
     }
@@ -174,8 +182,8 @@ export class MuseumAgentClient {
             this.isConnected = true;
             this.lastAuthData = authData; // 保存认证数据
             
-            // 初始化发送管理器（传递配置引用）
-            this.sendManager = new SendManager(this.wsClient, this.sessionId, this.config);
+            // 初始化发送管理器（传递配置引用和客户端实例）
+            this.sendManager = new SendManager(this.wsClient, this.sessionId, this.config, null, this);
             
             info('[MuseumAgentClient] 连接成功，会话ID:', this.sessionId);
             this.eventBus.emit(Events.CONNECTED, result);
@@ -267,6 +275,10 @@ export class MuseumAgentClient {
     updateConfig(key, value) {
         this.config[key] = value;
         this.configManager.update(key, value);
+        
+        // 自动标记需要更新的配置项
+        this._markConfigForUpdate(key);
+        
         info('[MuseumAgentClient] 配置已更新:', key, '=', value);
     }
     
@@ -277,6 +289,12 @@ export class MuseumAgentClient {
     updateConfigs(updates) {
         Object.assign(this.config, updates);
         this.configManager.updateMultiple(updates);
+        
+        // 自动标记需要更新的配置项
+        Object.keys(updates).forEach(key => {
+            this._markConfigForUpdate(key);
+        });
+        
         info('[MuseumAgentClient] 配置已批量更新');
     }
     
@@ -613,6 +631,188 @@ export class MuseumAgentClient {
     setSettingsPanel(settingsPanel) {
         if (this.sendManager) {
             this.sendManager.settingsPanel = settingsPanel;
+        }
+    }
+    
+    /**
+     * ✅ 新增：标记配置为需要更新
+     * @private
+     */
+    _markConfigForUpdate(key) {
+        switch (key) {
+            case 'requireTTS':
+            case 'enableSRS':
+                this.pendingUpdates.basic = true;
+                break;
+            case 'roleDescription':
+            case 'responseRequirements':
+                this.pendingUpdates.role = true;
+                break;
+            case 'sceneDescription':
+                this.pendingUpdates.scene = true;
+                break;
+            case 'functionCalling':
+                this.pendingUpdates.functions = true;
+                break;
+            default:
+                // 其他配置项不需要标记更新
+                break;
+        }
+    }
+    
+    /**
+     * ✅ 新增：获取待更新的配置项
+     * @returns {Object} 待更新的配置项
+     */
+    getPendingUpdates() {
+        const updates = {};
+        
+        if (this.pendingUpdates.basic) {
+            updates.require_tts = this.config.requireTTS;
+            updates.enable_srs = this.config.enableSRS;
+        }
+        
+        if (this.pendingUpdates.role) {
+            updates.system_prompt = {
+                role_description: this.config.roleDescription || '',
+                response_requirements: this.config.responseRequirements || ''
+            };
+        }
+        
+        if (this.pendingUpdates.scene) {
+            updates.scene_context = {
+                scene_description: this.config.sceneDescription || ''
+            };
+        }
+        
+        if (this.pendingUpdates.functions) {
+            updates.function_calling = this.config.functionCalling;
+        }
+        
+        return updates;
+    }
+    
+    /**
+     * ✅ 新增：清除更新标记
+     */
+    clearUpdateMarks() {
+        this.pendingUpdates = {
+            basic: false,
+            role: false,
+            scene: false,
+            functions: false
+        };
+        info('[MuseumAgentClient] 配置更新标记已清除');
+    }
+    
+    /**
+     * ✅ 新增：获取更新标记
+     * @returns {Object} 更新标记状态
+     */
+    getUpdateMarks() {
+        return { ...this.pendingUpdates };
+    }
+    
+    /**
+     * ✅ 新增：获取配置和更新标记
+     * @returns {Object} 配置和更新标记
+     */
+    getConfigWithUpdates() {
+        return {
+            config: { ...this.config },
+            updates: this.getPendingUpdates(),
+            marks: this.getUpdateMarks()
+        };
+    }
+    
+    /**
+     * ✅ 新增：更新智能体上下文
+     * @param {Object} contextData - 上下文数据
+     */
+    updateContext(contextData) {
+        info('[MuseumAgentClient] 更新智能体上下文:', contextData);
+        
+        try {
+            // 标记需要更新的配置项
+            const needUpdate = {
+                scene: false,
+                role: false,
+                functions: false
+            };
+            
+            // 更新上下文相关配置
+            if (contextData.sceneDescription) {
+                this.config.sceneDescription = contextData.sceneDescription;
+                this.configManager.update('sceneDescription', contextData.sceneDescription);
+                needUpdate.scene = true;
+            }
+            if (contextData.roleDescription) {
+                this.config.roleDescription = contextData.roleDescription;
+                this.configManager.update('roleDescription', contextData.roleDescription);
+                needUpdate.role = true;
+            }
+            if (contextData.responseRequirements) {
+                this.config.responseRequirements = contextData.responseRequirements;
+                this.configManager.update('responseRequirements', contextData.responseRequirements);
+                needUpdate.role = true;
+            }
+            if (contextData.functionCalling !== undefined) {
+                this.config.functionCalling = contextData.functionCalling;
+                this.configManager.update('functionCalling', contextData.functionCalling);
+                needUpdate.functions = true;
+            }
+            if (contextData.functions) {
+                try {
+                    // 解析functions字段
+                    const functionsData = typeof contextData.functions === 'string' 
+                        ? JSON.parse(contextData.functions) 
+                        : contextData.functions;
+                    if (functionsData.functions) {
+                        this.config.functionCalling = functionsData.functions;
+                        this.configManager.update('functionCalling', functionsData.functions);
+                        needUpdate.functions = true;
+                    } else if (Array.isArray(functionsData)) {
+                        // 如果直接是函数数组
+                        this.config.functionCalling = functionsData;
+                        this.configManager.update('functionCalling', functionsData);
+                        needUpdate.functions = true;
+                    }
+                } catch (error) {
+                    warn('[MuseumAgentClient] 解析functions字段失败:', error);
+                }
+            }
+            
+            // 自动标记需要更新的配置项
+            if (needUpdate.scene) {
+                this.pendingUpdates.scene = true;
+            }
+            if (needUpdate.role) {
+                this.pendingUpdates.role = true;
+            }
+            if (needUpdate.functions) {
+                this.pendingUpdates.functions = true;
+            }
+            
+            // 保持向后兼容：如果有设置面板引用，设置相应的更新开关
+            if (this.sendManager && this.sendManager.settingsPanel) {
+                const settingsPanel = this.sendManager.settingsPanel;
+                if (needUpdate.scene) {
+                    settingsPanel.autoEnableUpdate('scene');
+                }
+                if (needUpdate.role) {
+                    settingsPanel.autoEnableUpdate('role');
+                }
+                if (needUpdate.functions) {
+                    settingsPanel.autoEnableUpdate('functions');
+                }
+            }
+            
+            // 触发配置更新事件
+            this.eventBus.emit('configUpdated', this.config);
+            info('[MuseumAgentClient] 智能体上下文更新成功');
+        } catch (error) {
+            error('[MuseumAgentClient] 更新智能体上下文失败:', error);
+            throw error;
         }
     }
     

@@ -408,12 +408,11 @@ export class ControlButton {
         // ✅ 添加到页面（先添加才能获取尺寸）
         document.body.appendChild(this.menu);
         
-        // ✅ 获取菜单尺寸
-        const menuRect = this.menu.getBoundingClientRect();
+        // ✅ 设置菜单宽度与按钮宽度一致
+        this.menu.style.width = buttonRect.width + 'px';
         
-        // ✅ 计算菜单位置（与按钮左右居中对齐）
-        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-        const menuLeft = buttonCenterX - menuRect.width / 2;
+        // ✅ 计算菜单位置（与按钮左右对齐）
+        const menuLeft = buttonRect.left;
         
         // ✅ 设置菜单位置
         if (direction === 'down') {
