@@ -90,7 +90,7 @@ export class FloatingPanel {
             className: 'floating-panel-content'
         });
         this.element.appendChild(this.contentContainer);
-        
+        // this.contentContainer.style.padding = '10px';
         // 添加到页面
         document.body.appendChild(this.element);
         
@@ -173,6 +173,13 @@ export class FloatingPanel {
                 this.contentContainer.style.display = 'flex';
                 this.contentContainer.style.flexDirection = 'column';
                 this.contentContainer.style.height = '100%';
+                
+                // 只在设置面板时添加10px的padding
+                if (this.options.title === '客户端配置') {
+                    this.contentContainer.style.padding = '10px';
+                } else {
+                    this.contentContainer.style.padding = '0';
+                }
             }
         } else {
             // 旧模式：创建新组件实例

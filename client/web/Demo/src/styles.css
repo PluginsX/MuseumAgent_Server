@@ -1309,7 +1309,6 @@ button[type="submit"]:active {
     justify-content: flex-start;
     align-content: space-between;
     align-items: stretch;
-    padding: 10px;
 }
 
 /* 响应式 */
