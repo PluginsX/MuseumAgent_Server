@@ -11,9 +11,10 @@ const menuItems = [
   { key: '/config/stt', label: <Link to="/config/stt">STT 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/tts', label: <Link to="/config/tts">TTS 配置</Link>, icon: <CodeOutlined /> },
   { key: '/config/srs', label: <Link to="/config/srs">SRS配置</Link>, icon: <BookOutlined /> },
+  { key: '/config/mysql', label: <Link to="/config/mysql">MySQL配置</Link>, icon: <DatabaseOutlined /> },
   { key: '/session-config', label: <Link to="/session-config">会话配置</Link>, icon: <ClockCircleOutlined /> },
   { key: '/clients', label: <Link to="/clients">会话管理</Link>, icon: <DesktopOutlined /> },
-  { key: '/database-management', label: <Link to="/database-management">数据管理</Link>, icon: <DatabaseOutlined /> },
+  { key: '/database-management', label: <Link to="/database-management">用户管理</Link>, icon: <DatabaseOutlined /> },
 ];
 
 

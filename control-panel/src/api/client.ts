@@ -7,8 +7,7 @@ import type {
   STTConfig, 
   TTSConfig, 
   SRSConfig,
-  SessionConfig,
-  PaginationParams 
+  SessionConfig
 } from '../types';
 
 // 导出http实例供其他地方使用
@@ -78,26 +77,25 @@ export const sessionConfigApi = {
     http.post<{ is_valid: boolean; errors: string[] }>('/api/admin/session-config/validate', configData),
 };
 
-// 数据库管理API
-export const databaseApi = {
-  // 获取数据库表列表
-  getTables: () => http.get<{ name: string; rowCount: number }[]>('/api/admin/database/tables'),
-  // 获取表数据
-  getTableData: (tableName: string, params?: PaginationParams) => 
-    http.get<any[]>(`/api/admin/database/tables/${tableName}`, { params }),
-  // 创建记录
-  createRecord: (tableName: string, data: any) => 
-    http.post<any>(`/api/admin/database/tables/${tableName}`, data),
-  // 更新记录
-  updateRecord: (tableName: string, id: number, data: any) => 
-    http.put<any>(`/api/admin/database/tables/${tableName}/${id}`, data),
-  // 删除记录
-  deleteRecord: (tableName: string, id: number) => 
-    http.delete(`/api/admin/database/tables/${tableName}/${id}`),
-  // 初始化数据库
-  initializeDatabase: () => http.post('/api/admin/database/initialize'),
-  // 清空数据库
-  clearDatabase: () => http.post('/api/admin/database/clear'),
-  // 清空表记录
-  clearTable: (tableName: string) => http.post(`/api/admin/database/tables/${tableName}/clear`),
+// 用户管理API
+export const usersApi = {
+  // 管理员用户
+  listAdmins: (page: number = 1, size: number = 10) =>
+    http.get<any[]>('/api/admin/users/admins', { params: { page, size } }),
+  createAdmin: (data: { username: string; email: string; password: string; role?: string }) =>
+    http.post('/api/admin/users/admins', data),
+  updateAdmin: (userId: number, data: { username?: string; email?: string; password?: string; role?: string; is_active?: boolean }) =>
+    http.put(`/api/admin/users/admins/${userId}`, data),
+  deleteAdmin: (userId: number) =>
+    http.delete(`/api/admin/users/admins/${userId}`),
+  
+  // 客户用户
+  listClients: (page: number = 1, size: number = 10) =>
+    http.get<any[]>('/api/admin/users/clients', { params: { page, size } }),
+  createClient: (data: { username: string; email?: string; password: string; role?: string }) =>
+    http.post('/api/admin/users/clients', data),
+  updateClient: (userId: number, data: { username?: string; email?: string; password?: string; role?: string; is_active?: boolean }) =>
+    http.put(`/api/admin/users/clients/${userId}`, data),
+  deleteClient: (userId: number) =>
+    http.delete(`/api/admin/users/clients/${userId}`),
 };

@@ -12,6 +12,7 @@ const ConfigLLM = lazy(() => import('./pages/ConfigLLM'));
 const ConfigSTT = lazy(() => import('./pages/ConfigSTT'));
 const ConfigTTS = lazy(() => import('./pages/ConfigTTS'));
 const ConfigSRS = lazy(() => import('./pages/ConfigSRS'));
+const ConfigMySQL = lazy(() => import('./pages/ConfigMySQL'));
 const Clients = lazy(() => import('./pages/Clients'));
 const SessionConfig = lazy(() => import('./pages/SessionConfig'));
 const DatabaseManagement = lazy(() => import('./pages/DatabaseManagement'));
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="config/stt" element={<LazyLoad><ConfigSTT /></LazyLoad>} />
             <Route path="config/tts" element={<LazyLoad><ConfigTTS /></LazyLoad>} />
             <Route path="config/srs" element={<LazyLoad><ConfigSRS /></LazyLoad>} />
+            <Route path="config/mysql" element={<LazyLoad><ConfigMySQL /></LazyLoad>} />
             <Route path="clients" element={<LazyLoad><Clients /></LazyLoad>} />
             <Route path="session-config" element={<LazyLoad><SessionConfig /></LazyLoad>} />
             <Route path="database-management" element={<LazyLoad><DatabaseManagement /></LazyLoad>} />

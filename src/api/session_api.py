@@ -79,6 +79,7 @@ async def register_client_session(registration: ClientRegistrationRequest):
     """
     客户端注册接口（完整版 V2.0）
     支持系统提示词和场景上下文配置
+    注意：此接口不需要JWT token认证，因为用户认证在WebSocket连接时进行
     """
     try:
         # 记录客户端注册请求

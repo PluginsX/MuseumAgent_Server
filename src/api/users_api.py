@@ -4,12 +4,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
 
 from src.common.auth_utils import get_current_user, hash_password
-from src.db.database import get_db_session
-from src.db.models import AdminUser, ClientUser
+from src.services import database_service
+import secrets
 
 router = APIRouter(prefix="/api/admin/users", tags=["用户管理"])
 
@@ -29,9 +27,11 @@ class ClientUserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     email: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class AdminUserResponse(BaseModel):
@@ -62,14 +62,9 @@ def list_admin_users(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
-    db: Session = Depends(get_db_session),
 ):
     """管理员用户列表"""
-    q = db.query(AdminUser)
-    if search:
-        q = q.filter(or_(AdminUser.username.ilike(f"%{search}%"), AdminUser.email.ilike(f"%{search}%")))
-    total = q.count()
-    users = q.offset((page - 1) * size).limit(size).all()
+    users, total = database_service.list_admin_users(page=page, size=size, search=search)
     return [AdminUserResponse(
         id=u.id, 
         username=u.username, 
@@ -85,22 +80,20 @@ def list_admin_users(
 def create_admin_user(
     body: AdminUserCreate,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """创建管理员用户"""
-    if db.query(AdminUser).filter(AdminUser.username == body.username).first():
+    if database_service.get_admin_user_by_username(body.username):
         raise HTTPException(status_code=400, detail="用户名已存在")
-    if db.query(AdminUser).filter(AdminUser.email == body.email).first():
+    if database_service.get_admin_user_by_email(body.email):
         raise HTTPException(status_code=400, detail="邮箱已存在")
-    user = AdminUser(
+    
+    user = database_service.create_admin_user(
         username=body.username,
         email=body.email,
         password_hash=hash_password(body.password),
         role=body.role,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    
     return AdminUserResponse(
         id=user.id, 
         username=user.username, 
@@ -117,20 +110,41 @@ def update_admin_user(
     user_id: int,
     body: UserUpdate,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """更新管理员用户"""
-    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    # 验证用户名和邮箱不为空
+    if body.username is not None and body.username.strip() == "":
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    if body.email is not None and body.email.strip() == "":
+        raise HTTPException(status_code=400, detail="邮箱不能为空")
+    
+    # 检查用户名是否已被其他用户使用
+    if body.username and body.username.strip():
+        existing_user = database_service.get_admin_user_by_username(body.username)
+        if existing_user and existing_user.id != user_id:
+            raise HTTPException(status_code=400, detail="用户名已被其他用户使用")
+    
+    # 检查邮箱是否已被其他用户使用
+    if body.email and body.email.strip():
+        existing_user = database_service.get_admin_user_by_email(body.email)
+        if existing_user and existing_user.id != user_id:
+            raise HTTPException(status_code=400, detail="邮箱已被其他用户使用")
+    
+    password_hash = None
+    if body.password:
+        password_hash = hash_password(body.password)
+    
+    user = database_service.update_admin_user(
+        user_id=user_id,
+        username=body.username,
+        email=body.email,
+        role=body.role,
+        is_active=body.is_active,
+        password_hash=password_hash
+    )
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    if body.email is not None:
-        user.email = body.email
-    if body.role is not None:
-        user.role = body.role
-    if body.is_active is not None:
-        user.is_active = body.is_active
-    db.commit()
-    db.refresh(user)
+    
     return AdminUserResponse(
         id=user.id, 
         username=user.username, 
@@ -149,18 +163,12 @@ def list_client_users(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
-    db: Session = Depends(get_db_session),
 ):
     """客户用户列表"""
-    q = db.query(ClientUser)
-    if search:
-        q = q.filter(or_(ClientUser.username.ilike(f"%{search}%"), ClientUser.email.ilike(f"%{search}%")))
-    total = q.count()
-    users = q.offset((page - 1) * size).limit(size).all()
+    users, total = database_service.list_client_users(page=page, size=size, search=search)
     
     responses = []
     for u in users:
-        # 直接从ClientUser表获取API密钥
         api_key_str = u.api_key if u.api_key else "未生成"
         
         responses.append(ClientUserResponse(
@@ -180,27 +188,22 @@ def list_client_users(
 def create_client_user(
     body: ClientUserCreate,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """创建客户用户"""
-    if db.query(ClientUser).filter(ClientUser.username == body.username).first():
+    if database_service.get_client_user_by_username(body.username):
         raise HTTPException(status_code=400, detail="用户名已存在")
-    if body.email and db.query(ClientUser).filter(ClientUser.email == body.email).first():
-        raise HTTPException(status_code=400, detail="邮箱已存在")
-    # 生成API密钥
-    import secrets
-    api_key = secrets.token_urlsafe(32)
     
-    user = ClientUser(
+    # 生成API密钥
+    api_key = f"museum_{secrets.token_urlsafe(32)}"
+    
+    user = database_service.create_client_user(
         username=body.username,
         email=body.email,
         password_hash=hash_password(body.password),
         api_key=api_key,
         role=body.role,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    
     return ClientUserResponse(
         id=user.id, 
         username=user.username, 
@@ -208,7 +211,8 @@ def create_client_user(
         role=user.role, 
         is_active=user.is_active,
         created_at=user.created_at.isoformat() if user.created_at else None,
-        last_login=user.last_login.isoformat() if user.last_login else None
+        last_login=user.last_login.isoformat() if user.last_login else None,
+        api_key=user.api_key
     )
 
 
@@ -217,20 +221,43 @@ def update_client_user(
     user_id: int,
     body: UserUpdate,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """更新客户用户"""
-    user = db.query(ClientUser).filter(ClientUser.id == user_id).first()
+    # 验证用户名不为空
+    if body.username is not None and body.username.strip() == "":
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    
+    # 验证邮箱不为空（如果提供了邮箱）
+    if body.email is not None and body.email.strip() == "":
+        raise HTTPException(status_code=400, detail="邮箱不能为空")
+    
+    # 检查用户名是否已被其他用户使用
+    if body.username and body.username.strip():
+        existing_user = database_service.get_client_user_by_username(body.username)
+        if existing_user and existing_user.id != user_id:
+            raise HTTPException(status_code=400, detail="用户名已被其他用户使用")
+    
+    # 检查邮箱是否已被其他用户使用（如果提供了邮箱）
+    if body.email and body.email.strip():
+        existing_user = database_service.get_client_user_by_email(body.email)
+        if existing_user and existing_user.id != user_id:
+            raise HTTPException(status_code=400, detail="邮箱已被其他用户使用")
+    
+    password_hash = None
+    if body.password:
+        password_hash = hash_password(body.password)
+    
+    user = database_service.update_client_user(
+        user_id=user_id,
+        username=body.username,
+        email=body.email,
+        role=body.role,
+        is_active=body.is_active,
+        password_hash=password_hash
+    )
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    if body.email is not None:
-        user.email = body.email
-    if body.role is not None:
-        user.role = body.role
-    if body.is_active is not None:
-        user.is_active = body.is_active
-    db.commit()
-    db.refresh(user)
+    
     return ClientUserResponse(
         id=user.id, 
         username=user.username, 
@@ -238,7 +265,8 @@ def update_client_user(
         role=user.role, 
         is_active=user.is_active,
         created_at=user.created_at.isoformat() if user.created_at else None,
-        last_login=user.last_login.isoformat() if user.last_login else None
+        last_login=user.last_login.isoformat() if user.last_login else None,
+        api_key=user.api_key
     )
 
 
@@ -246,14 +274,10 @@ def update_client_user(
 def delete_admin_user(
     user_id: int,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """删除管理员用户"""
-    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
-    if not user:
+    if not database_service.delete_admin_user(user_id):
         raise HTTPException(status_code=404, detail="用户不存在")
-    db.delete(user)
-    db.commit()
     return {"message": "删除成功"}
 
 
@@ -261,12 +285,8 @@ def delete_admin_user(
 def delete_client_user(
     user_id: int,
     _: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
 ):
     """删除客户用户"""
-    user = db.query(ClientUser).filter(ClientUser.id == user_id).first()
-    if not user:
+    if not database_service.delete_client_user(user_id):
         raise HTTPException(status_code=404, detail="用户不存在")
-    db.delete(user)
-    db.commit()
     return {"message": "删除成功"}

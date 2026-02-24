@@ -1,604 +1,582 @@
 import { useEffect, useState } from 'react';
-import { Table, Card, Button, Space, Tag, Typography, Input, Modal, Form, Select, message, Badge, Dropdown, Menu } from 'antd';
+import { Table, Card, Button, Space, Tag, Typography, Input, Modal, Form, Tabs, message, Badge, Switch, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined, WarningOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
-import { databaseApi } from '../api/client';
+import { ReloadOutlined, PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons';
+import { usersApi } from '../api/client';
 import { extractData, formatDateTime, getErrorMessage } from '../utils/helpers';
 
 const { Title, Text } = Typography;
 
-interface TableData {
-  [key: string]: any;
+interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  last_login: string | null;
 }
 
-interface TableInfo {
-  name: string;
-  rowCount: number;
+interface ClientUser {
+  id: number;
+  username: string;
+  email: string | null;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  last_login: string | null;
+  api_key: string | null;
 }
 
-export default function DatabaseManagement() {
-  const [tables, setTables] = useState<TableInfo[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string>('');
-  const [tableData, setTableData] = useState<TableData[]>([]);
+export default function UserManagement() {
+  const [activeTab, setActiveTab] = useState<'admin' | 'client'>('admin');
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [clientUsers, setClientUsers] = useState<ClientUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [databaseStatus, setDatabaseStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
-  const [databaseMessage, setDatabaseMessage] = useState('');
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingRow, setEditingRow] = useState<TableData | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUser | ClientUser | null>(null);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [form] = Form.useForm();
+  const [createForm] = Form.useForm();
   const [pagination, setPagination] = useState({
     current: 1,
     pageSize: 10,
     total: 0,
   });
-  const [form] = Form.useForm();
-  const [accountModalVisible, setAccountModalVisible] = useState(false);
-  const [accountType, setAccountType] = useState<'admin' | 'client' | null>(null);
-  const [accountForm] = Form.useForm();
 
-  // 获取数据库表列表
-  const fetchTables = async () => {
+  const fetchAdminUsers = async (page: number = 1, pageSize: number = pagination.pageSize) => {
     try {
-      setDatabaseStatus('loading');
-      const response = await databaseApi.getTables();
-      const data = extractData<TableInfo[]>(response);
-      setTables(data);
-      setDatabaseStatus('connected');
-      setDatabaseMessage(`已连接，${data.length} 个表加载成功`);
-      
-      // 如果有表且未选择表，则默认选择第一个表
-      if (data.length > 0 && !selectedTable) {
-        setSelectedTable(data[0].name);
-      }
+      setLoading(true);
+      const response = await usersApi.listAdmins(page, pageSize);
+      const data = extractData<AdminUser[]>(response);
+      setAdminUsers(data);
+      setPagination(prev => ({ ...prev, current: page, pageSize, total: data.length }));
     } catch (error) {
-      setDatabaseStatus('disconnected');
-      setDatabaseMessage('连接失败: ' + getErrorMessage(error));
+      message.error('获取管理员用户列表失败: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
   };
 
-  // 获取表数据
-  const fetchTableData = async (tableName: string, page: number = 1, pageSize: number = pagination.pageSize) => {
-    if (!tableName) return;
-    
+  const fetchClientUsers = async (page: number = 1, pageSize: number = pagination.pageSize) => {
     try {
       setLoading(true);
-      const response = await databaseApi.getTableData(tableName, { page, size: pageSize });
-      const data = extractData<{ rows: TableData[]; total: number }>(response);
-      
-      // 更新表数据和分页信息
-      setTableData(data.rows || data);
-      setPagination(prev => ({
-        ...prev,
-        current: page,
-        pageSize,
-        total: data.total || 0,
-      }));
+      const response = await usersApi.listClients(page, pageSize);
+      const data = extractData<ClientUser[]>(response);
+      setClientUsers(data);
+      setPagination(prev => ({ ...prev, current: page, pageSize, total: data.length }));
     } catch (error) {
-      message.error('获取表数据失败: ' + getErrorMessage(error));
+      message.error('获取客户用户列表失败: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
   };
 
-
-
-  // 初始化数据库
-  const handleInitializeDatabase = () => {
-    Modal.confirm({
-      title: '初始化数据库',
-      content: '确定要初始化数据库吗？这将删除所有现有数据并重新创建表结构。',
-      okText: '确定',
-      cancelText: '取消',
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          setLoading(true);
-          await databaseApi.initializeDatabase();
-          message.success('数据库初始化成功！');
-          fetchTables();
-        } catch (error) {
-          message.error('数据库初始化失败: ' + getErrorMessage(error));
-        } finally {
-          setLoading(false);
-        }
-      }
-    });
-  };
-
-  // 清空数据库
-  const handleClearDatabase = () => {
-    Modal.confirm({
-      title: '清空数据库',
-      content: '确定要清空数据库吗？这将删除所有表中的数据，但保留表结构。',
-      okText: '确定',
-      cancelText: '取消',
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          setLoading(true);
-          await databaseApi.clearDatabase();
-          message.success('数据库清空成功！');
-          fetchTables();
-          if (selectedTable) {
-            fetchTableData(selectedTable);
-          }
-        } catch (error) {
-          message.error('数据库清空失败: ' + getErrorMessage(error));
-        } finally {
-          setLoading(false);
-        }
-      }
-    });
-  };
-
-  // 新建记录
-  const handleCreateRecord = () => {
-    setEditingRow(null);
-    form.resetFields();
-    setEditModalVisible(true);
-  };
-
-  // 编辑记录
-  const handleEditRecord = (record: TableData) => {
-    setEditingRow(record);
-    form.setFieldsValue(record);
-    setEditModalVisible(true);
-  };
-
-  // 删除记录
-  const handleDeleteRecord = (record: TableData) => {
-    console.log('handleDeleteRecord called with record:', record);
-    console.log('Selected table:', selectedTable);
-    
-    // 查找记录的主键值
-    let primaryKeyValue = record.id;
-    console.log('Initial primaryKeyValue:', primaryKeyValue);
-    
-    // 如果没有id字段，尝试使用其他可能的主键字段
-    if (!primaryKeyValue) {
-      console.log('No id field found, searching for other primary key fields');
-      const possibleKeys = ['uuid', 'user_id', 'client_id'];
-      for (const key of possibleKeys) {
-        if (record[key]) {
-          primaryKeyValue = record[key];
-          console.log('Found primary key using', key, ':', primaryKeyValue);
-          break;
-        }
-      }
-    }
-    
-    console.log('Final primaryKeyValue:', primaryKeyValue);
-    
-    // 强制显示一个简单的确认框，测试事件是否触发
-    if (window.confirm('确定要删除这条记录吗？此操作无法恢复！')) {
-      console.log('User confirmed deletion');
-      // 执行删除操作
-      (async () => {
-        try {
-          setLoading(true);
-          if (!primaryKeyValue) {
-            throw new Error('找不到记录的主键值，无法删除');
-          }
-          console.log('Calling deleteRecord API with:', selectedTable, primaryKeyValue);
-          await databaseApi.deleteRecord(selectedTable, primaryKeyValue);
-          message.success('记录删除成功！');
-          fetchTableData(selectedTable);
-        } catch (error) {
-          console.error('Delete error:', error);
-          message.error('记录删除失败: ' + getErrorMessage(error));
-        } finally {
-          setLoading(false);
-        }
-      })();
-    } else {
-      console.log('User cancelled deletion');
-    }
-  };
-
-  // 保存记录
-  const handleSaveRecord = async (values: any) => {
+  const handleCreateAdmin = async (values: any) => {
     try {
       setLoading(true);
-      if (editingRow) {
-        // 更新记录
-        await databaseApi.updateRecord(selectedTable, editingRow.id, values);
-        message.success('记录更新成功！');
-      } else {
-        // 创建记录
-        await databaseApi.createRecord(selectedTable, values);
-        message.success('记录创建成功！');
-      }
-      setEditModalVisible(false);
-      fetchTableData(selectedTable);
-    } catch (error) {
-      message.error('保存记录失败: ' + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-
-  // 打开新建账户模态框
-  const handleOpenAccountModal = (type: 'admin' | 'client') => {
-    setAccountType(type);
-    accountForm.resetFields();
-    setAccountModalVisible(true);
-  };
-
-  // 保存账户
-  const handleSaveAccount = async (values: any) => {
-    try {
-      setLoading(true);
-      
-      // 根据账户类型准备数据
-      const accountData: any = {
-        username: values.username,
-        email: values.email,
-        password_hash: values.password, // 密码哈希会在后端处理
-        is_active: true,
-      };
-
-      if (accountType === 'admin') {
-        accountData.role = 'admin';
-        await databaseApi.createRecord('admin_users', accountData);
-      } else if (accountType === 'client') {
-        accountData.role = 'client';
-        await databaseApi.createRecord('client_users', accountData);
-      }
-
-      message.success(accountType === 'admin' ? '管理员账户创建成功！' : '客户账户创建成功！');
-      setAccountModalVisible(false);
-      fetchTableData(selectedTable);
+      await usersApi.createAdmin(values);
+      message.success('管理员用户创建成功！');
+      setCreateModalVisible(false);
+      createForm.resetFields();
+      fetchAdminUsers();
     } catch (error: any) {
-      // 解析错误信息，识别唯一性冲突
       let errorMessage = getErrorMessage(error);
-      
-      // 检查是否是唯一性约束错误
-      if (errorMessage.includes('UNIQUE constraint failed') || errorMessage.includes('unique constraint')) {
-        if (errorMessage.includes('username')) {
-          errorMessage = '用户名已存在，请使用其他用户名';
-        } else if (errorMessage.includes('email')) {
-          errorMessage = '邮箱已存在，请使用其他邮箱';
-        } else if (errorMessage.includes('api_key')) {
-          errorMessage = 'API-KEY生成失败，请重试';
-        }
+      if (errorMessage.includes('username') || errorMessage.includes('用户名')) {
+        errorMessage = '用户名已存在，请使用其他用户名';
+      } else if (errorMessage.includes('email') || errorMessage.includes('邮箱')) {
+        errorMessage = '邮箱已存在，请使用其他邮箱';
       }
-      
-      message.error(accountType === 'admin' ? '管理员账户创建失败: ' + errorMessage : '客户账户创建失败: ' + errorMessage);
+      message.error('创建失败: ' + errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // 刷新数据
-  const handleRefresh = () => {
-    fetchTables();
-    if (selectedTable) {
-      fetchTableData(selectedTable, pagination.current);
+  const handleCreateClient = async (values: any) => {
+    try {
+      setLoading(true);
+      await usersApi.createClient(values);
+      message.success('客户用户创建成功！');
+      setCreateModalVisible(false);
+      createForm.resetFields();
+      fetchClientUsers();
+    } catch (error: any) {
+      let errorMessage = getErrorMessage(error);
+      if (errorMessage.includes('username') || errorMessage.includes('用户名')) {
+        errorMessage = '用户名已存在，请使用其他用户名';
+      } else if (errorMessage.includes('email') || errorMessage.includes('邮箱')) {
+        errorMessage = '邮箱已存在，请使用其他邮箱';
+      }
+      message.error('创建失败: ' + errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 处理分页变化
-  const handlePaginationChange = (page: number, pageSize: number) => {
-    setPagination(prev => ({ ...prev, current: page, pageSize }));
-    if (selectedTable) {
-      fetchTableData(selectedTable, page, pageSize);
+  const handleUpdateAdmin = async (values: any) => {
+    if (!editingUser) return;
+    try {
+      setLoading(true);
+      await usersApi.updateAdmin((editingUser as AdminUser).id, values);
+      message.success('管理员用户更新成功！');
+      setEditModalVisible(false);
+      setEditingUser(null);
+      form.resetFields();
+      fetchAdminUsers();
+    } catch (error: any) {
+      let errorMessage = getErrorMessage(error);
+      if (errorMessage.includes('不能为空')) {
+        if (errorMessage.includes('用户名')) {
+          errorMessage = '用户名不能为空';
+        } else if (errorMessage.includes('邮箱')) {
+          errorMessage = '邮箱不能为空';
+        }
+      } else if (errorMessage.includes('username') || errorMessage.includes('用户名')) {
+        errorMessage = '用户名已被其他用户使用，请使用其他用户名';
+      } else if (errorMessage.includes('email') || errorMessage.includes('邮箱')) {
+        errorMessage = '邮箱已被其他用户使用，请使用其他邮箱';
+      }
+      message.error('更新失败: ' + errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 组件挂载时获取数据
-  useEffect(() => {
-    fetchTables();
-  }, []);
-
-  // 当选择的表变化时，获取表数据
-  useEffect(() => {
-    if (selectedTable) {
-      fetchTableData(selectedTable);
+  const handleUpdateClient = async (values: any) => {
+    if (!editingUser) return;
+    try {
+      setLoading(true);
+      await usersApi.updateClient((editingUser as ClientUser).id, values);
+      message.success('客户用户更新成功！');
+      setEditModalVisible(false);
+      setEditingUser(null);
+      form.resetFields();
+      fetchClientUsers();
+    } catch (error: any) {
+      let errorMessage = getErrorMessage(error);
+      if (errorMessage.includes('不能为空')) {
+        if (errorMessage.includes('用户名')) {
+          errorMessage = '用户名不能为空';
+        } else if (errorMessage.includes('邮箱')) {
+          errorMessage = '邮箱不能为空';
+        }
+      } else if (errorMessage.includes('username') || errorMessage.includes('用户名')) {
+        errorMessage = '用户名已被其他用户使用，请使用其他用户名';
+      } else if (errorMessage.includes('email') || errorMessage.includes('邮箱')) {
+        errorMessage = '邮箱已被其他用户使用，请使用其他邮箱';
+      }
+      message.error('更新失败: ' + errorMessage);
+    } finally {
+      setLoading(false);
     }
-  }, [selectedTable]);
+  };
 
-  // 生成表的列定义
-  const generateColumns = (): ColumnsType<TableData> => {
-    if (tableData.length === 0) return [];
-
-    const firstRow = tableData[0];
-    const columns: ColumnsType<TableData> = Object.keys(firstRow).map(key => {
-      return {
-        title: key,
-        dataIndex: key,
-        key,
-        render: (text: any) => {
-          // 特殊处理时间字段，但排除response_time字段（它是整数，存储响应时间毫秒）
-          if ((key.includes('created') || key.includes('updated') || key.includes('time')) && key !== 'response_time') {
-            return text ? formatDateTime(text) : '-';
-          }
-          
-          // 特殊处理response_time字段，显示为毫秒数
-          if (key === 'response_time') {
-            return text !== null && text !== undefined ? `${text}ms` : '-';
-          }
-          
-          // 特殊处理布尔字段
-          if (typeof firstRow[key] === 'boolean') {
-            return <Badge status={text ? 'success' : 'error'} text={text ? '是' : '否'} />;
-          }
-
-          return text;
-        },
-      };
-    });
-
-    // 添加操作列，确保key唯一
-    let actionKey = 'action';
-    // 检查是否已存在同名key
-    const existingKeys = columns.map(col => col.key);
-    if (existingKeys.includes(actionKey)) {
-      actionKey = 'actions';
-    }
-    columns.push({
-      title: '操作',
-      key: actionKey,
-      fixed: 'right',
-      width: 150,
-      render: (_: any, record: TableData) => {
-        console.log('Rendering action buttons for record:', record);
-        return (
-          <Space size="small">
-            <Button 
-              type="link" 
-              icon={<EditOutlined />} 
-              onClick={() => {
-                console.log('Edit button clicked for record:', record);
-                handleEditRecord(record);
-              }}
-            >
-              编辑
-            </Button>
-            <Button 
-              type="link" 
-              danger 
-              icon={<DeleteOutlined />} 
-              onClick={() => {
-                console.log('Delete button clicked for record:', record);
-                handleDeleteRecord(record);
-              }}
-            >
-              删除
-            </Button>
-          </Space>
-        );
+  const handleDeleteAdmin = async (user: AdminUser) => {
+    Modal.confirm({
+      title: '删除管理员用户',
+      content: `确定要删除管理员用户 "${user.username}" 吗？此操作无法恢复！`,
+      okText: '确定',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await usersApi.deleteAdmin(user.id);
+          message.success('删除成功！');
+          fetchAdminUsers();
+        } catch (error) {
+          message.error('删除失败: ' + getErrorMessage(error));
+        } finally {
+          setLoading(false);
+        }
       },
     });
-
-    return columns;
   };
 
-  // 生成表单字段
-  const generateFormItems = () => {
-    if (tableData.length === 0) return [];
-
-    const firstRow = tableData[0];
-    return Object.keys(firstRow).map(key => {
-      // 跳过id字段，因为它通常是自增的
-      if (key === 'id' && !editingRow) {
-        return null;
-      }
-
-      return (
-        <Form.Item key={key} name={key} label={key}>
-          {typeof firstRow[key] === 'boolean' ? (
-            <Select>
-              <Select.Option value={true}>是</Select.Option>
-              <Select.Option value={false}>否</Select.Option>
-            </Select>
-          ) : (
-            <Input placeholder={`请输入${key}`} />
-          )}
-        </Form.Item>
-      );
-    }).filter(Boolean);
+  const handleDeleteClient = async (user: ClientUser) => {
+    Modal.confirm({
+      title: '删除客户用户',
+      content: `确定要删除客户用户 "${user.username}" 吗？此操作无法恢复！`,
+      okText: '确定',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await usersApi.deleteClient(user.id);
+          message.success('删除成功！');
+          fetchClientUsers();
+        } catch (error) {
+          message.error('删除失败: ' + getErrorMessage(error));
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
-  // 表选择器的下拉菜单
-  const tableMenu = (
-    <Menu
-      items={tables.map(table => ({
-        key: table.name,
-        label: (
+  const handleCopyApiKey = (apiKey: string) => {
+    navigator.clipboard.writeText(apiKey);
+    message.success('API Key 已复制到剪贴板');
+  };
+
+  const adminColumns: ColumnsType<AdminUser> = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 80,
+    },
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      width: 150,
+    },
+    {
+      title: '邮箱',
+      dataIndex: 'email',
+      key: 'email',
+      width: 200,
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      width: 100,
+      render: (role: string) => <Tag color="blue">{role}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      width: 100,
+      render: (isActive: boolean) => (
+        <Badge status={isActive ? 'success' : 'error'} text={isActive ? '启用' : '禁用'} />
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (date: string) => formatDateTime(date),
+    },
+    {
+      title: '最后登录',
+      dataIndex: 'last_login',
+      key: 'last_login',
+      width: 180,
+      render: (date: string | null) => date ? formatDateTime(date) : '-',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      fixed: 'right',
+      render: (_: any, record: AdminUser) => (
+        <Space size="small">
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingUser(record);
+              form.setFieldsValue({
+                username: record.username,
+                email: record.email,
+                role: record.role,
+                is_active: record.is_active,
+              });
+              setEditModalVisible(true);
+            }}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteAdmin(record)}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const clientColumns: ColumnsType<ClientUser> = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 80,
+    },
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      width: 150,
+    },
+    {
+      title: '邮箱',
+      dataIndex: 'email',
+      key: 'email',
+      width: 200,
+      render: (email: string | null) => email || '-',
+    },
+    {
+      title: 'API Key',
+      dataIndex: 'api_key',
+      key: 'api_key',
+      width: 250,
+      render: (apiKey: string | null) => (
+        apiKey ? (
           <Space>
-            <Text>{table.name}</Text>
-            <Tag>{table.rowCount} 行</Tag>
+            <Tooltip title={apiKey}>
+              <Text code style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {apiKey}
+              </Text>
+            </Tooltip>
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => handleCopyApiKey(apiKey)}
+            />
           </Space>
-        ),
-        onClick: () => setSelectedTable(table.name),
-      }))}
-    />
-  );
+        ) : (
+          <Text type="secondary">-</Text>
+        )
+      ),
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      width: 100,
+      render: (role: string) => <Tag color="green">{role}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      width: 100,
+      render: (isActive: boolean) => (
+        <Badge status={isActive ? 'success' : 'error'} text={isActive ? '启用' : '禁用'} />
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (date: string) => formatDateTime(date),
+    },
+    {
+      title: '最后登录',
+      dataIndex: 'last_login',
+      key: 'last_login',
+      width: 180,
+      render: (date: string | null) => date ? formatDateTime(date) : '-',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      fixed: 'right',
+      render: (_: any, record: ClientUser) => (
+        <Space size="small">
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingUser(record);
+              form.setFieldsValue({
+                username: record.username,
+                email: record.email,
+                role: record.role,
+                is_active: record.is_active,
+              });
+              setEditModalVisible(true);
+            }}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteClient(record)}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  useEffect(() => {
+    if (activeTab === 'admin') {
+      fetchAdminUsers();
+    } else {
+      fetchClientUsers();
+    }
+  }, [activeTab]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Title level={3}>
         <Space>
-          <DatabaseOutlined /> 数据管理
+          <UserOutlined /> 用户管理
         </Space>
       </Title>
-      
-      {/* 数据库状态和操作栏 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
-          <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-            <Space wrap>
-              <Button 
-                type="primary" 
-                icon={<DatabaseOutlined />} 
-                onClick={handleInitializeDatabase}
-                loading={loading}
-              >
-                初始化数据库
-              </Button>
-              <Button 
-                danger 
-                icon={<WarningOutlined />} 
-                onClick={handleClearDatabase}
-                loading={loading}
-              >
-                清空数据库
-              </Button>
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={handleRefresh}
-                loading={loading}
-              >
-                刷新
-              </Button>
 
-            </Space>
-            <Space wrap>
-              <Badge 
-                status={databaseStatus === 'connected' ? 'success' : databaseStatus === 'disconnected' ? 'error' : 'processing'} 
-                text={databaseMessage}
-              />
-              <Dropdown overlay={tableMenu} disabled={tables.length === 0}>
-                <Button>
-                  <Space>
-                    {selectedTable || '选择表'}
-                    {selectedTable && tables.find(t => t.name === selectedTable)?.rowCount && (
-                      <Tag>{tables.find(t => t.name === selectedTable)?.rowCount} 行</Tag>
-                    )}
-                  </Space>
-                </Button>
-              </Dropdown>
-            </Space>
-          </Space>
+      <Card style={{ marginBottom: 16 }}>
+        <Space>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => activeTab === 'admin' ? fetchAdminUsers() : fetchClientUsers()}
+            loading={loading}
+          >
+            刷新
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              createForm.resetFields();
+              setCreateModalVisible(true);
+            }}
+          >
+            {activeTab === 'admin' ? '新建管理员' : '新建客户'}
+          </Button>
         </Space>
       </Card>
 
-      {/* 表数据展示 */}
-      {selectedTable ? (
-        <Card style={{ flex: 1, overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Title level={4} style={{ margin: 0 }}>{selectedTable} 表</Title>
-            <Space>
-              {/* 条件显示的新建账户按钮 */}
-              {selectedTable === 'admin_users' && (
-                <Button 
-                  type="primary" 
-                  icon={<UserOutlined />} 
-                  onClick={() => handleOpenAccountModal('admin')}
+      <Card style={{ flex: 1, overflow: 'auto' }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as 'admin' | 'client')}
+          items={[
+            {
+              key: 'admin',
+              label: (
+                <Space>
+                  <UserOutlined />
+                  管理员用户
+                  <Badge count={adminUsers.length} showZero />
+                </Space>
+              ),
+              children: (
+                <Table
+                  dataSource={adminUsers}
+                  columns={adminColumns}
+                  rowKey="id"
                   loading={loading}
-                >
-                  新建管理账户
-                </Button>
-              )}
-              {selectedTable === 'client_users' && (
-                <Button 
-                  type="primary" 
-                  icon={<TeamOutlined />} 
-                  onClick={() => handleOpenAccountModal('client')}
+                  pagination={{
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                    total: pagination.total,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                    onChange: (page, pageSize) => {
+                      setPagination(prev => ({ ...prev, current: page, pageSize }));
+                      fetchAdminUsers(page, pageSize);
+                    },
+                  }}
+                  scroll={{ y: 'calc(100vh - 350px)', x: 'max-content' }}
+                />
+              ),
+            },
+            {
+              key: 'client',
+              label: (
+                <Space>
+                  <TeamOutlined />
+                  客户用户
+                  <Badge count={clientUsers.length} showZero />
+                </Space>
+              ),
+              children: (
+                <Table
+                  dataSource={clientUsers}
+                  columns={clientColumns}
+                  rowKey="id"
                   loading={loading}
-                >
-                  新建客户账户
-                </Button>
-              )}
-              {/* 始终显示的新增记录按钮 */}
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />} 
-                onClick={handleCreateRecord}
-                loading={loading}
-              >
-                新增记录
-              </Button>
-              {/* 清空记录按钮 */}
-              <Button 
-                danger 
-                icon={<DeleteOutlined />} 
-                onClick={async () => {
-                  console.log('Clear records button clicked');
-                  if (window.confirm('确定要清空 ' + selectedTable + ' 表的所有记录吗？此操作无法恢复！')) {
-                    try {
-                      setLoading(true);
-                      await databaseApi.clearTable(selectedTable);
-                      message.success('表记录清空成功！');
-                      fetchTableData(selectedTable);
-                      fetchTables();
-                    } catch (error) {
-                      console.error('Error clearing table:', error);
-                      message.error('清空表记录失败: ' + getErrorMessage(error));
-                    } finally {
-                      setLoading(false);
-                    }
-                  }
-                }}
-                loading={loading}
-              >
-                清空记录
-              </Button>
-            </Space>
-          </div>
-          <Table
-            dataSource={tableData}
-            columns={generateColumns()}
-            rowKey={(record) => {
-              // 尝试使用不同的主键字段
-              if (record.id) return record.id;
-              if (record.uuid) return record.uuid;
-              if (record.user_id) return record.user_id;
-              if (record.client_id) return record.client_id;
-              // 如果都没有，使用索引
-              return tableData.indexOf(record);
-            }}
-            loading={loading}
-            pagination={{
-              current: pagination.current,
-              pageSize: pagination.pageSize,
-              total: pagination.total,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条记录`,
-              onChange: handlePaginationChange,
-            }}
-            scroll={{ y: 'calc(100vh - 350px)', x: 'max-content' }}
-          />
-        </Card>
-      ) : (
-        <Card style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Space direction="vertical" size="large" align="center">
-            <DatabaseOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
-            <Text type="secondary">请选择一个表查看数据</Text>
-          </Space>
-        </Card>
-      )}
+                  pagination={{
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                    total: pagination.total,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                    onChange: (page, pageSize) => {
+                      setPagination(prev => ({ ...prev, current: page, pageSize }));
+                      fetchClientUsers(page, pageSize);
+                    },
+                  }}
+                  scroll={{ y: 'calc(100vh - 350px)', x: 'max-content' }}
+                />
+              ),
+            },
+          ]}
+        />
+      </Card>
 
-      {/* 编辑记录模态框 */}
       <Modal
-        title={editingRow ? '编辑记录' : '新增记录'}
-        open={editModalVisible}
-        onCancel={() => setEditModalVisible(false)}
+        title={activeTab === 'admin' ? '新建管理员' : '新建客户'}
+        open={createModalVisible}
+        onCancel={() => setCreateModalVisible(false)}
         footer={null}
-        width={600}
+        width={500}
       >
         <Form
-          form={form}
+          form={createForm}
           layout="vertical"
-          onFinish={handleSaveRecord}
+          onFinish={activeTab === 'admin' ? handleCreateAdmin : handleCreateClient}
         >
-          {generateFormItems()}
+          <Form.Item
+            name="username"
+            label="用户名"
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { min: 3, message: '用户名至少3个字符' },
+            ]}
+          >
+            <Input placeholder="请输入用户名" />
+          </Form.Item>
+          <Form.Item
+            name="email"
+            label="邮箱"
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '请输入有效的邮箱地址' },
+            ]}
+          >
+            <Input placeholder="请输入邮箱" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="密码"
+            rules={[
+              { required: true, message: '请输入密码' },
+              { min: 6, message: '密码至少6个字符' },
+            ]}
+          >
+            <Input.Password placeholder="请输入密码" />
+          </Form.Item>
+          <Form.Item name="role" label="角色" initialValue={activeTab === 'admin' ? 'admin' : 'client'}>
+            <Input disabled />
+          </Form.Item>
           <Form.Item>
             <Space>
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                loading={loading}
-              >
-                保存
+              <Button type="primary" htmlType="submit" loading={loading}>
+                创建
               </Button>
-              <Button 
-                onClick={() => setEditModalVisible(false)}
-              >
+              <Button onClick={() => setCreateModalVisible(false)}>
                 取消
               </Button>
             </Space>
@@ -606,52 +584,64 @@ export default function DatabaseManagement() {
         </Form>
       </Modal>
 
-      {/* 新建账户模态框 */}
       <Modal
-        title={accountType === 'admin' ? '新建管理账户' : '新建客户账户'}
-        open={accountModalVisible}
-        onCancel={() => setAccountModalVisible(false)}
+        title="编辑用户"
+        open={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false);
+          setEditingUser(null);
+          form.resetFields();
+        }}
         footer={null}
         width={500}
       >
         <Form
-          form={accountForm}
+          form={form}
           layout="vertical"
-          onFinish={handleSaveAccount}
+          onFinish={activeTab === 'admin' ? handleUpdateAdmin : handleUpdateClient}
         >
-          <Form.Item 
-            name="username" 
-            label="用户名" 
-            rules={[{ required: true, message: '请输入用户名' }]}
+          <Form.Item
+            name="username"
+            label="用户名"
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { min: 3, message: '用户名至少3个字符' },
+            ]}
           >
             <Input placeholder="请输入用户名" />
           </Form.Item>
           <Form.Item 
-            name="password" 
-            label="密码" 
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password placeholder="请输入密码" autoComplete="current-password" />
-          </Form.Item>
-          <Form.Item 
             name="email" 
             label="邮箱" 
-            rules={[{ required: true, message: '请输入邮箱' }, { type: 'email', message: '请输入有效的邮箱地址' }]}
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '请输入有效的邮箱地址' }
+            ]}
           >
             <Input placeholder="请输入邮箱" />
           </Form.Item>
+          <Form.Item
+            name="password"
+            label="新密码"
+            rules={[
+              { min: 6, message: '密码至少6个字符' },
+            ]}
+            tooltip="留空则不修改密码"
+          >
+            <Input.Password placeholder="留空则不修改密码" />
+          </Form.Item>
+          <Form.Item name="role" label="角色">
+            <Input disabled />
+          </Form.Item>
+          <Form.Item name="is_active" label="状态" valuePropName="checked">
+            <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+          </Form.Item>
           <Form.Item>
             <Space>
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                loading={loading}
-              >
+              <Button type="primary" htmlType="submit" loading={loading}>
                 保存
               </Button>
-              <Button 
-                onClick={() => setAccountModalVisible(false)}
-              >
+              <Button onClick={() => setEditModalVisible(false)}>
                 取消
               </Button>
             </Space>

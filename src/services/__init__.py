@@ -8,6 +8,7 @@ services/                 # 业务服务层
 ├── external_services.py  # 外部服务集成 (LLM, TTS, STT, SRS)
 ├── business_services.py  # 业务逻辑服务 (文本处理, 音频处理, 语音通话)
 ├── core_services.py      # 核心服务 (会话管理, 认证授权)
+├── database_service.py  # 数据库服务层 (统一数据库操作接口)
 └── service_interfaces.py # 服务接口定义
 
 各服务职责:
@@ -19,6 +20,7 @@ services/                 # 业务服务层
 - AudioProcessingService: 音频处理和编排
 - VoiceCallService: 语音通话管理
 - SessionService: 用户会话和认证管理
+- database_service: 数据库服务层，提供统一的数据库操作接口
 """
 
 # 业务服务层 - 处理具体的业务逻辑
@@ -26,6 +28,9 @@ from .text_processing_service import TextProcessingService
 from .audio_processing_service import AudioProcessingService
 from .voice_call_service import VoiceCallService
 from .session_service import SessionService
+
+# 数据库服务层 - 统一数据库操作接口
+from . import database_service
 
 # 外部服务集成层 - 与外部系统交互
 from .external_services import (
@@ -54,6 +59,9 @@ __all__ = [
     'AudioProcessingService', 
     'VoiceCallService',
     'SessionService',
+    
+    # 数据库服务
+    'database_service',
     
     # 外部服务
     'UnifiedTTSService',

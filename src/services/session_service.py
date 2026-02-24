@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 会话管理服务模块
-管理用户会话和认证 - 现在统一使用StrictSessionManager
+管理用户会话和认证 - 现在统一使用StrictSessionManager和database_service
 """
 import jwt
 import hashlib
@@ -13,10 +13,12 @@ from passlib.context import CryptContext
 from src.common.enhanced_logger import get_enhanced_logger
 from src.common.config_utils import get_global_config
 from src.session.strict_session_manager import strict_session_manager
+from src.services import database_service
+from src.common.auth_utils import verify_password
 
 
 class SessionService:
-    """会话管理服务 - 现在整合了StrictSessionManager功能"""
+    """会话管理服务 - 现在整合了StrictSessionManager功能，使用database_service"""
     
     def __init__(self):
         """初始化会话管理服务"""
@@ -40,26 +42,31 @@ class SessionService:
         # 返回StrictSessionManager中的活跃会话
         return strict_session_manager.get_all_sessions()
 
-    @property
-    def users(self):
-        """懒加载用户数据"""
-        if not hasattr(self, '_users'):
-            # 为避免bcrypt长度限制，使用较短的密码或备用哈希算法
-            try:
-                hashed_password = self.pwd_context.hash("123")  # 默认密码
-            except ValueError:
-                # 如果bcrypt失败，使用SHA256作为备选方案
-                import hashlib
-                hashed_password = hashlib.sha256("123".encode()).hexdigest()
-            
-            self._users = {
-                "123": {  # 默认用户名
-                    "username": "123",
-                    "hashed_password": hashed_password,
-                    "active": True
-                }
+    async def _get_user_from_database(self, username: str) -> Optional[Dict[str, Any]]:
+        """从数据库获取用户信息"""
+        # 先尝试从管理员用户中查找
+        admin_user = database_service.get_admin_user_by_username(username)
+        if admin_user:
+            return {
+                "username": admin_user.username,
+                "hashed_password": admin_user.password_hash,
+                "active": admin_user.is_active,
+                "role": admin_user.role,
+                "user_type": "admin"
             }
-        return self._users
+        
+        # 再尝试从客户用户中查找
+        client_user = database_service.get_client_user_by_username(username)
+        if client_user:
+            return {
+                "username": client_user.username,
+                "hashed_password": client_user.password_hash,
+                "active": client_user.is_active,
+                "role": client_user.role,
+                "user_type": "client"
+            }
+        
+        return None
     
     async def login(self, credentials: Dict[str, str]) -> Dict[str, Any]:
         """
@@ -120,20 +127,12 @@ class SessionService:
             }
     
     async def _authenticate_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
-        """验证用户凭据"""
-        if username in self.users:
-            user = self.users[username]
-            if user["active"]:
-                # 尝试使用bcrypt验证
-                try:
-                    if self.pwd_context.verify(password, user["hashed_password"]):
-                        return user
-                except ValueError:
-                    # 如果bcrypt验证失败，尝试SHA256验证
-                    import hashlib
-                    expected_hash = hashlib.sha256(password.encode()).hexdigest()
-                    if expected_hash == user["hashed_password"]:
-                        return user
+        """验证用户凭据（使用database_service）"""
+        user = await self._get_user_from_database(username)
+        if user and user["active"]:
+            # 使用 verify_password 验证密码
+            if verify_password(password, user["hashed_password"]):
+                return user
         return None
     
     async def _create_access_token(self, data: Dict[str, Any]) -> str:
@@ -147,7 +146,7 @@ class SessionService:
     
     async def get_user_info(self, token: str) -> Dict[str, Any]:
         """
-        获取用户信息
+        获取用户信息（使用database_service）
         
         Args:
             token: 认证令牌
@@ -160,14 +159,14 @@ class SessionService:
             payload = jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
             username = payload.get("sub")
             
-            if username not in self.users:
+            # 从数据库获取用户信息
+            user = await self._get_user_from_database(username)
+            if not user:
                 return {
                     "code": 401,
                     "msg": "用户不存在",
                     "data": None
                 }
-            
-            user = self.users[username]
             
             # 构建响应
             result = {
@@ -175,7 +174,9 @@ class SessionService:
                 "msg": "获取用户信息成功",
                 "data": {
                     "username": user["username"],
-                    "active": user["active"]
+                    "active": user["active"],
+                    "role": user["role"],
+                    "user_type": user.get("user_type", "unknown")
                 },
                 "timestamp": datetime.now().isoformat()
             }

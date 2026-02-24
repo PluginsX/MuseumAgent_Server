@@ -73,8 +73,12 @@ request.interceptors.response.use(
         case 500:
           message.error('服务器内部错误');
           break;
+        case 400:
+          // 400错误不自动显示，让调用方处理
+          break;
         default:
-          const errorMsg = data?.msg || data?.message || '请求失败';
+          // 支持多种错误格式：detail, msg, message
+          const errorMsg = (data as any)?.detail || data?.msg || data?.message || '请求失败';
           message.error(errorMsg);
       }
     } else if (error.request) {

@@ -217,3 +217,27 @@ def get_config_file_path() -> str:
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.normpath(os.path.join(base_dir, DEFAULT_JSON_CONFIG_PATH))
+
+
+def save_ini_config(ini_config: ConfigParser) -> None:
+    """
+    保存INI配置到文件
+    
+    Args:
+        ini_config: 要保存的INI配置对象
+    
+    Raises:
+        FileNotFoundError: 配置文件路径不存在
+    """
+    global GLOBAL_INI_CONFIG
+    
+    # 解析相对路径为绝对路径（相对于项目根目录）
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    ini_full_path = os.path.normpath(os.path.join(base_dir, DEFAULT_INI_CONFIG_PATH))
+    
+    # 写入配置文件
+    with open(ini_full_path, "w", encoding="utf-8") as f:
+        ini_config.write(f)
+    
+    # 更新全局配置
+    GLOBAL_INI_CONFIG = ini_config

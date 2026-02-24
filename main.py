@@ -57,11 +57,16 @@ def main():
     # 初始化数据库
     print("2. 初始化数据库...")
     try:
+        from src.services import database_service
+        database_service.init_database()
+        
+        # 初始化默认管理员账户
         from src.db.seed import seed_admin
         seed_admin()
         print("   [OK] 数据库初始化成功")
     except Exception as e:
         print(f"   [ERROR] 数据库初始化失败: {e}")
+        logger.sys.error(f"数据库初始化失败: {e}")
     
     # 初始化API网关
     print("3. 初始化API网关...")

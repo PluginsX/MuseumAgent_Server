@@ -417,4 +417,137 @@ def validate_tts_config(
         return {"valid": False, "message": str(e)}
 
 
+# ---------- MySQL Database ----------
+class MySQLConfigUpdate(BaseModel):
+    db_type: Optional[str] = None
+    mysql_host: Optional[str] = None
+    mysql_port: Optional[int] = None
+    mysql_user: Optional[str] = None
+    mysql_password: Optional[str] = None
+    mysql_db: Optional[str] = None
+    mysql_charset: Optional[str] = None
+    mysql_pool_size: Optional[int] = None
+    mysql_pool_recycle: Optional[int] = None
+
+
+@router.get("/mysql")
+def get_mysql_config(_: dict = Depends(get_current_user)):
+    """获取 MySQL 配置（密码脱敏）"""
+    from src.common.config_utils import get_global_ini_config
+    ini_config = get_global_ini_config()
+    
+    mysql_config = {
+        "db_type": ini_config.get('database', 'db_type', fallback='sqlite'),
+        "mysql_host": ini_config.get('database', 'mysql_host', fallback='127.0.0.1'),
+        "mysql_port": ini_config.getint('database', 'mysql_port', fallback=3306),
+        "mysql_user": ini_config.get('database', 'mysql_user', fallback='root'),
+        "mysql_password": _mask_api_key(ini_config.get('database', 'mysql_password', fallback='')),
+        "mysql_db": ini_config.get('database', 'mysql_db', fallback='museum_artifact'),
+        "mysql_charset": ini_config.get('database', 'mysql_charset', fallback='utf8mb4'),
+        "mysql_pool_size": ini_config.getint('database', 'mysql_pool_size', fallback=10),
+        "mysql_pool_recycle": ini_config.getint('database', 'mysql_pool_recycle', fallback=3600),
+    }
+    return mysql_config
+
+
+@router.get("/mysql/raw")
+def get_mysql_config_raw(_: dict = Depends(get_current_user)):
+    """获取 MySQL 配置（完整密码，仅限管理员配置页面使用）"""
+    from src.common.config_utils import get_global_ini_config
+    ini_config = get_global_ini_config()
+    
+    mysql_config = {
+        "db_type": ini_config.get('database', 'db_type', fallback='sqlite'),
+        "mysql_host": ini_config.get('database', 'mysql_host', fallback='127.0.0.1'),
+        "mysql_port": ini_config.getint('database', 'mysql_port', fallback=3306),
+        "mysql_user": ini_config.get('database', 'mysql_user', fallback='root'),
+        "mysql_password": ini_config.get('database', 'mysql_password', fallback=''),
+        "mysql_db": ini_config.get('database', 'mysql_db', fallback='museum_artifact'),
+        "mysql_charset": ini_config.get('database', 'mysql_charset', fallback='utf8mb4'),
+        "mysql_pool_size": ini_config.getint('database', 'mysql_pool_size', fallback=10),
+        "mysql_pool_recycle": ini_config.getint('database', 'mysql_pool_recycle', fallback=3600),
+    }
+    return mysql_config
+
+
+@router.put("/mysql")
+def update_mysql_config(
+    body: MySQLConfigUpdate,
+    _: dict = Depends(get_current_user),
+):
+    """更新 MySQL 配置（写入 config.ini，需重启生效）"""
+    from src.common.config_utils import get_global_ini_config, save_ini_config
+    import os
+    
+    ini_config = get_global_ini_config()
+    
+    # 更新配置
+    if body.db_type is not None:
+        ini_config.set('database', 'db_type', body.db_type)
+    if body.mysql_host is not None:
+        ini_config.set('database', 'mysql_host', body.mysql_host)
+    if body.mysql_port is not None:
+        ini_config.set('database', 'mysql_port', str(body.mysql_port))
+    if body.mysql_user is not None:
+        ini_config.set('database', 'mysql_user', body.mysql_user)
+    if body.mysql_password is not None:
+        ini_config.set('database', 'mysql_password', body.mysql_password)
+    if body.mysql_db is not None:
+        ini_config.set('database', 'mysql_db', body.mysql_db)
+    if body.mysql_charset is not None:
+        ini_config.set('database', 'mysql_charset', body.mysql_charset)
+    if body.mysql_pool_size is not None:
+        ini_config.set('database', 'mysql_pool_size', str(body.mysql_pool_size))
+    if body.mysql_pool_recycle is not None:
+        ini_config.set('database', 'mysql_pool_recycle', str(body.mysql_pool_recycle))
+    
+    # 保存配置
+    save_ini_config(ini_config)
+    
+    # 返回更新后的配置（密码脱敏）
+    mysql_config = {
+        "db_type": ini_config.get('database', 'db_type', fallback='sqlite'),
+        "mysql_host": ini_config.get('database', 'mysql_host', fallback='127.0.0.1'),
+        "mysql_port": ini_config.getint('database', 'mysql_port', fallback=3306),
+        "mysql_user": ini_config.get('database', 'mysql_user', fallback='root'),
+        "mysql_password": _mask_api_key(ini_config.get('database', 'mysql_password', fallback='')),
+        "mysql_db": ini_config.get('database', 'mysql_db', fallback='museum_artifact'),
+        "mysql_charset": ini_config.get('database', 'mysql_charset', fallback='utf8mb4'),
+        "mysql_pool_size": ini_config.getint('database', 'mysql_pool_size', fallback=10),
+        "mysql_pool_recycle": ini_config.getint('database', 'mysql_pool_recycle', fallback=3600),
+    }
+    return mysql_config
+
+
+class ValidateMySQLRequest(BaseModel):
+    mysql_host: str
+    mysql_port: int
+    mysql_user: str
+    mysql_password: str
+    mysql_db: str
+
+
+@router.post("/mysql/validate")
+def validate_mysql_config(
+    body: ValidateMySQLRequest,
+    _: dict = Depends(get_current_user),
+):
+    """验证 MySQL 配置是否可用"""
+    try:
+        from sqlalchemy import create_engine, text
+        
+        # 构建连接URL
+        url = f"mysql+pymysql://{body.mysql_user}:{body.mysql_password}@{body.mysql_host}:{body.mysql_port}/{body.mysql_db}?charset=utf8mb4"
+        
+        # 尝试连接
+        engine = create_engine(url, pool_pre_ping=True, echo=False)
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            result.fetchone()
+        
+        return {"valid": True, "message": "MySQL连接成功"}
+    except Exception as e:
+        return {"valid": False, "message": f"MySQL连接失败: {str(e)}"}
+
+
 
