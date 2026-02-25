@@ -193,8 +193,6 @@ public class AgentContext : MonoBehaviour
     public string roleDescription;
     public string responseRequirements;
     public FunctionDefinition functionDefinition;
-    
-    public void ActivateContext();
 }
 ```
 

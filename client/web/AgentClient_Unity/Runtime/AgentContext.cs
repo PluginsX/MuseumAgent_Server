@@ -17,9 +17,6 @@ public class AgentContext : MonoBehaviour
     {
         // 检查函数定义组件
         CheckFunctionDefinitionComponent();
-        
-        // 激活当前上下文
-        ActivateContext();
     }
     
     // 检查函数定义组件
@@ -32,21 +29,13 @@ public class AgentContext : MonoBehaviour
         }
     }
 
-    // 激活当前上下文，向前端发送上下文信息
-    public void ActivateContext()
-    {
-        if (AgentBridge.Instance != null)
-        {
-            string contextJson = BuildContextJson();
-            AgentBridge.Instance.UpdateContext(contextJson);
-        }
-    }
+
 
     // 上次发送的上下文数据，用于计算差异
     private Dictionary<string, object> lastSentContext = null;
     
     // 构建上下文JSON数据
-    private string BuildContextJson()
+    public string BuildContextJson()
     {
         // 获取关联的函数定义组件
         var functionDef = enableFunctionCalling ? functionDefinition : null;

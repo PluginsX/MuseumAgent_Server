@@ -370,7 +370,8 @@ window.UnityAgentBridge = {
             // 处理转发的用户消息
             if (window.app && window.app.client) {
                 console.log('[UnityAgentBridge] 发送用户消息');
-                window.app.client.sendMessage(message);
+                // 使用 sendText 方法替代不存在的 sendMessage 方法
+                window.app.client.sendText(message);
             } else {
                 console.warn('[UnityAgentBridge] 智能体客户端未初始化');
             }

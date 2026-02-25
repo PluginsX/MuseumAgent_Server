@@ -48,7 +48,7 @@ public class AgentBridge : MonoBehaviour
         // 自动加载当前上下文
         if (currentContext != null && autoUpdateContext)
         {
-            currentContext.ActivateContext();
+            UpdateContext();
         }
     }
 
@@ -119,6 +119,38 @@ public class AgentBridge : MonoBehaviour
             Log.Print("AgentBridge", "error", $"发送上下文更新失败: {e.Message}");
         }
     }
+    
+    // 向前端发送上下文更新（无参数重载版本），默认使用当前引用的上下文
+    public void UpdateContext()
+    {
+        // 检查当前上下文是否存在且有效
+        if (currentContext != null)
+        {
+            Log.Print("AgentBridge", "debug", "使用当前上下文向前端发送更新");
+            try
+            {
+                // 直接调用当前上下文的BuildContextJson方法获取上下文JSON
+                string contextJson = currentContext.BuildContextJson();
+                if (!string.IsNullOrEmpty(contextJson))
+                {
+                    UpdateContextFromUnity(contextJson);
+                    Log.Print("AgentBridge", "debug", "上下文更新发送成功");
+                }
+                else
+                {
+                    Log.Print("AgentBridge", "warn", "当前上下文构建的JSON为空，无法发送更新");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Log.Print("AgentBridge", "error", $"发送上下文更新失败: {e.Message}");
+            }
+        }
+        else
+        {
+            Log.Print("AgentBridge", "error", "当前上下文为null，无法发送更新");
+        }
+    }
 
     // 向前端回传函数执行结果
     public void NotifyFunctionExecuteResult(string resultJson)
@@ -159,8 +191,9 @@ public class AgentBridge : MonoBehaviour
             if (newContext != null)
             {
                 Log.Print("AgentBridge", "debug", "激活新上下文");
-                newContext.ActivateContext();
                 currentContext = newContext;
+                // 使用新的无参数重载方法更新上下文
+                UpdateContext();
                 Log.Print("AgentBridge", "debug", $"上下文切换成功，当前上下文: {currentContext?.name}");
             }
             else
@@ -174,14 +207,9 @@ public class AgentBridge : MonoBehaviour
         }
     }
     
-    // 方法2：更新客户端配置(使用当前的上下文组件)
-    public void UpdateClientConfig()
-    {
-        // 客户端配置更新逻辑
-        // 暂时保留这个方法，后续可以根据需要进行修改
-    }
+
     
-    // 方法3：发送用户消息
+    // 方法2：发送用户消息
     public void SendUserMessage(string message)
     {
         Log.Print("AgentBridge", "debug", $"发送用户消息: {message}");

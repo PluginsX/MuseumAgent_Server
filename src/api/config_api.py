@@ -145,13 +145,14 @@ class STTConfigUpdate(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
 
 
 class TTSConfigUpdate(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    voice: Optional[str] = None
+    format: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
 
 
@@ -248,8 +249,6 @@ def update_stt_config(
         update_data["api_key"] = body.api_key
     if body.model is not None:
         update_data["model"] = body.model
-    if body.parameters is not None:
-        update_data["parameters"] = body.parameters
     
     # 更新配置并通知监听器
     update_config_section("stt", update_data)
@@ -297,6 +296,10 @@ def update_tts_config(
         update_data["api_key"] = body.api_key
     if body.model is not None:
         update_data["model"] = body.model
+    if body.voice is not None:
+        update_data["voice"] = body.voice
+    if body.format is not None:
+        update_data["format"] = body.format
     if body.parameters is not None:
         update_data["parameters"] = body.parameters
     

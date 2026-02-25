@@ -91,16 +91,6 @@ export interface STTConfig {
   base_url: string;
   api_key: string;
   model: string;
-  parameters: {
-    sample_rate: number;
-    format: string;
-    language: string;
-    enable_punctuation: boolean;
-    enable_itn: boolean;
-    enable_vad: boolean;
-    vad_silence_timeout: number;
-    max_sentence_length: number;
-  };
 }
 
 // TTS配置类型
@@ -108,14 +98,14 @@ export interface TTSConfig {
   base_url: string;
   api_key: string;
   model: string;
-  parameters: {
-    voice: string;
-    speech_rate: number;
-    pitch: number;
-    volume: number;
-    format: string;
-    sample_rate: number;
-    enable_subtitle: boolean;
+  voice: string;
+  format: string;
+  parameters?: {
+    speech_rate?: number;
+    pitch?: number;
+    volume?: number;
+    sample_rate?: number;
+    enable_subtitle?: boolean;
   };
 }
 

@@ -16,7 +16,7 @@
     "api_type": "openai_compatible",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "qwen-plus",
+    "model": "qwen-max",
     "parameters": {
       "temperature": 0.2,
       "max_tokens": 1024,
@@ -114,14 +114,13 @@
   "tts": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "cosyvoice-v1",
-    "voice": "zhixiaomei",
+    "model": "cosyvoice-v3-flash",
+    "voice": "longxiaochun",
     "format": "PCM_16000HZ_MONO_16BIT"
   },
   "stt": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
     "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "paraformer-realtime-v2",
-    "parameters": {}
+    "model": "paraformer-realtime-v2"
   }
 }

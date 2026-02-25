@@ -86,6 +86,10 @@ export default function ConfigTTS() {
       message.success('保存成功');
       console.log('message.success called');
       alert('保存成功');
+      
+      // 保存成功后，更新初始配置并重置未保存修改状态
+      setInitialConfig(values.config);
+      setHasUnsavedChanges(false);
     } catch (e: unknown) {
       console.log('Error caught:', e);
       const err = e as { response?: { data?: { detail?: string } } };

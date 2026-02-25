@@ -110,65 +110,44 @@ public class FunctionDefinitionDrawer : PropertyDrawer
 
                 if (methodNames.Count > 0)
                 {
-                    // 获取当前属性的搜索关键词
-                    string searchPropertyPath = property.propertyPath;
-                    string searchKeyword = GetSearchKeyword(searchPropertyPath);
+                    // 使用Unity默认的标签宽度
+                    float labelWidth = EditorGUIUtility.labelWidth;
                     
-                    // 过滤方法列表
-                    List<string> filteredMethodNames = FilterMethodNames(methodNames, searchKeyword);
+                    // 绘制目标方法标签和选择区域
+                    Rect methodLabelRect = new Rect(position.x, position.y + 4 * (lineHeight + spacing), labelWidth, lineHeight);
+                    EditorGUI.LabelField(methodLabelRect, "目标方法");
                     
-                    // 计算当前选择的索引（通过方法名匹配）
-                    int selectedIndex = 0;
-                    string currentMethodName = methodNameProp.stringValue;
-                    if (!string.IsNullOrEmpty(currentMethodName))
+                    // 绘制方法名称显示区域，点击时打开方法选择窗口
+                    // 宽度与上面的其他字段保持一致
+                    Rect methodNameRect = new Rect(position.x + labelWidth, position.y + 4 * (lineHeight + spacing), position.width - labelWidth, lineHeight);
+                    GUIStyle methodNameStyle = new GUIStyle(EditorStyles.textField);
+                    methodNameStyle.normal.textColor = Color.yellow;
+                    methodNameStyle.hover.textColor = Color.red;
+                    
+                    string displayText = string.IsNullOrEmpty(methodNameProp.stringValue) ? "[选择方法]" : methodNameProp.stringValue;
+                    if (GUI.Button(methodNameRect, displayText, methodNameStyle))
                     {
-                        for (int i = 0; i < filteredMethodNames.Count; i++)
-                        {
-                            string methodSignature = filteredMethodNames[i];
-                            int openParenIndex = methodSignature.IndexOf('(');
-                            string methodNameInSignature = openParenIndex > 0 ? methodSignature.Substring(0, openParenIndex) : methodSignature;
-                            
-                            if (methodNameInSignature == currentMethodName)
+                        // 打开方法选择窗口
+                        MethodSelectionWindow.Show(methodNameRect, targetObj, (selectedMethodName) => {
+                            if (selectedMethodName != methodNameProp.stringValue)
                             {
-                                selectedIndex = i;
-                                break;
+                                methodNameProp.stringValue = selectedMethodName;
+                                
+                                // 查找完整的方法签名以创建参数列表
+                                foreach (string methodSignature in methodNames)
+                                {
+                                    int openParenIndex = methodSignature.IndexOf('(');
+                                    string methodNameOnly = openParenIndex > 0 ? methodSignature.Substring(0, openParenIndex) : methodSignature;
+                                    if (methodNameOnly == selectedMethodName)
+                                    {
+                                        CreateParametersFromMethodSignature(property, methodSignature, targetObj);
+                                        break;
+                                    }
+                                }
+                                
+                                property.serializedObject.ApplyModifiedProperties();
                             }
-                        }
-                    }
-                    
-                    // 绘制搜索框
-                    Rect searchRect = new Rect(position.x, position.y + 4 * (lineHeight + spacing), position.width, lineHeight);
-                    string newSearchKeyword = EditorGUI.TextField(searchRect, "搜索方法", searchKeyword);
-                    if (newSearchKeyword != searchKeyword)
-                    {
-                        SetSearchKeyword(searchPropertyPath, newSearchKeyword);
-                    }
-                    
-                    // 绘制方法选择下拉框
-                    Rect popupRect = new Rect(position.x, position.y + 5 * (lineHeight + spacing), position.width, lineHeight);
-                    int newSelectedIndex = EditorGUI.Popup(popupRect, "目标方法", selectedIndex, filteredMethodNames.ToArray());
-                    
-                    // 检查是否需要更新方法（当选择了不同的方法，或者搜索结果只有一个且与当前选择不同）
-                    if ((newSelectedIndex != selectedIndex || filteredMethodNames.Count == 1) && filteredMethodNames.Count > 0)
-                    {
-                        string selectedMethodSignature = filteredMethodNames[newSelectedIndex];
-                        
-                        // 解析方法名（不包含参数部分）
-                        int openParenIndex = selectedMethodSignature.IndexOf('(');
-                        string methodNameOnly = openParenIndex > 0 ? selectedMethodSignature.Substring(0, openParenIndex) : selectedMethodSignature;
-                        
-                        // 检查方法名是否已更改
-                        if (methodNameOnly != methodNameProp.stringValue)
-                        {
-                            // 只存储方法名到targetMethodName字段
-                            methodNameProp.stringValue = methodNameOnly;
-                            
-                            // 解析方法签名，自动创建参数列表
-                            CreateParametersFromMethodSignature(property, selectedMethodSignature, targetObj);
-                            
-                            // 应用修改
-                            property.serializedObject.ApplyModifiedProperties();
-                        }
+                        });
                     }
                 }
                 else
@@ -182,7 +161,7 @@ public class FunctionDefinitionDrawer : PropertyDrawer
             }
 
             // 绘制参数列表
-            Rect paramsRect = new Rect(position.x, position.y + 6 * (lineHeight + spacing), position.width, lineHeight);
+            Rect paramsRect = new Rect(position.x, position.y + 5 * (lineHeight + spacing), position.width, lineHeight);
             EditorGUI.PropertyField(paramsRect, property.FindPropertyRelative("parameters"), new GUIContent("参数列表"), true);
         }
 

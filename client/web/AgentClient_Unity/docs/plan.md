@@ -66,8 +66,7 @@ Assets/
 - 提供上下文切换事件
 
 #### 关键方法
-- `ActivateContext()`: 激活当前上下文
-- `BuildContextJson()`: 构建上下文JSON
+- `BuildContextJson()`: 构建上下文JSON（公共方法）
 
 ### 3. ClientConfigDeclaration (客户端配置声明组件)
 
