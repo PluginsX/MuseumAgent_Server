@@ -302,7 +302,10 @@ dxdiag_output.txt
 .tox/
 
 # Web客户端库文件（构建产物）
-client/web/Demo/lib/
+!client/web/Demo/lib/
+
+# Unity项目打包文件
+!client/web/Demo/unity/*
 
 # 保留data目录（取消注释下面这行来忽略data目录）
 # data/
