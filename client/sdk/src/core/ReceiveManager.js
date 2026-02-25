@@ -129,14 +129,14 @@ export class ReceiveManager {
         }
 
         // 处理文本流
-        if (payload.content?.text) {
+        if (payload.content && payload.content.text) {
             if (handler.onTextChunk) {
                 handler.onTextChunk(payload.content.text);
             }
         }
 
         // 处理语音流
-        if (payload.content?.voice) {
+        if (payload.content && payload.content.voice) {
             if (handler.onVoiceChunk) {
                 const audioData = this._decodeBase64(payload.content.voice);
                 handler.onVoiceChunk(audioData, payload.voice_stream_seq);

@@ -201,7 +201,7 @@ export class ChatWindow {
         // 检查是否已存在
         if (this.messageBubbles.has(bubbleId)) {
             return;
-            }
+        }
         
         // ✅ 调试日志：检查消息类型
         console.log('[ChatWindow] 创建消息气泡:', {
@@ -243,7 +243,7 @@ export class ChatWindow {
         if (!bubbleId) {
             console.warn('[ChatWindow] 消息没有 ID，无法更新气泡');
             return;
-                    }
+        }
                     
         // 直接通过 ID 查找气泡
         const bubble = this.messageBubbles.get(bubbleId);
@@ -253,7 +253,7 @@ export class ChatWindow {
             console.log('[ChatWindow] 气泡不存在，创建新气泡:', bubbleId);
             this.createMessageBubble(message);
             return;
-                    }
+        }
                     
         // 更新气泡数据
         const bubbleData = {
