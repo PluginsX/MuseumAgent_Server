@@ -301,5 +301,8 @@ dxdiag_output.txt
 .nox/
 .tox/
 
+# Web客户端库文件（构建产物）
+client/web/Demo/lib/
+
 # 保留data目录（取消注释下面这行来忽略data目录）
 # data/

@@ -123,6 +123,7 @@ export class ReceiveManager {
 
         // 处理函数调用
         if (payload.function_call) {
+            console.log('[ReceiveManager] 检测到函数调用:', payload.function_call);
             if (handler.onFunctionCall) {
                 handler.onFunctionCall(payload.function_call);
             }
@@ -130,6 +131,11 @@ export class ReceiveManager {
 
         // 处理文本流
         if (payload.content && payload.content.text) {
+            console.log('[ReceiveManager] 检测到文本流:', {
+                text: payload.content.text.substring(0, 50) + (payload.content.text.length > 50 ? '...' : ''),
+                length: payload.content.text.length,
+                trimmedLength: payload.content.text.trim().length
+            });
             if (handler.onTextChunk) {
                 handler.onTextChunk(payload.content.text);
             }
@@ -137,6 +143,11 @@ export class ReceiveManager {
 
         // 处理语音流
         if (payload.content && payload.content.voice) {
+            console.log('[ReceiveManager] 检测到语音流:', {
+                voiceLength: payload.content.voice.length,
+                sequence: payload.voice_stream_seq,
+                hasVoice: !!payload.content.voice
+            });
             if (handler.onVoiceChunk) {
                 const audioData = this._decodeBase64(payload.content.voice);
                 handler.onVoiceChunk(audioData, payload.voice_stream_seq);
