@@ -7,7 +7,7 @@ alwaysApply: true
 
 0. 对话完全使用中文交流
 
-1. 请你牢记！通信协议是定死的！永远不许改！CommunicationProtocol_CS.md 
+1. 请你牢记！通信协议是定死的！永远不许改！CommunicationProtocol.md 
 
 2. 每次修改架构时，都要更新图表和文档
    - 架构图表存储在 `docs\diagram\*.mermaid`
