@@ -19,6 +19,7 @@ echo [2/3] 创建目标目录...
 if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
 if not exist "%TARGET_DIR%\Build" mkdir "%TARGET_DIR%\Build"
 if not exist "%TARGET_DIR%\StreamingAssets" mkdir "%TARGET_DIR%\StreamingAssets"
+if not exist "%TARGET_DIR%\ServerData" mkdir "%TARGET_DIR%\ServerData"
 
 echo [3/3] 复制核心文件...
 echo   - Build/ 目录（游戏代码和资源，包含加载器）
@@ -33,6 +34,13 @@ if exist "%SOURCE_DIR%\StreamingAssets" (
     xcopy "%SOURCE_DIR%\StreamingAssets" "%TARGET_DIR%\StreamingAssets\" /E /I /Y /Q
 ) else (
     echo   [警告] StreamingAssets 目录不存在
+)
+
+echo   - ServerData/ 目录（服务器数据）
+if exist "%SOURCE_DIR%\ServerData" (
+    xcopy "%SOURCE_DIR%\ServerData" "%TARGET_DIR%\ServerData\" /E /I /Y /Q
+) else (
+    echo   [警告] ServerData 目录不存在
 )
 
 echo.

@@ -129,6 +129,23 @@ export class UnityContainer {
                 productName: 'Museum',
                 productVersion: '0.1.0'
             };
+            
+            // 获取当前页面的协议和域名，用于构建完整的URL
+            const currentOrigin = window.location.origin;
+            console.log('[UnityContainer] 当前页面Origin:', currentOrigin);
+            
+            // 配置Addressable系统的基础URL
+            // 这样Unity就能正确解析ServerData中的bundle文件路径
+            const addressablesBaseUrl = currentOrigin + '/unity/ServerData/WebGL/';
+            console.log('[UnityContainer] Addressables基础URL:', addressablesBaseUrl);
+            
+            // 将Addressables配置添加到Unity配置中
+            config.addressablesBaseUrl = addressablesBaseUrl;
+            
+            // 配置StreamingAssets的基础URL
+            const streamingAssetsBaseUrl = currentOrigin + '/unity/StreamingAssets/';
+            config.streamingAssetsBaseUrl = streamingAssetsBaseUrl;
+            
             console.log('[UnityContainer] Unity 配置:', config);
             
             // 创建 Unity 实例
@@ -145,6 +162,20 @@ export class UnityContainer {
             // 保存到全局变量（供 Unity 调用）
             window.unityInstance = this.unityInstance;
             console.log('[UnityContainer] Unity 实例已保存到全局变量:', window.unityInstance ? '成功' : '失败');
+            
+            // 配置Addressable系统的远程加载路径
+            if (this.unityInstance) {
+                console.log('[UnityContainer] 配置Addressable系统...');
+                try {
+                    // 调用Unity的Addressable系统配置方法
+                    // 注意：这需要在Unity项目中实现相应的C#方法
+                    this.unityInstance.SendMessage('AddressablesManager', 'SetRemoteLoadPath', addressablesBaseUrl);
+                    console.log('[UnityContainer] Addressable系统配置完成');
+                } catch (error) {
+                    console.warn('[UnityContainer] 配置Addressable系统失败:', error);
+                    console.warn('[UnityContainer] 可能是因为Unity场景中没有AddressablesManager对象');
+                }
+            }
             
             // 隐藏加载提示
             const loadingBar = document.getElementById('unity-loading-bar');
