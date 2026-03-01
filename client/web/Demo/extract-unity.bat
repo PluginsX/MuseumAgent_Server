@@ -49,6 +49,3 @@ echo 提取完成！
 echo 目标目录: %TARGET_DIR%
 echo 已提取核心文件（使用Unity自带minimal模板）
 echo ========================================
-
-pause
-

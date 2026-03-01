@@ -1,24 +1,28 @@
 <linker>
   <assembly fullname="Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="CameraController" preserve="all" />
-    <type fullname="EnvironmentSettings" preserve="all" />
+    <type fullname="EnvironmentalController" preserve="all" />
     <type fullname="InputHandler" preserve="all" />
     <type fullname="Museum.Component.Animation.ClipPlayer" preserve="all" />
     <type fullname="Museum.Component.LifeCycleEvent" preserve="all" />
-    <type fullname="Museum.Component.UGUI.ShaderImage" preserve="all" />
+    <type fullname="Museum.Component.SceneLoader.SceneProfile" preserve="all" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_VisibleEvent" preserve="all" />
     <type fullname="SetTransform" preserve="all" />
     <type fullname="UI_Controller" preserve="all" />
-    <type fullname="UI_RectSizeToShader" preserve="all" />
     <type fullname="UI_SyncSize" preserve="all" />
     <type fullname="UI_ToggleEvent" preserve="all" />
     <type fullname="UI_WorldBillboard" preserve="all" />
     <type fullname="WebFunctionExecutor" preserve="all" />
     <type fullname="WebGLAudioManager" preserve="all" />
     <type fullname="WebGLVideoPlayer" preserve="all" />
+    <type fullname="Museum.Component.SceneLoader.SceneCategory_Camera" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneCategory_Environment" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneCategory_Light" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneCategory_Singleton" preserve="nothing" serialized="true" />
     <type fullname="FloatEvent" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.UGUI.ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.UGUI.ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
     <type fullname="UI_Controller/UIItem" preserve="nothing" serialized="true" />
     <type fullname="Vector2Event" preserve="nothing" serialized="true" />
     <type fullname="Vector2Vector2Event" preserve="nothing" serialized="true" />
@@ -69,19 +73,6 @@
     <type fullname="UnityEngine.ResourceManagement.ResourceProviders.LegacyResourcesProvider" preserve="all" />
     <type fullname="UnityEngine.ResourceManagement.ResourceProviders.SceneProvider" preserve="all" />
   </assembly>
-  <assembly fullname="Unity.Splines, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
-    <type fullname="UnityEngine.Splines.SplineContainer" preserve="all" />
-    <type fullname="UnityEngine.Splines.SplineExtrude" preserve="all" />
-    <type fullname="UnityEngine.Splines.BezierKnot" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.ExtrusionShapes.Circle" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.KnotLinkCollection" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.Spline" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.Spline/MetaData" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.SplineDataDictionary`1[System.Int32]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.SplineDataDictionary`1[System.Single]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.SplineDataDictionary`1[Unity.Mathematics.float4]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Splines.SplineDataDictionary`1[UnityEngine.Object]" preserve="nothing" serialized="true" />
-  </assembly>
   <assembly fullname="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="TMPro.TextMeshProUGUI" preserve="all" />
     <type fullname="TMPro.TMP_FontAsset" preserve="all" />
@@ -115,8 +106,10 @@
     <type fullname="UnityEngine.Mesh" preserve="all" />
     <type fullname="UnityEngine.MeshFilter" preserve="all" />
     <type fullname="UnityEngine.MeshRenderer" preserve="all" />
+    <type fullname="UnityEngine.MonoBehaviour" preserve="all" />
     <type fullname="UnityEngine.Object" preserve="all" />
     <type fullname="UnityEngine.RectTransform" preserve="all" />
+    <type fullname="UnityEngine.ReflectionProbe" preserve="all" />
     <type fullname="UnityEngine.RenderSettings" preserve="all" />
     <type fullname="UnityEngine.RenderTexture" preserve="all" />
     <type fullname="UnityEngine.Shader" preserve="all" />
@@ -148,6 +141,7 @@
     <type fullname="UnityEngine.UI.CanvasScaler" preserve="all" />
     <type fullname="UnityEngine.UI.ContentSizeFitter" preserve="all" />
     <type fullname="UnityEngine.UI.GraphicRaycaster" preserve="all" />
+    <type fullname="UnityEngine.UI.GridLayoutGroup" preserve="all" />
     <type fullname="UnityEngine.UI.HorizontalLayoutGroup" preserve="all" />
     <type fullname="UnityEngine.UI.Image" preserve="all" />
     <type fullname="UnityEngine.UI.Mask" preserve="all" />
@@ -175,11 +169,6 @@
   </assembly>
   <assembly fullname="UnityEngine.VideoModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.Video.VideoPlayer" preserve="all" />
-  </assembly>
-  <assembly fullname="Unity.Mathematics">
-    <type fullname="Unity.Mathematics.float3" preserve="nothing" serialized="true" />
-    <type fullname="Unity.Mathematics.float4" preserve="nothing" serialized="true" />
-    <type fullname="Unity.Mathematics.quaternion" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.TextCoreFontEngineModule">
     <type fullname="UnityEngine.TextCore.FaceInfo" preserve="nothing" serialized="true" />
