@@ -25,13 +25,13 @@ if %ERRORLEVEL% NEQ 0 (
 
 if "%SSL_ENABLED%"=="true" (
     echo Starting HTTPS server...
-    echo Server address: https://museum.soulflaw.com:%PORT%
+    echo Server address: https://localhost:%PORT%
     echo SSL enabled
-    start https://museum.soulflaw.com:%PORT%/index.html
-    python ssl_server.py --ssl --port %PORT%
+    start https://localhost:%PORT%/index.html
+    python ssl_server.py --ssl --port %PORT% --host 0.0.0.0
 ) else (
     echo Starting HTTP server...
-    echo Server address: http://museum.soulflaw.com:%PORT%
-    start http://museum.soulflaw.com:%PORT%/index.html
+    echo Server address: http://localhost:%PORT%
+    start http://localhost:%PORT%/index.html
     python -m http.server %PORT% --bind 0.0.0.0
 )

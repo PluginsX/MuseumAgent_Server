@@ -40,7 +40,7 @@ class App {
 
         // ✅ 尝试从保存的会话恢复
         const client = new MuseumAgentClient({
-            serverUrl: 'wss://museum.soulflaw.com:12301',
+            serverUrl: 'ws://localhost:12301',
             functionCalling: this.getPetFunctions()
         });
         
