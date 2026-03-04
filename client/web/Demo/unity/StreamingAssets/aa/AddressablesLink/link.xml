@@ -5,6 +5,8 @@
     <type fullname="InputHandler" preserve="all" />
     <type fullname="Museum.Component.Animation.ClipPlayer" preserve="all" />
     <type fullname="Museum.Component.LifeCycleEvent" preserve="all" />
+    <type fullname="Museum.Component.ParallaxScrolling.ParallaxController" preserve="all" />
+    <type fullname="Museum.Component.ParallaxScrolling.ParallaxScrolling" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_VisibleEvent" preserve="all" />
@@ -26,6 +28,8 @@
     <type fullname="UI_Controller/UIItem" preserve="nothing" serialized="true" />
     <type fullname="Vector2Event" preserve="nothing" serialized="true" />
     <type fullname="Vector2Vector2Event" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.ParallaxScrolling.ParallaxScrolling/ParallaxLayer" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage/TextureProperty" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="Unity.Addressables, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null" preserve="all">
     <type fullname="UnityEngine.AddressableAssets.Addressables" preserve="all" />
@@ -75,16 +79,6 @@
   </assembly>
   <assembly fullname="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="TMPro.TextMeshProUGUI" preserve="all" />
-    <type fullname="TMPro.TMP_FontAsset" preserve="all" />
-    <type fullname="TMPro.FaceInfo_Legacy" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.FontAssetCreationSettings" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.KerningTable" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_Character" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_FontFeatureTable" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_FontWeightPair" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_GlyphAdjustmentRecord" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_GlyphPairAdjustmentRecord" preserve="nothing" serialized="true" />
-    <type fullname="TMPro.TMP_GlyphValueRecord" preserve="nothing" serialized="true" />
     <type fullname="TMPro.VertexGradient" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.AnimationModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
@@ -169,11 +163,5 @@
   </assembly>
   <assembly fullname="UnityEngine.VideoModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.Video.VideoPlayer" preserve="all" />
-  </assembly>
-  <assembly fullname="UnityEngine.TextCoreFontEngineModule">
-    <type fullname="UnityEngine.TextCore.FaceInfo" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.TextCore.Glyph" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.TextCore.GlyphMetrics" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.TextCore.GlyphRect" preserve="nothing" serialized="true" />
   </assembly>
 </linker>
