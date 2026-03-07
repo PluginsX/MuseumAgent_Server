@@ -166,8 +166,8 @@ public class AgentBridge : MonoBehaviour
     // 接收前端的函数调用
     public void OnFunctionCall(string functionCallJson);
     
-    // 向前端发送上下文更新
-    public void UpdateContext(string contextJson);
+    // 向前端发送上下文更新（自动计算差异）
+    public void UpdateContext();
     
     // 向前端回传函数执行结果
     public void NotifyFunctionExecuteResult(string resultJson);

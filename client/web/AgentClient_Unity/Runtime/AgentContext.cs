@@ -1,9 +1,27 @@
 using UnityEngine;
 using System.Collections.Generic;
 using LitJson;
+using Museum.Debug;
+
+[System.Serializable]
+public class AdditionalDescription
+{
+    public string key;
+    public string value;
+    
+    public AdditionalDescription(string key, string value)
+    {
+        this.key = key;
+        this.value = value;
+    }
+}
 
 public class AgentContext : MonoBehaviour
 {
+    [Tooltip("AgentBridge 单例组件引用")]
+    public AgentBridge agentBridge;
+    [Tooltip("启动时自动注册到 AgentBridge")]
+    public bool autoRegisterOnStart = false;
     [TextArea(3, 999)]
     public string sceneDescription = "当前场景描述";
     [TextArea(3, 999)]
@@ -12,11 +30,43 @@ public class AgentContext : MonoBehaviour
     public string responseRequirements = "响应要求";
     public bool enableFunctionCalling = true;
     public AgentFunctionDefinition functionDefinition;
+    public List<AdditionalDescription> additionalDescriptions = new List<AdditionalDescription>();
+
+
 
     void Start()
     {
-        // 检查函数定义组件
         CheckFunctionDefinitionComponent();
+        
+        if (autoRegisterOnStart)
+        {
+            AutoRegisterToBridge();
+        }
+    }
+    
+    private void OnValidate()
+    {
+        if (agentBridge == null)
+        {
+            agentBridge = AgentBridge.Instance;
+        }
+    }
+    
+    private void AutoRegisterToBridge()
+    {
+        if (agentBridge == null)
+        {
+            agentBridge = AgentBridge.Instance;
+        }
+        
+        if (agentBridge == null)
+        {
+            Log.Print("AgentContext", "error", "未找到 AgentBridge 单例组件，无法自动注册");
+            return;
+        }
+        
+        agentBridge.SwitchContext(this);
+        Log.Print("AgentContext", "debug", $"已自动注册到 AgentBridge: {name}");
     }
     
     // 检查函数定义组件
@@ -29,107 +79,140 @@ public class AgentContext : MonoBehaviour
         }
     }
 
-
-
-    // 上次发送的上下文数据，用于计算差异
-    private Dictionary<string, object> lastSentContext = null;
-    
-    // 构建上下文JSON数据
-    public string BuildContextJson()
+    // 获取合并后的场景描述（包含补充描述）
+    public string GetMergedSceneDescription()
     {
-        // 获取关联的函数定义组件
-        var functionDef = enableFunctionCalling ? functionDefinition : null;
-        List<object> functionList = new List<object>();
-        
-        if (functionDef != null)
+        if (additionalDescriptions == null || additionalDescriptions.Count == 0)
         {
-            functionList = functionDef.GetAllFunctions();
+            return sceneDescription;
         }
-
-        // 构建完整的上下文数据
-        Dictionary<string, object> currentContext = new Dictionary<string, object>
-        {
-            { "sceneDescription", sceneDescription },
-            { "roleDescription", roleDescription },
-            { "responseRequirements", responseRequirements },
-            { "functionCalling", functionList },
-            { "functions", functionList } // 兼容支持
-        };
-
-        // 计算差异更新
-        string jsonToSend = CalculateDeltaUpdate(currentContext);
         
-        // 更新上次发送的上下文
-        lastSentContext = currentContext;
-
-        return jsonToSend;
+        // 基础描述
+        string merged = sceneDescription;
+        
+        // 添加补充描述
+        foreach (var desc in additionalDescriptions)
+        {
+            if (!string.IsNullOrEmpty(desc.key) && !string.IsNullOrEmpty(desc.value))
+            {
+                merged += $"\n{desc.key}: {desc.value}";
+            }
+        }
+        
+        return merged;
     }
     
-    // 计算差异更新
-    private string CalculateDeltaUpdate(Dictionary<string, object> currentContext)
+    // 创建补充描述
+    public void AdditionalDescription_Create(string key, string value)
     {
-        // 如果是第一次发送，发送完整数据
-        if (lastSentContext == null)
+        if (string.IsNullOrEmpty(key))
         {
-            return JsonMapper.ToJson(currentContext);
+            Log.Print("AgentContext", "warn", "补充描述的键不能为空");
+            return;
         }
         
-        // 创建差异对象
-        Dictionary<string, object> delta = new Dictionary<string, object>();
-        
-        // 检查场景描述是否有变化
-        if (!lastSentContext.ContainsKey("sceneDescription") || 
-            lastSentContext["sceneDescription"].ToString() != currentContext["sceneDescription"].ToString())
+        // 检查是否已存在相同键
+        var existing = additionalDescriptions.Find(desc => desc.key == key);
+        if (existing != null)
         {
-            delta["sceneDescription"] = currentContext["sceneDescription"];
+            Log.Print("AgentContext", "warn", $"补充描述的键 '{key}' 已存在，请使用 Set 方法修改");
+            return;
         }
         
-        // 检查角色描述是否有变化
-        if (!lastSentContext.ContainsKey("roleDescription") || 
-            lastSentContext["roleDescription"].ToString() != currentContext["roleDescription"].ToString())
-        {
-            delta["roleDescription"] = currentContext["roleDescription"];
-        }
-        
-        // 检查响应要求是否有变化
-        if (!lastSentContext.ContainsKey("responseRequirements") || 
-            lastSentContext["responseRequirements"].ToString() != currentContext["responseRequirements"].ToString())
-        {
-            delta["responseRequirements"] = currentContext["responseRequirements"];
-        }
-        
-        // 检查函数调用是否有变化
-        if (!lastSentContext.ContainsKey("functionCalling") || 
-            !AreFunctionListsEqual((List<object>)lastSentContext["functionCalling"], (List<object>)currentContext["functionCalling"]))
-        {
-            delta["functionCalling"] = currentContext["functionCalling"];
-            delta["functions"] = currentContext["functions"]; // 同时更新functions字段
-        }
-        
-        // 如果没有变化，返回空对象
-        if (delta.Count == 0)
-        {
-            return "{}";
-        }
-        
-        // 使用LitJSON序列化差异数据
-        return JsonMapper.ToJson(delta);
+        additionalDescriptions.Add(new AdditionalDescription(key, value));
+        Log.Print("AgentContext", "debug", $"已添加补充描述: {key} = {value}");
     }
     
-    // 比较两个函数列表是否相等
-    private bool AreFunctionListsEqual(List<object> list1, List<object> list2)
+    // 删除补充描述
+    public void AdditionalDescription_Delete(string key)
     {
-        if (list1.Count != list2.Count)
+        if (string.IsNullOrEmpty(key))
+        {
+            Log.Print("AgentContext", "warn", "补充描述的键不能为空");
+            return;
+        }
+        
+        int removedCount = additionalDescriptions.RemoveAll(desc => desc.key == key);
+        if (removedCount > 0)
+        {
+            Log.Print("AgentContext", "debug", $"已删除补充描述: {key}");
+        }
+        else
+        {
+            Log.Print("AgentContext", "warn", $"未找到键为 '{key}' 的补充描述");
+        }
+    }
+    
+    // 获取补充描述
+    public string AdditionalDescription_Get(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            Log.Print("AgentContext", "warn", "补充描述的键不能为空");
+            return null;
+        }
+        
+        var description = additionalDescriptions.Find(desc => desc.key == key);
+        return description?.value;
+    }
+    
+    // 修改补充描述
+    public void AdditionalDescription_Set(string key, string newValue)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            Log.Print("AgentContext", "warn", "补充描述的键不能为空");
+            return;
+        }
+        
+        var description = additionalDescriptions.Find(desc => desc.key == key);
+        if (description == null)
+        {
+            Log.Print("AgentContext", "warn", $"未找到键为 '{key}' 的补充描述，无法修改");
+            return;
+        }
+        
+        string oldValue = description.value;
+        description.value = newValue;
+        Log.Print("AgentContext", "debug", $"已修改补充描述: {key} 从 '{oldValue}' 改为 '{newValue}'");
+    }
+    
+    // 检查补充描述是否存在
+    public bool AdditionalDescription_Contains(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
             return false;
-        
-        for (int i = 0; i < list1.Count; i++)
-        {
-            string json1 = JsonMapper.ToJson(list1[i]);
-            string json2 = JsonMapper.ToJson(list2[i]);
-            if (json1 != json2)
-                return false;
         }
         
-        return true;
+        return additionalDescriptions.Exists(desc => desc.key == key);
+    }
+    
+    // 获取所有补充描述的键
+    public List<string> AdditionalDescription_GetAllKeys()
+    {
+        List<string> keys = new List<string>();
+        foreach (var desc in additionalDescriptions)
+        {
+            if (!string.IsNullOrEmpty(desc.key))
+            {
+                keys.Add(desc.key);
+            }
+        }
+        return keys;
+    }
+    
+    // 清空所有补充描述
+    public void AdditionalDescription_Clear()
+    {
+        int count = additionalDescriptions.Count;
+        additionalDescriptions.Clear();
+        Log.Print("AgentContext", "debug", $"已清空 {count} 个补充描述");
+    }
+    
+    // 获取补充描述数量
+    public int AdditionalDescription_Count()
+    {
+        return additionalDescriptions.Count;
     }
 }

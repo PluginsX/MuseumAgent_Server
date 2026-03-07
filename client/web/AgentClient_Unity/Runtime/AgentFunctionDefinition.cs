@@ -531,13 +531,6 @@ public class AgentFunctionDefinition : MonoBehaviour
         return functionList;
     }
 
-    // 获取所有OpenAI格式函数定义的JSON字符串
-    public string GetAllOpenAIFunctionsJsonStr()
-    {
-        List<object> functionList = GetAllFunctions();
-        return JsonMapper.ToJson(functionList);
-    }
-
     // 根据名称查找函数
     public FunctionDefinition FindFunction(string functionName)
     {

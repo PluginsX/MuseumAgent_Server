@@ -1,5 +1,7 @@
 <linker>
   <assembly fullname="Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+    <type fullname="AgentContext" preserve="all" />
+    <type fullname="AgentFunctionDefinition" preserve="all" />
     <type fullname="CameraController" preserve="all" />
     <type fullname="EnvironmentalController" preserve="all" />
     <type fullname="InputHandler" preserve="all" />
@@ -7,10 +9,14 @@
     <type fullname="Museum.Component.LifeCycleEvent" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxController" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxScrolling" preserve="all" />
+    <type fullname="Museum.Component.SceneLoader.SceneObjectManifest" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_VisibleEvent" preserve="all" />
+    <type fullname="SceneController" preserve="all" />
     <type fullname="SetTransform" preserve="all" />
+    <type fullname="SimpleSwitchSkyBox" preserve="all" />
+    <type fullname="Test_FunctionCalling" preserve="all" />
     <type fullname="UI_Controller" preserve="all" />
     <type fullname="UI_SyncSize" preserve="all" />
     <type fullname="UI_ToggleEvent" preserve="all" />
@@ -18,13 +24,15 @@
     <type fullname="WebFunctionExecutor" preserve="all" />
     <type fullname="WebGLAudioManager" preserve="all" />
     <type fullname="WebGLVideoPlayer" preserve="all" />
-    <type fullname="Museum.Component.SceneLoader.SceneCategory_Camera" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.SceneLoader.SceneCategory_Environment" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.SceneLoader.SceneCategory_Light" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.SceneLoader.SceneCategory_Singleton" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneObjectManifest/ObjectCategory" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneProfile/CollectedObject" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.SceneLoader.SceneProfile/EnvironmentSettings" preserve="nothing" serialized="true" />
     <type fullname="FloatEvent" preserve="nothing" serialized="true" />
+    <type fullname="FunctionDefinition" preserve="nothing" serialized="true" />
+    <type fullname="FunctionParameter" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
+    <type fullname="SimpleSwitchSkyBox/SkyBoxItem" preserve="nothing" serialized="true" />
     <type fullname="UI_Controller/UIItem" preserve="nothing" serialized="true" />
     <type fullname="Vector2Event" preserve="nothing" serialized="true" />
     <type fullname="Vector2Vector2Event" preserve="nothing" serialized="true" />

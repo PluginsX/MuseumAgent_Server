@@ -43,7 +43,7 @@ Assets/
 #### 关键方法
 - `RegisterToJS()`: 向JS注册Unity实例
 - `OnFunctionCall(string)`: 接收函数调用
-- `UpdateContext(string)`: 更新上下文
+- `UpdateContext()`: 更新上下文（自动计算差异）
 - `NotifyFunctionExecuteResult(string)`: 回传执行结果
 
 ### 2. AgentContext (智能体上下文组件)

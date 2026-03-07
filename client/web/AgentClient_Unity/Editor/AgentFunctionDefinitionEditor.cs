@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Reflection;
 using System.Collections.Generic;
+using AgentClient.Runtime;
 
 [CustomPropertyDrawer(typeof(FunctionDefinition))]
 public class FunctionDefinitionDrawer : PropertyDrawer
@@ -414,75 +415,10 @@ public class AgentFunctionDefinitionEditor : Editor
 {
     // 用于存储生成的OpenAI格式数据
     private string openAIFormatPreview = "";
-
-    // JSON格式化方法
-    private string FormatJson(string json)
-    {
-        try
-        {
-            // 简单的JSON格式化实现
-            int indentLevel = 0;
-            bool inQuotes = false;
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-
-            foreach (char c in json)
-            {
-                switch (c)
-                {
-                    case '{':
-                    case '[':
-                        sb.Append(c);
-                        if (!inQuotes)
-                        {
-                            sb.AppendLine();
-                            indentLevel++;
-                            sb.Append(new string(' ', indentLevel * 4));
-                        }
-                        break;
-                    case '}':
-                    case ']':
-                        if (!inQuotes)
-                        {
-                            sb.AppendLine();
-                            indentLevel--;
-                            sb.Append(new string(' ', indentLevel * 4));
-                        }
-                        sb.Append(c);
-                        break;
-                    case ',':
-                        sb.Append(c);
-                        if (!inQuotes)
-                        {
-                            sb.AppendLine();
-                            sb.Append(new string(' ', indentLevel * 4));
-                        }
-                        break;
-                    case ':':
-                        sb.Append(c);
-                        if (!inQuotes)
-                        {
-                            sb.Append(' ');
-                        }
-                        break;
-                    case '"':
-                        sb.Append(c);
-                        inQuotes = !inQuotes;
-                        break;
-                    default:
-                        sb.Append(c);
-                        break;
-                }
-            }
-
-            return sb.ToString();
-        }
-        catch
-        {
-            // 如果解析失败，返回原始JSON
-            return json;
-        }
-    }
-
+    
+    // 预览区域展开状态
+    private bool previewExpanded = false;
+    
     public override void OnInspectorGUI()
     {
         base.OnInspectorGUI();
@@ -501,8 +437,8 @@ public class AgentFunctionDefinitionEditor : Editor
         // 添加生成OpenAI格式预览按钮
         if (GUILayout.Button("生成OpenAI格式预览", GUILayout.ExpandWidth(false)))
         {
-            string rawJson = component.GetAllOpenAIFunctionsJsonStr();
-            openAIFormatPreview = FormatJson(rawJson);
+            List<object> functionList = component.GetAllFunctions();
+            openAIFormatPreview = CommonUtils.SerializeToFormattedJson(functionList);
             Debug.Log("OpenAI Function Calling格式预览:\n" + openAIFormatPreview);
         }
         
@@ -523,15 +459,20 @@ public class AgentFunctionDefinitionEditor : Editor
         }
         
         GUILayout.EndHorizontal();
-
-        // 添加文本显示框，显示生成的OpenAI格式数据
-        GUILayout.Space(10);
-        GUILayout.Label("OpenAI Function Calling格式预览:");
-        // 计算文本框高度，根据内容长度自适应
-        int lineCount = Mathf.Max(5, openAIFormatPreview.Split('\n').Length);
-        float textAreaHeight = lineCount * 16f; // 每行大约16像素
-        openAIFormatPreview = GUILayout.TextArea(openAIFormatPreview, GUILayout.Height(textAreaHeight));
-        GUILayout.Space(10);
+        
+        // 可点击的折叠/展开标题
+        if (GUILayout.Button($"{(previewExpanded ? "▼" : "▶")} OpenAI Function Calling格式预览", EditorStyles.boldLabel))
+        {
+            previewExpanded = !previewExpanded;
+        }
+        
+        // 文本显示框（根据展开状态显示）
+        if (previewExpanded)
+        {
+            int lineCount = Mathf.Max(5, openAIFormatPreview.Split('\n').Length);
+            float textAreaHeight = lineCount * 16f;
+            openAIFormatPreview = GUILayout.TextArea(openAIFormatPreview, GUILayout.Height(textAreaHeight));
+        }
     }
 
     // 验证所有函数定义
