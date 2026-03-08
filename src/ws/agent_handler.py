@@ -32,6 +32,9 @@ from src.services.interrupt_manager import get_interrupt_manager
 from src.common.access_log_manager import access_log_manager
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
+# 同时注册 /mas/ws 路径的路由（用于 Nginx 反向代理）
+mas_router = APIRouter(prefix="/mas/ws", tags=["WebSocket-MAS"])
+
 manager = ConnectionManager()
 logger = get_enhanced_logger()
 interrupt_manager = get_interrupt_manager()
@@ -577,8 +580,8 @@ async def _handle_health_check(ws: WebSocket) -> None:
     }))
 
 
-@router.websocket("/agent/stream")
-async def agent_stream(websocket: WebSocket):
+async def _agent_stream_handler(websocket: WebSocket):
+    """WebSocket 处理核心逻辑（可被多个路由复用）"""
     await websocket.accept()
     session_id: Optional[str] = None
     last_heartbeat_reply: Dict[str, float] = {}  # 用于心跳防抖
@@ -757,3 +760,15 @@ async def agent_stream(websocket: WebSocket):
         if session_id:
             await manager.disconnect(session_id)
             strict_session_manager.unregister_session(session_id)
+
+
+@router.websocket("/agent/stream")
+async def agent_stream(websocket: WebSocket):
+    """标准 WebSocket 端点: /ws/agent/stream"""
+    await _agent_stream_handler(websocket)
+
+
+@mas_router.websocket("/agent/stream")
+async def agent_stream_mas(websocket: WebSocket):
+    """Nginx 代理 WebSocket 端点: /mas/ws/agent/stream"""
+    await _agent_stream_handler(websocket)

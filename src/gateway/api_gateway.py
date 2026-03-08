@@ -18,6 +18,7 @@ from src.common.auth_utils import decode_access_token
 from src.api.auth_api import get_current_user
 from src.services.registry import service_registry
 from src.ws import agent_stream_router
+from src.ws.agent_handler import mas_router as agent_stream_mas_router
 from src.common.access_log_manager import access_log_manager, AccessLogContext
 
 
@@ -61,6 +62,30 @@ class APIGateway:
             ssl_enabled = get_config_by_key("server", "ssl_enabled")
         except Exception:
             ssl_enabled = False
+        
+        # ========== Nginx 反向代理路径前缀处理中间件 ==========
+        @self.app.middleware("http")
+        async def nginx_prefix_middleware(request, call_next):
+            """处理 Nginx 反向代理的 /mas/ 路径前缀"""
+            if request.url.path.startswith("/mas/"):
+                # 创建新的请求对象，移除 /mas/ 前缀
+                from starlette.requests import Request
+                
+                # 构建新的路径
+                new_path = request.url.path[4:]  # 移除 /mas/ 前缀
+                if not new_path:
+                    new_path = "/"
+                
+                # 创建新的 scope
+                scope = dict(request.scope)
+                scope["path"] = new_path
+                scope["raw_path"] = new_path.encode()
+                
+                # 使用新的请求对象
+                request = Request(scope, receive=request.receive)
+            
+            response = await call_next(request)
+            return response
         
         # 会话中间件
         self.app.add_middleware(
@@ -424,6 +449,9 @@ class APIGateway:
         
         # 包含 WebSocket 通信路由（协议：docs/CommunicationProtocol_CS.md）
         self.app.include_router(agent_stream_router)
+        
+        # 包含 Nginx 代理 WebSocket 路由（用于 /mas/ 前缀路径）
+        self.app.include_router(agent_stream_mas_router)
         
         # 包含会话管理API路由
         from src.api.session_api import router as session_router

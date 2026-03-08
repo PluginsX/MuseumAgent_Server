@@ -272,7 +272,7 @@ control-panel/dist/
 control-panel/.vite/
 
 # SSL证书文件（敏感）
-security/SSL/*
+config/SSL/*
 
 # 调试和诊断文件
 dxdiag_output.txt

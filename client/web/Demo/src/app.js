@@ -12,6 +12,18 @@ import { UnityContainer } from './components/UnityContainer.js';
 import { AgentController } from './AgentController.js';
 import { createElement, $, showNotification } from './utils/dom.js';
 
+/**
+ * 自动推导智能体服务端地址
+ * 从当前页面 URL 推导出 WebSocket 地址
+ * 通过 Nginx 代理路径 /mas/ 访问
+ * @returns {string} WebSocket 服务端地址
+ */
+function getAgentServerUrl() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;  // 包含域名和端口
+    return `${protocol}//${host}/mas/`;
+}
+
 class App {
     constructor() {
         this.container = null;
@@ -40,7 +52,7 @@ class App {
 
         // ✅ 尝试从保存的会话恢复
         const client = new MuseumAgentClient({
-            serverUrl: 'ws://localhost:12301',
+            serverUrl: getAgentServerUrl(),
             functionCalling: this.getPetFunctions()
         });
         

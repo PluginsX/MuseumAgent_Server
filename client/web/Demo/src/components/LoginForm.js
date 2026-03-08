@@ -5,6 +5,18 @@
 
 import { createElement } from '../utils/dom.js';
 
+/**
+ * 自动推导智能体服务端地址
+ * 从当前页面 URL 推导出 WebSocket 地址
+ * 通过 Nginx 代理路径 /mas/ 访问
+ * @returns {string} WebSocket 服务端地址
+ */
+function getAgentServerUrl() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;  // 包含域名和端口
+    return `${protocol}//${host}/mas/`;
+}
+
 export class LoginForm {
     constructor(container, onLogin) {
         this.container = container;
@@ -27,12 +39,12 @@ export class LoginForm {
             textContent: '智能体客户端' 
         });
 
-        // 服务器地址输入
+        // 服务器地址输入（隐藏，使用自动推导的地址）
         const serverInput = createElement('input', {
-            type: 'text',
+            type: 'hidden',
             className: 'login-input',
             placeholder: '服务器地址',
-            value: 'ws://localhost:12301'
+            value: getAgentServerUrl()
         });
         
         // 认证方式选择

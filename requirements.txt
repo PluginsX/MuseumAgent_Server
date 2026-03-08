@@ -14,9 +14,9 @@ numpy<2.0
 onnxruntime==1.17.0
 pyjwt>=2.8.0
 python-multipart>=0.0.6
-cffi-2.0.0
-cryptography-46.0.5
-dashscope-1.25.12
-pycparser-3.0
+cffi==2.0.0
+cryptography==46.0.5
+dashscope==1.25.12
+pycparser==3.0
 passlib>=1.7.4
 # semantic_retrieval_client==1.0.0 从本地目录安装
