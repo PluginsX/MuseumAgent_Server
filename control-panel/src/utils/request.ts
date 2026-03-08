@@ -5,7 +5,7 @@ import type { ApiResponse } from '../types';
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '', // 使用相对路径，自动继承页面的协议
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/mas', // 修改为 /mas 前缀
   timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
   headers: {
     'Content-Type': 'application/json',

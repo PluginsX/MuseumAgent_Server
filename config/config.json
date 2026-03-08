@@ -103,7 +103,7 @@
     "log_level": "INFO"
   },
   "semantic_retrieval": {
-    "base_url": "http://localhost:12315/api/v1",
+    "base_url": "http://127.0.0.1:12315/api/v1",
     "api_key": "",
     "timeout": 300,
     "search_params": {

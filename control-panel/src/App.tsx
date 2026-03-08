@@ -79,7 +79,7 @@ export default function App() {
         },
       },
     }}>
-      <BrowserRouter basename="/Control">
+      <BrowserRouter basename="/mas">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
