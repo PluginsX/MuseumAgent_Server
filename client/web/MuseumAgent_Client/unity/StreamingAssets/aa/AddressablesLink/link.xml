@@ -6,7 +6,6 @@
     <type fullname="EnvironmentalController" preserve="all" />
     <type fullname="InputHandler" preserve="all" />
     <type fullname="Museum.Component.Animation.ClipPlayer" preserve="all" />
-    <type fullname="Museum.Component.LifeCycleEvent" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxController" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxScrolling" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneObjectManifest" preserve="all" />
@@ -22,8 +21,6 @@
     <type fullname="UI_ToggleEvent" preserve="all" />
     <type fullname="UI_WorldBillboard" preserve="all" />
     <type fullname="WebFunctionExecutor" preserve="all" />
-    <type fullname="WebGLAudioManager" preserve="all" />
-    <type fullname="WebGLVideoPlayer" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneObjectManifest/ObjectCategory" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/CollectedObject" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/EnvironmentSettings" preserve="nothing" serialized="true" />
@@ -95,7 +92,6 @@
   </assembly>
   <assembly fullname="UnityEngine.AudioModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.AudioListener" preserve="all" />
-    <type fullname="UnityEngine.AudioSource" preserve="all" />
   </assembly>
   <assembly fullname="UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.Camera" preserve="all" />
@@ -108,7 +104,6 @@
     <type fullname="UnityEngine.Mesh" preserve="all" />
     <type fullname="UnityEngine.MeshFilter" preserve="all" />
     <type fullname="UnityEngine.MeshRenderer" preserve="all" />
-    <type fullname="UnityEngine.MonoBehaviour" preserve="all" />
     <type fullname="UnityEngine.Object" preserve="all" />
     <type fullname="UnityEngine.RectTransform" preserve="all" />
     <type fullname="UnityEngine.ReflectionProbe" preserve="all" />
@@ -123,9 +118,6 @@
     <type fullname="UnityEngine.RectOffset" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[System.Single]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Events.UnityEvent`1[System.String]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collider]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collision]" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.ParticleSystemModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.ParticleSystem" preserve="all" />
@@ -146,11 +138,11 @@
     <type fullname="UnityEngine.UI.HorizontalLayoutGroup" preserve="all" />
     <type fullname="UnityEngine.UI.Image" preserve="all" />
     <type fullname="UnityEngine.UI.Mask" preserve="all" />
-    <type fullname="UnityEngine.UI.RawImage" preserve="all" />
     <type fullname="UnityEngine.UI.ScrollRect" preserve="all" />
     <type fullname="UnityEngine.UI.Slider" preserve="all" />
     <type fullname="UnityEngine.UI.Text" preserve="all" />
     <type fullname="UnityEngine.UI.Toggle" preserve="all" />
+    <type fullname="UnityEngine.UI.ToggleGroup" preserve="all" />
     <type fullname="UnityEngine.UI.VerticalLayoutGroup" preserve="all" />
     <type fullname="UnityEngine.UI.AnimationTriggers" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.Button/ButtonClickedEvent" preserve="nothing" serialized="true" />
@@ -167,8 +159,5 @@
     <type fullname="UnityEngine.Canvas" preserve="all" />
     <type fullname="UnityEngine.CanvasGroup" preserve="all" />
     <type fullname="UnityEngine.CanvasRenderer" preserve="all" />
-  </assembly>
-  <assembly fullname="UnityEngine.VideoModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
-    <type fullname="UnityEngine.Video.VideoPlayer" preserve="all" />
   </assembly>
 </linker>
