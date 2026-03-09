@@ -78,8 +78,20 @@ def main():
         print(f"   [ERROR] API网关初始化失败: {e}")
         return
     
+    # 重新加载会话管理器配置（确保使用配置文件中的值）
+    print("4. 重新加载会话管理器配置...")
+    try:
+        from src.session.strict_session_manager import strict_session_manager
+        strict_session_manager.reload_config()
+        print(f"   [OK] 会话管理器配置已加载")
+        print(f"       - 会话超时: {strict_session_manager.config['session_timeout_minutes']}分钟")
+        print(f"       - 不活跃超时: {strict_session_manager.config['inactivity_timeout_minutes']}分钟")
+        print(f"       - 心跳超时: {strict_session_manager.config['heartbeat_timeout_minutes']}分钟")
+    except Exception as e:
+        print(f"   [ERROR] 会话管理器配置加载失败: {e}")
+    
     # 检查系统健康状态
-    print("3. 检查系统健康状态...")
+    print("5. 检查系统健康状态...")
     try:
         health_status = get_health_status()
         print(f"   [OK] 熔断器状态: {len(health_status['circuit_breakers'])} 个")
@@ -88,7 +100,7 @@ def main():
         print(f"   [ERROR] 健康状态检查失败: {e}")
     
     # 显示架构信息
-    print("\n4. 系统架构信息:")
+    print("\n6. 系统架构信息:")
     print("   ┌─ 客户端请求")
     print("   ├─ API网关 (统一入口)")
     print("   ├─ 认证与授权")
@@ -107,13 +119,13 @@ def main():
     print("      └─ SRS语义检索系统")
     
     # 显示配置信息
-    print("\n5. 服务器配置:")
+    print("\n7. 服务器配置:")
     print(f"   主机: {server_config.get('host', 'localhost')}")
     print(f"   端口: {server_config.get('port', 8000)}")
     print(f"   调试模式: {server_config.get('debug', False)}")
     
     # 显示特性
-    print("\n6. 支持的功能特性:")
+    print("\n8. 支持的功能特性:")
     print("   [OK] 文本对话 (支持Function Calling)")
     print("   [OK] 预录制语音消息处理")
     print("   [OK] 实时语音通话 (流式STT/TTS)")

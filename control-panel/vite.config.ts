@@ -20,8 +20,8 @@ export default defineConfig({
         secure: false,
         rewrite: (path) => path
       }
+      },
     },
-  },
   build: {
     outDir: 'dist',
     sourcemap: false,

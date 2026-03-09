@@ -25,6 +25,9 @@ async def get_current_config():
     try:
         logger.sys.info('Getting current session configuration')
         
+        # 重新加载配置以确保获取最新值
+        strict_session_manager.reload_config()
+        
         config_info = {
             "current_config": strict_session_manager.config,
             "runtime_info": {
@@ -41,7 +44,13 @@ async def get_current_config():
         }
         
         logger.sys.info('Configuration retrieval successful')
-        return config_info
+        
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "获取配置成功",
+            "data": config_info
+        }
         
     except Exception as e:
         logger.sys.error('Failed to get configuration', {'error': str(e)})
@@ -142,6 +151,17 @@ async def update_session_config(config_updates: Dict[str, Any]):
             # 即使持久化失败，也不影响内存中的配置更新
         
         # 更新运行时参数（无需重启的配置）
+        if 'session_timeout_minutes' in validated_config:
+            strict_session_manager.session_timeout = timedelta(minutes=validated_config['session_timeout_minutes'])
+            restart_required = True  # 会话超时需要重启才能完全生效
+        
+        if 'inactivity_timeout_minutes' in validated_config:
+            strict_session_manager.inactivity_timeout = timedelta(minutes=validated_config['inactivity_timeout_minutes'])
+            restart_required = True  # 不活跃超时需要重启才能完全生效
+        
+        if 'heartbeat_timeout_minutes' in validated_config:
+            strict_session_manager.heartbeat_timeout = timedelta(minutes=validated_config['heartbeat_timeout_minutes'])
+        
         if 'cleanup_interval_seconds' in validated_config:
             strict_session_manager.cleanup_interval = validated_config['cleanup_interval_seconds']
         
@@ -157,6 +177,9 @@ async def update_session_config(config_updates: Dict[str, Any]):
         if 'enable_heartbeat_monitoring' in validated_config:
             strict_session_manager.enable_heartbeat_monitoring = validated_config['enable_heartbeat_monitoring']
         
+        if 'log_level' in validated_config:
+            strict_session_manager.log_level = validated_config['log_level']
+        
         response_data = {
             "message": "配置更新成功",
             "changes_made": changes_made,
@@ -170,7 +193,12 @@ async def update_session_config(config_updates: Dict[str, Any]):
             'restart_required': restart_required
         })
         
-        return response_data
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "配置更新成功",
+            "data": response_data
+        }
         
     except HTTPException:
         raise
@@ -244,13 +272,18 @@ async def reset_to_defaults():
         
         logger.sys.info('Session configuration reset completed')
         
-        return response_data
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "配置已重置为默认值",
+            "data": response_data
+        }
         
     except Exception as e:
         logger.sys.error('Failed to reset configuration', {'error': str(e)})
         raise HTTPException(status_code=500, detail=f"配置重置失败: {str(e)}")
 
-@router.get("/validate")
+@router.post("/validate")
 async def validate_config_format(config: Dict[str, Any]):
     """
     验证配置格式是否正确
@@ -332,7 +365,12 @@ async def validate_config_format(config: Dict[str, Any]):
         else:
             logger.sys.warn('Configuration validation failed', {'errors': errors})
         
-        return response_data
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "验证完成",
+            "data": response_data
+        }
         
     except Exception as e:
         logger.sys.error('Configuration validation exception', {'error': str(e)})

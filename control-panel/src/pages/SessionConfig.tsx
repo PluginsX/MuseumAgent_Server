@@ -20,12 +20,21 @@ const SessionConfigPage: React.FC = () => {
     try {
       const response = await sessionConfigApi.getCurrent();
       const data = response.data.data;
-      if (data) {
+      if (data && data.current_config) {
         setRuntimeInfo(data.runtime_info);
         setSessionStats(data.session_stats);
         
-        // 设置表单默认值
-        form.setFieldsValue(data.current_config);
+        // 设置表单值（直接显示在输入框中）
+        form.setFieldsValue({
+          session_timeout_minutes: data.current_config.session_timeout_minutes,
+          inactivity_timeout_minutes: data.current_config.inactivity_timeout_minutes,
+          heartbeat_timeout_minutes: data.current_config.heartbeat_timeout_minutes,
+          cleanup_interval_seconds: data.current_config.cleanup_interval_seconds,
+          deep_validation_interval_seconds: data.current_config.deep_validation_interval_seconds,
+          log_level: data.current_config.log_level,
+          enable_auto_cleanup: data.current_config.enable_auto_cleanup,
+          enable_heartbeat_monitoring: data.current_config.enable_heartbeat_monitoring
+        });
       }
       
       message.success('配置加载成功');
@@ -143,7 +152,6 @@ const SessionConfigPage: React.FC = () => {
                       min={1} 
                       max={1440} 
                       style={{ width: '100%' }} 
-                      placeholder="15"
                     />
                   </Form.Item>
                 </Col>
@@ -161,7 +169,6 @@ const SessionConfigPage: React.FC = () => {
                       min={1} 
                       max={1440} 
                       style={{ width: '100%' }} 
-                      placeholder="5"
                     />
                   </Form.Item>
                 </Col>
@@ -181,7 +188,6 @@ const SessionConfigPage: React.FC = () => {
                       min={1} 
                       max={60} 
                       style={{ width: '100%' }} 
-                      placeholder="2"
                     />
                   </Form.Item>
                 </Col>
@@ -199,7 +205,6 @@ const SessionConfigPage: React.FC = () => {
                       min={10} 
                       max={300} 
                       style={{ width: '100%' }} 
-                      placeholder="30"
                     />
                   </Form.Item>
                 </Col>
@@ -219,7 +224,6 @@ const SessionConfigPage: React.FC = () => {
                       min={60} 
                       max={3600} 
                       style={{ width: '100%' }} 
-                      placeholder="300"
                     />
                   </Form.Item>
                 </Col>

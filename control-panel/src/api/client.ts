@@ -49,6 +49,12 @@ export const configApi = {
   // 服务器配置
   getServer: () => http.get('/api/admin/config/server'),
   updateServer: (data: any) => http.put('/api/admin/config/server', data),
+  
+  // MySQL配置
+  getMySQL: () => http.get('/api/admin/config/mysql/raw'),
+  updateMySQL: (data: any) => http.put('/api/admin/config/mysql', data),
+  validateMySQL: (data: { mysql_host: string; mysql_port: number; mysql_user: string; mysql_password: string; mysql_db: string }) =>
+    http.post<{ valid: boolean; message: string }>('/api/admin/config/mysql/validate', data),
 };
 
 

@@ -111,11 +111,11 @@ class StrictSessionManager:
         # 默认配置（优化后的配置，更宽松且合理）
         default_config = {
             'session_timeout_minutes': 120,  # 120分钟总超时（2小时，足够长）
-            'inactivity_timeout_minutes': 60,  # 60分钟无活动超时（1小时）
+            'inactivity_timeout_minutes': 30,  # 30分钟无活动超时
             'heartbeat_timeout_minutes': 10,  # 10分钟活动超时（从5分钟增加，更宽容）
-            'cleanup_interval_seconds': 120,  # 120秒清理间隔（2分钟，减少清理频率）
+            'cleanup_interval_seconds': 60,  # 60秒清理间隔（1分钟）
             'deep_validation_interval_seconds': 600,  # 10分钟深度验证
-            'enable_auto_cleanup': True,
+            'enable_auto_cleanup': False,
             'enable_heartbeat_monitoring': True,
             'log_level': 'INFO'
         }
@@ -136,6 +136,35 @@ class StrictSessionManager:
             # ✅ 降低日志级别为 debug，避免启动时显示错误
             # 这是正常情况，因为 StrictSessionManager 在全局配置加载前就初始化了
             self.config = default_config
+    
+    def reload_config(self):
+        """重新加载配置（用于配置更新后刷新）"""
+        try:
+            config = get_global_config()
+            if not config:
+                return
+            
+            session_config = config.get('session_management', {})
+            
+            # 更新配置
+            for key, value in session_config.items():
+                if key in self.config:
+                    self.config[key] = value
+            
+            # 更新运行时参数
+            self.session_timeout = timedelta(minutes=self.config['session_timeout_minutes'])
+            self.inactivity_timeout = timedelta(minutes=self.config['inactivity_timeout_minutes'])
+            self.heartbeat_timeout = timedelta(minutes=self.config['heartbeat_timeout_minutes'])
+            self.cleanup_interval = self.config['cleanup_interval_seconds']
+            self.deep_validation_interval = self.config['deep_validation_interval_seconds']
+            self.enable_auto_cleanup = self.config['enable_auto_cleanup']
+            self.enable_heartbeat_monitoring = self.config['enable_heartbeat_monitoring']
+            self.log_level = self.config['log_level']
+            
+            self.logger.sess.info('Session configuration reloaded', self.config)
+            
+        except Exception as e:
+            self.logger.sess.error('Failed to reload configuration', {'error': str(e)})
     def _start_enhanced_cleanup_daemon(self):
         """启动增强清理守护线程"""
         if not self.enable_auto_cleanup:

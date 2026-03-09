@@ -328,12 +328,12 @@ server
         
         # 长期缓存（AssetBundle 文件名包含哈希值，可以安全缓存）
         expires 365d;
-        add_header Cache-Control "public, immutable";
+            add_header Cache-Control "public, immutable";
         
         # 禁用访问日志（减少 I/O）
         access_log off;
     }
-    
+
     # ========== 博物馆智能体服务代理（优先级第二）==========
     location /mas/ { 
         # 关键：末尾的 / 会自动移除 /mas/ 前缀
@@ -365,11 +365,11 @@ server
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 60s;
-        proxy_read_timeout 60s;
-        proxy_send_timeout 60s;
-    }
-    
+        proxy_connect_timeout 60s; 
+        proxy_read_timeout 60s; 
+        proxy_send_timeout 60s; 
+    } 
+
     # ========== 控制面板内部 API 代理（优先级第四）==========
     location /Control/internal/ {
         proxy_pass http://127.0.0.1:12301/internal/;
@@ -398,7 +398,7 @@ server
     location = /Control/login {
         return 301 /Control/;
     }
-
+    
     # ========== SRS 语义检索系统代理（优先级第六）==========
     location /srs/ { 
         proxy_pass http://127.0.0.1:12315/; 
@@ -410,7 +410,7 @@ server
         proxy_read_timeout 60s; 
         proxy_send_timeout 60s; 
     } 
-    
+
     # ========== 智能体客户端 Demo（静态文件，优先级最低） ==========
     location / {
         root /www/wwwroot/MuseumAgent_Client/Demo;

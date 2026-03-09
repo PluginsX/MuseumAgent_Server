@@ -5,8 +5,8 @@ import type { ApiResponse } from '../types';
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/mas', // 修改为 /mas 前缀
-  timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
+  baseURL: '/mas', // 固定使用 /mas 前缀
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -60,8 +60,7 @@ request.interceptors.response.use(
         case 401:
           // 未授权，清除token并跳转到登录页
           localStorage.removeItem('token');
-          const base = import.meta.env.BASE_URL || '';
-          window.location.href = `${base}login`;
+          window.location.href = '/mas/login';
           message.error('登录已过期，请重新登录');
           break;
         case 403:

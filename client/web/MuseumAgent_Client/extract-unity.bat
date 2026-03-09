@@ -6,7 +6,7 @@ echo ========================================
 echo.
 
 set SOURCE_DIR=E:\Project\Python\MuseumAgent_Server\client\web\Unity\build
-set TARGET_DIR=E:\Project\Python\MuseumAgent_Server\client\web\Demo\unity
+set TARGET_DIR=E:\Project\Python\MuseumAgent_Server\client\web\MuseumAgent_Client\unity
 
 echo [1/3] 检查源目录...
 if not exist "%SOURCE_DIR%" (

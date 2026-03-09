@@ -20,7 +20,7 @@ class ClientInfoResponse:
 # 初始化日志记录器
 logger = get_enhanced_logger()
 
-@router.get("/connected", response_model=List[Dict[str, Any]])
+@router.get("/connected")
 async def get_connected_clients():
     """
     获取所有连接的客户端信息
@@ -56,7 +56,12 @@ async def get_connected_clients():
         
         logger.cli.info(f'Found {len(client_list)} active clients')
         
-        return client_list
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "获取客户端列表成功",
+            "data": client_list
+        }
         
     except Exception as e:
         logger.cli.error(f'Failed to get client list: {str(e)}')
@@ -213,7 +218,13 @@ async def get_client_statistics():
         }
         
         logger.cli.info('Successfully got client statistics')
-        return stats
+        
+        # 返回统一格式
+        return {
+            "code": 200,
+            "msg": "获取统计信息成功",
+            "data": stats
+        }
         
     except Exception as e:
         logger.cli.error('Failed to get client statistics', {'error': str(e)})
@@ -238,10 +249,15 @@ async def disconnect_client_session(session_id: str):
         
         if success:
             logger.cli.info('Client session forcibly disconnected', {'session_id': session_id})
+            
+            # 返回统一格式
             return {
-                "message": "客户端连接已断开",
-                "session_id": session_id,
-                "timestamp": datetime.now().isoformat()
+                "code": 200,
+                "msg": "客户端连接已断开",
+                "data": {
+                    "session_id": session_id,
+                    "timestamp": datetime.now().isoformat()
+                }
             }
         else:
             raise HTTPException(status_code=500, detail="断开会话失败")

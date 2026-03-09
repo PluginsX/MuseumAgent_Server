@@ -89,7 +89,6 @@ else:
 # 挂载新版 API（JWT 认证）
 from src.api.auth_api import router as auth_router
 from src.api.config_api import router as config_router
-from src.api.monitor_api import router as monitor_router
 from src.api.users_api import router as users_router
 from src.api.session_api import router as session_router
 from src.api.client_api import router as client_router
@@ -100,7 +99,6 @@ from src.api.audio_api import router as audio_router  # 音频处理API
 
 app.include_router(auth_router)
 app.include_router(config_router)
-app.include_router(monitor_router)
 app.include_router(users_router)
 app.include_router(session_router)
 app.include_router(client_router)

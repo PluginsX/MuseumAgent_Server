@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, Form, Input, Button, message, Space, InputNumber, Typography } from 'antd';
-import axios from 'axios';
+import { configApi } from '../api/client';
 
 interface MySQLConfig {
   mysql_host: string;
@@ -26,10 +26,7 @@ export default function ConfigMySQL() {
   const loadConfig = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/admin/config/mysql/raw', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await configApi.getMySQL();
       form.setFieldsValue(response.data);
     } catch (error: any) {
       message.error('加载MySQL配置失败');
@@ -42,10 +39,7 @@ export default function ConfigMySQL() {
   const onFinish = async (values: MySQLConfig) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      await axios.put('/api/admin/config/mysql', values, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await configApi.updateMySQL(values);
       message.success('MySQL配置保存成功');
       message.warning('修改数据库配置后需要重启服务才能生效');
     } catch (error: any) {
@@ -66,22 +60,20 @@ export default function ConfigMySQL() {
 
     try {
       setTesting(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.post('/api/admin/config/mysql/validate', {
+      const response = await configApi.validateMySQL({
         mysql_host: values.mysql_host,
         mysql_port: values.mysql_port,
         mysql_user: values.mysql_user,
         mysql_password: values.mysql_password,
         mysql_db: values.mysql_db
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (response.data.valid) {
-        message.success(response.data.message);
+      const result = (response.data as any).data || response.data;
+      if ((result as any).valid) {
+        message.success((result as any).message);
         setTestResult('success');
       } else {
-        message.error(response.data.message);
+        message.error((result as any).message);
         setTestResult('error');
       }
     } catch (error: any) {
