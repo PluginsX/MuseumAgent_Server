@@ -24,12 +24,17 @@ class EnhancedClientSession:
     expires_at: datetime
     is_registered: bool = True
     operation_set: List[str] = None  # 新增：操作集合，保持向后兼容
+    session_timeout: timedelta = None  # ✅ 新增：会话超时时间（从配置读取）
     
     def __post_init__(self):
         """初始化后处理"""
         if self.operation_set is None:
             # 从client_metadata中提取操作集合，如果有的话
             self.operation_set = self.client_metadata.get("operation_set", [])
+        
+        # ✅ 如果没有设置 session_timeout，使用默认值 120 分钟
+        if self.session_timeout is None:
+            self.session_timeout = timedelta(minutes=120)
     
     def is_expired(self) -> bool:
         """检查会话是否过期"""
@@ -41,31 +46,35 @@ class EnhancedClientSession:
     
     def is_disconnected(self, heartbeat_timeout: timedelta = None) -> bool:
         """检查会话是否断开连接（使用最后活动时间，而非心跳时间）"""
-        timeout = heartbeat_timeout or timedelta(minutes=2)  # 默认2分钟心跳超时
+        # ✅ 修复：不再使用硬编码的 2 分钟，而是使用传入的超时时间
+        # 如果没有传入，则返回 False（由调用方决定超时时间）
+        if heartbeat_timeout is None:
+            return False  # 不判断，由外部传入正确的超时时间
+        
         # ✅ 关键修复：使用 last_activity 而非 last_heartbeat
         # 任何业务请求都会更新 last_activity，避免误判
-        return datetime.now() - self.last_activity > timeout
+        return datetime.now() - self.last_activity > heartbeat_timeout
     
     def is_active(self) -> bool:
         """检查会话是否活跃"""
-        return (not self.is_expired() and 
-                not self.is_inactive() and 
-                not self.is_disconnected())
+        # ✅ 修复：不再调用 is_disconnected()，因为它需要外部传入超时时间
+        # 只检查是否过期和是否长期不活跃
+        return not self.is_expired() and not self.is_inactive()
     
     def update_heartbeat(self):
         """更新心跳时间（同时更新活动时间）"""
         now = datetime.now()
         self.last_heartbeat = now
         self.last_activity = now  # ✅ 心跳也算活动
-        # 延长会话有效期到120分钟（与配置保持一致）
-        self.expires_at = now + timedelta(minutes=120)
+        # ✅ 修复：使用配置的会话超时时间，而非硬编码
+        self.expires_at = now + self.session_timeout
     
     def update_activity(self):
         """更新活动时间（业务请求时调用）"""
         now = datetime.now()
         self.last_activity = now
-        # ✅ 业务活动也延长会话有效期
-        self.expires_at = now + timedelta(minutes=120)
+        # ✅ 修复：使用配置的会话超时时间，而非硬编码
+        self.expires_at = now + self.session_timeout
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -289,7 +298,8 @@ class StrictSessionManager:
                 last_heartbeat=now,
                 last_activity=now,
                 expires_at=now + self.session_timeout,
-                is_registered=True
+                is_registered=True,
+                session_timeout=self.session_timeout  # ✅ 传递配置的超时时间
             )
             
             self.sessions[session_id] = session

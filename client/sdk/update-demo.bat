@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo MuseumAgent SDK - 更新到 Demo
+echo MuseumAgent SDK - 更新到 MuseumAgent_Client
 echo ========================================
 echo.
 
@@ -15,22 +15,22 @@ if %errorlevel% neq 0 (
 echo ✓ 构建成功
 echo.
 
-echo [2/3] 正在复制到 Demo...
-copy /Y dist\museum-agent-sdk.min.js ..\web\Demo\lib\museum-agent-sdk.min.js >nul
-copy /Y dist\museum-agent-sdk.min.js.map ..\web\Demo\lib\museum-agent-sdk.min.js.map >nul
-copy /Y src\managers\vad-processor.js ..\web\Demo\lib\vad-processor.js >nul
+echo [2/3] 正在复制到 MuseumAgent_Client...
+copy /Y dist\museum-agent-sdk.min.js ..\web\MuseumAgent_Client\lib\museum-agent-sdk.min.js >nul
+copy /Y dist\museum-agent-sdk.min.js.map ..\web\MuseumAgent_Client\lib\museum-agent-sdk.min.js.map >nul
+copy /Y src\managers\vad-processor.js ..\web\MuseumAgent_Client\lib\vad-processor.js >nul
 echo ✓ 复制成功
 echo.
 
 echo [3/3] 检查文件...
-if exist ..\web\Demo\lib\museum-agent-sdk.min.js (
-    if exist ..\web\Demo\lib\vad-processor.js (
-        echo ✓ SDK 已成功更新到 Demo！
+if exist ..\web\MuseumAgent_Client\lib\museum-agent-sdk.min.js (
+    if exist ..\web\MuseumAgent_Client\lib\vad-processor.js (
+        echo ✓ SDK 已成功更新到 MuseumAgent_Client ！
         echo.
         echo 文件位置：
-        echo   - ..\web\Demo\lib\museum-agent-sdk.min.js
-        echo   - ..\web\Demo\lib\museum-agent-sdk.min.js.map
-        echo   - ..\web\Demo\lib\vad-processor.js
+        echo   - ..\web\MuseumAgent_Client\lib\museum-agent-sdk.min.js
+        echo   - ..\web\MuseumAgent_Client\lib\museum-agent-sdk.min.js.map
+        echo   - ..\web\MuseumAgent_Client\lib\vad-processor.js
     ) else (
         echo ✗ AudioWorklet 处理器文件复制失败！
     )
@@ -40,5 +40,4 @@ if exist ..\web\Demo\lib\museum-agent-sdk.min.js (
 
 echo.
 echo ========================================
-pause
 

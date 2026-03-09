@@ -56,9 +56,15 @@ export class SendManager {
         }
 
         // ✅ 添加配置更新（每次请求都携带最新配置）
-        message.payload.update_session = this._buildUpdateSession();
+        const updateSession = this._buildUpdateSession();
+        message.payload.update_session = updateSession;
 
         this.wsClient.send(message);
+        
+        // ✅ 发送成功后清除更新标记
+        if (Object.keys(updateSession).length > 0) {
+            this._clearUpdateMarksAfterSend();
+        }
         
         return requestId;
     }
@@ -74,14 +80,10 @@ export class SendManager {
             // 获取需要更新的配置（差异更新）
             const updates = this.client.getPendingUpdates();
             
-            // 如果有更新，发送后自动清除标记
+            // 如果有更新，记录日志但不清除标记
             if (Object.keys(updates).length > 0) {
                 console.log('[SendManager] 携带配置更新:', updates);
-                
-                // ✅ 发送成功后自动清除更新标记
-                setTimeout(() => {
-                    this.client.clearUpdateMarks();
-                }, 100);
+                // ⚠️ 不再自动清除标记，由外部调用 _clearUpdateMarksAfterSend() 清除
             }
             
             return updates;
@@ -130,6 +132,20 @@ export class SendManager {
             }
             
             return updates;
+        }
+    }
+
+    /**
+     * ✅ 发送成功后清除更新标记
+     * @private
+     */
+    _clearUpdateMarksAfterSend() {
+        if (this.client) {
+            // 延迟清除，确保消息已发送
+            setTimeout(() => {
+                this.client.clearUpdateMarks();
+                console.log('[SendManager] 配置更新标记已清除');
+            }, 100);
         }
     }
 
@@ -187,9 +203,15 @@ export class SendManager {
         }
 
         // ✅ 添加配置更新（每次请求都携带最新配置）
-        startMessage.payload.update_session = this._buildUpdateSession();
+        const updateSession = this._buildUpdateSession();
+        startMessage.payload.update_session = updateSession;
 
         this.wsClient.send(startMessage);
+        
+        // ✅ 发送成功后清除更新标记
+        if (Object.keys(updateSession).length > 0) {
+            this._clearUpdateMarksAfterSend();
+        }
         
         return { requestId, controller };
     }

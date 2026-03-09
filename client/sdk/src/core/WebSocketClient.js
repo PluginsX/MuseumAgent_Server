@@ -9,7 +9,7 @@ export class WebSocketClient {
             baseUrl: config.baseUrl || 'ws://localhost:8001',
             reconnectInterval: config.reconnectInterval || 5000,
             maxReconnectAttempts: config.maxReconnectAttempts || 5,
-            heartbeatTimeout: config.heartbeatTimeout || 120000
+            heartbeatTimeout: config.heartbeatTimeout || 600000  // ✅ 增加到 10 分钟（600秒）
         };
         
         this.ws = null;
@@ -29,7 +29,9 @@ export class WebSocketClient {
      */
     async connect() {
         return new Promise((resolve, reject) => {
-            const wsUrl = `${this.config.baseUrl}/ws/agent/stream`;
+            // ✅ 修复：移除 baseUrl 末尾的斜杠，避免双斜杠
+            const baseUrl = this.config.baseUrl.replace(/\/$/, '');
+            const wsUrl = `${baseUrl}/ws/agent/stream`;
             console.log('[WebSocketClient] 连接:', wsUrl);
 
             this.ws = new WebSocket(wsUrl);

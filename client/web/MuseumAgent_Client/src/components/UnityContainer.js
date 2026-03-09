@@ -112,6 +112,24 @@ export class UnityContainer {
         this.isLoading = true;
         console.log('[UnityContainer] 开始加载 Unity...');
         
+        // ✅ 关键修复：在 Unity 加载期间保持心跳
+        const keepAliveInterval = setInterval(() => {
+            if (this.client && this.client.wsClient && this.client.wsClient.isConnected()) {
+                console.log('[UnityContainer] 发送保活心跳（Unity 加载中）');
+                // 发送一个轻量级的心跳消息
+                this.client.wsClient.send({
+                    version: '1.0',
+                    msg_type: 'HEARTBEAT_REPLY',
+                    session_id: this.client.sessionId,
+                    payload: { 
+                        client_status: 'LOADING_UNITY',
+                        progress: 'loading'
+                    },
+                    timestamp: Date.now()
+                });
+            }
+        }, 30000);  // 每 30 秒发送一次心跳
+        
         try {
             // 动态加载 Unity loader
             console.log('[UnityContainer] 开始加载 Unity Loader...');
@@ -121,13 +139,15 @@ export class UnityContainer {
             // 配置 Unity
             const buildUrl = 'unity/Build';
             const config = {
-                dataUrl: buildUrl + '/build.data',
-                frameworkUrl: buildUrl + '/build.framework.js',
-                codeUrl: buildUrl + '/build.wasm',
+                dataUrl: buildUrl + '/build.data.unityweb',
+                frameworkUrl: buildUrl + '/build.framework.js.unityweb',
+                codeUrl: buildUrl + '/build.wasm.unityweb',
                 streamingAssetsUrl: 'unity/StreamingAssets',
                 companyName: 'SoulFlaw',
                 productName: 'Museum',
-                productVersion: '0.1.0'
+                productVersion: '0.1.0',
+                // ✅ 启用压缩支持
+                compressionFormat: 'br'  // 或 'gzip'，取决于你的构建设置
             };
             
             // 获取当前页面的协议和域名，用于构建完整的URL
@@ -203,6 +223,10 @@ export class UnityContainer {
             console.error('[UnityContainer] 错误详情:', error.stack);
             alert('Unity 加载失败: ' + error.message);
         } finally {
+            // ✅ 清理保活定时器
+            clearInterval(keepAliveInterval);
+            console.log('[UnityContainer] 已停止保活心跳');
+            
             this.isLoading = false;
             console.log('[UnityContainer] Unity 加载过程结束，isLoading:', this.isLoading);
         }

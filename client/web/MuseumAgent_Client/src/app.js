@@ -15,13 +15,13 @@ import { createElement, $, showNotification } from './utils/dom.js';
 /**
  * 自动推导智能体服务端地址
  * 从当前页面 URL 推导出 WebSocket 地址
- * 通过 Nginx 代理路径 /agent/ 访问
+ * 通过 Nginx 代理路径 /agent 访问
  * @returns {string} WebSocket 服务端地址
  */
 function getAgentServerUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;  // 包含域名和端口
-    return `${protocol}//${host}/agent/`;
+    return `${protocol}//${host}/agent`;  // ✅ 移除末尾斜杠
 }
 
 class App {
@@ -50,6 +50,9 @@ class App {
         // ✅ 防止 Unity 捕获输入框的键盘事件
         this.preventUnityKeyboardCapture();
 
+        // ✅ 清理错误的 localStorage 缓存（修复路径问题）
+        this.cleanupInvalidSession();
+
         // ✅ 尝试从保存的会话恢复
         const client = new MuseumAgentClient({
             serverUrl: getAgentServerUrl(),
@@ -73,6 +76,27 @@ class App {
         }
 
         console.log('[App] 应用初始化完成');
+    }
+    
+    /**
+     * ✅ 清理无效的会话缓存
+     * 修复：如果保存的 serverUrl 是 /mas/（控制面板路径），则清除缓存
+     */
+    cleanupInvalidSession() {
+        try {
+            const savedSession = localStorage.getItem('museumAgentSession');
+            if (savedSession) {
+                const session = JSON.parse(savedSession);
+                // 检查是否是错误的控制面板路径
+                if (session.serverUrl && session.serverUrl.includes('/mas')) {
+                    console.warn('[App] 检测到错误的 serverUrl (包含 /mas)，清除缓存');
+                    localStorage.removeItem('museumAgentSession');
+                    showNotification('检测到旧版本缓存，已自动清理', 'info');
+                }
+            }
+        } catch (error) {
+            console.error('[App] 清理会话缓存失败:', error);
+        }
     }
     
     /**
