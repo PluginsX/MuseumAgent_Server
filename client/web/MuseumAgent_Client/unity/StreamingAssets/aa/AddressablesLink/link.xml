@@ -1,34 +1,35 @@
 <linker>
   <assembly fullname="Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+    <type fullname="AgentClient.Runtime.AgentBridgeProxy" preserve="all" />
     <type fullname="AgentContext" preserve="all" />
     <type fullname="AgentFunctionDefinition" preserve="all" />
     <type fullname="CameraController" preserve="all" />
     <type fullname="EnvironmentalController" preserve="all" />
     <type fullname="InputHandler" preserve="all" />
     <type fullname="Museum.Component.Animation.ClipPlayer" preserve="all" />
+    <type fullname="Museum.Component.LifeCycleEvent" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxController" preserve="all" />
     <type fullname="Museum.Component.ParallaxScrolling.ParallaxScrolling" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneObjectManifest" preserve="all" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage" preserve="all" />
     <type fullname="Museum.Component.UGUI.UI_VisibleEvent" preserve="all" />
-    <type fullname="SceneController" preserve="all" />
+    <type fullname="SceneManagerProxy" preserve="all" />
     <type fullname="SetTransform" preserve="all" />
     <type fullname="SimpleSwitchSkyBox" preserve="all" />
     <type fullname="Test_FunctionCalling" preserve="all" />
     <type fullname="UI_Controller" preserve="all" />
     <type fullname="UI_SyncSize" preserve="all" />
     <type fullname="UI_ToggleEvent" preserve="all" />
-    <type fullname="UI_WorldBillboard" preserve="all" />
     <type fullname="WebFunctionExecutor" preserve="all" />
+    <type fullname="FunctionDefinition" preserve="nothing" serialized="true" />
+    <type fullname="FunctionParameter" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneObjectManifest/ObjectCategory" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/CollectedObject" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/EnvironmentSettings" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.UGUI.UI_ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
     <type fullname="FloatEvent" preserve="nothing" serialized="true" />
-    <type fullname="FunctionDefinition" preserve="nothing" serialized="true" />
-    <type fullname="FunctionParameter" preserve="nothing" serialized="true" />
     <type fullname="SimpleSwitchSkyBox/SkyBoxItem" preserve="nothing" serialized="true" />
     <type fullname="UI_Controller/UIItem" preserve="nothing" serialized="true" />
     <type fullname="Vector2Event" preserve="nothing" serialized="true" />
@@ -104,6 +105,7 @@
     <type fullname="UnityEngine.Mesh" preserve="all" />
     <type fullname="UnityEngine.MeshFilter" preserve="all" />
     <type fullname="UnityEngine.MeshRenderer" preserve="all" />
+    <type fullname="UnityEngine.MonoBehaviour" preserve="all" />
     <type fullname="UnityEngine.Object" preserve="all" />
     <type fullname="UnityEngine.RectTransform" preserve="all" />
     <type fullname="UnityEngine.ReflectionProbe" preserve="all" />
@@ -115,8 +117,10 @@
     <type fullname="UnityEngine.Events.ArgumentCache" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.PersistentCallGroup" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.PersistentListenerMode" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.RectOffset" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collider]" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collision]" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.RectOffset" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[System.Single]" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.ParticleSystemModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
