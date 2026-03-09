@@ -27,11 +27,11 @@
     <type fullname="Museum.Component.SceneLoader.SceneObjectManifest/ObjectCategory" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/CollectedObject" preserve="nothing" serialized="true" />
     <type fullname="Museum.Component.SceneLoader.SceneProfile/EnvironmentSettings" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
+    <type fullname="Museum.Component.UGUI.UI_ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
     <type fullname="FloatEvent" preserve="nothing" serialized="true" />
     <type fullname="FunctionDefinition" preserve="nothing" serialized="true" />
     <type fullname="FunctionParameter" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.UGUI.UI_ShaderImage/ColorProperty" preserve="nothing" serialized="true" />
-    <type fullname="Museum.Component.UGUI.UI_ShaderImage/FloatProperty" preserve="nothing" serialized="true" />
     <type fullname="SimpleSwitchSkyBox/SkyBoxItem" preserve="nothing" serialized="true" />
     <type fullname="UI_Controller/UIItem" preserve="nothing" serialized="true" />
     <type fullname="Vector2Event" preserve="nothing" serialized="true" />
@@ -117,15 +117,15 @@
     <type fullname="UnityEngine.Sprite" preserve="all" />
     <type fullname="UnityEngine.Texture2D" preserve="all" />
     <type fullname="UnityEngine.Transform" preserve="all" />
-    <type fullname="UnityEngine.Events.PersistentCallGroup" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.ArgumentCache" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.Events.PersistentCallGroup" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.PersistentListenerMode" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.RectOffset" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[System.Single]" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[System.String]" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collider]" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.Events.UnityEvent`1[UnityEngine.Collision]" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.RectOffset" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.ParticleSystemModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
     <type fullname="UnityEngine.ParticleSystem" preserve="all" />
@@ -152,15 +152,15 @@
     <type fullname="UnityEngine.UI.Text" preserve="all" />
     <type fullname="UnityEngine.UI.Toggle" preserve="all" />
     <type fullname="UnityEngine.UI.VerticalLayoutGroup" preserve="all" />
-    <type fullname="UnityEngine.UI.FontData" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.UI.MaskableGraphic/CullStateChangedEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.AnimationTriggers" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.Button/ButtonClickedEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.ColorBlock" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.UI.FontData" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.UI.MaskableGraphic/CullStateChangedEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.Navigation" preserve="nothing" serialized="true" />
+    <type fullname="UnityEngine.UI.SpriteState" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.ScrollRect/ScrollRectEvent" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.Slider/SliderEvent" preserve="nothing" serialized="true" />
-    <type fullname="UnityEngine.UI.SpriteState" preserve="nothing" serialized="true" />
     <type fullname="UnityEngine.UI.Toggle/ToggleEvent" preserve="nothing" serialized="true" />
   </assembly>
   <assembly fullname="UnityEngine.UIModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
