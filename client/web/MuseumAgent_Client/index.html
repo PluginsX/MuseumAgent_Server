@@ -9,12 +9,16 @@
     <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
-    <div id="app"></div>
-    
+
     <!-- 使用 SDK 构建产物 -->
     <script src="./lib/museum-agent-sdk.min.js"></script>
+    <div id="app"></div>
+
+    <!-- 加载公共函数 -->
+    <script type="module" src="./src/commonFunction.js"></script>
     
     <!-- 加载应用 -->
     <script type="module" src="./src/app.js"></script>
+
 </body>
 </html>
