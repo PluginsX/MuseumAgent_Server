@@ -15,6 +15,7 @@ function getAgentServerUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;  // 包含域名和端口
     return `${protocol}//${host}/mas/`;
+    // return `wss://www.soulflaw.com/mas/`;
 }
 
 export class LoginForm {

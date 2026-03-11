@@ -7,6 +7,7 @@
 import { createElement, detectAndOptimizeForDevice } from '../utils/dom.js';
 import { ControlButton } from './ControlButton.js';
 import { FloatingPanel } from './FloatingPanel.js';
+import { detectDeviceEnvironment } from '../commonFunction.js';
 
 export class UnityContainer {
     constructor(container, client, agentController) {
@@ -19,6 +20,10 @@ export class UnityContainer {
         this.controlButton = null;
         this.currentPanel = null;
         this.isLoading = false;
+        
+        // ✅ 初始化设备环境信息
+        this.deviceInfo = detectDeviceEnvironment();
+        console.log('[UnityContainer] 设备信息:', this.deviceInfo);
         
         this.init();
     }
@@ -417,9 +422,14 @@ export class UnityContainer {
         // ✅ 通过 AgentController 获取 SettingsPanel 单例
         const settingsPanel = this.agentController.getSettingsPanel();
         
+        // ✅ 使用设备信息决定显示模式（仅作为预设，用户可随时切换）
+        const useWindowMode = this.deviceInfo.shouldUseWindowMode;
+        
         // 创建浮动面板包装
         this.currentPanel = new FloatingPanel(settingsPanel, {
             title: '客户端配置',
+            deviceInfo: this.deviceInfo,
+            useWindowMode: useWindowMode,
             onClose: () => this.closePanel()
         });
     }
@@ -434,9 +444,14 @@ export class UnityContainer {
         // ✅ 通过 AgentController 获取 ChatWindow 单例
         const chatWindow = this.agentController.getChatWindow();
         
+        // ✅ 使用设备信息决定显示模式（仅作为预设，用户可随时切换）
+        const useWindowMode = this.deviceInfo.shouldUseWindowMode;
+        
         // 创建浮动面板包装
         this.currentPanel = new FloatingPanel(chatWindow, {
             title: 'MuseumAgent 智能体',
+            deviceInfo: this.deviceInfo,
+            useWindowMode: useWindowMode,
             onClose: () => this.closePanel()
         });
     }

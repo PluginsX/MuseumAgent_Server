@@ -1,10 +1,11 @@
 /**
  * 悬浮面板基类
  * ✅ 重构版本：支持传入已有组件实例（单例模式）
- * 用于包装设置和聊天组件，提供全屏显示和关闭功能
+ * 用于包装设置和聊天组件，提供窗口/全屏模式切换和关闭功能
  */
 
 import { createElement } from '../utils/dom.js';
+import { detectDeviceEnvironment } from '../commonFunction.js';
 
 export class FloatingPanel {
     constructor(componentOrInstance, options = {}) {
@@ -25,11 +26,25 @@ export class FloatingPanel {
             this.isExternalComponent = true;
         }
         
+        // ✅ 获取设备信息
+        this.deviceInfo = options.deviceInfo || detectDeviceEnvironment();
+        
+        // 用户可自定义初始模式，如果没有则使用设备预设
+        this.useWindowMode = options.useWindowMode !== undefined 
+            ? options.useWindowMode 
+            : (this.deviceInfo ? this.deviceInfo.shouldUseWindowMode : false);
+        
+        // 保存用户偏好（持久化到 localStorage）
+        this.userPreferredMode = options.useWindowMode;
+        
         this.options = {
             title: options.title || '',
             onClose: options.onClose || null,
             showFullscreenButton: options.showFullscreenButton !== false
         };
+        
+        this.draggable = options.draggable !== false; // 默认启用拖拽
+        this.useDragInFullscreen = options.useDragInFullscreen !== false; // 全屏模式下默认启用拖拽
         
         this.element = null;
         this.contentContainer = null;
@@ -47,8 +62,21 @@ export class FloatingPanel {
         // ✅ 切换到网页模式（允许右键、选择等）
         this.switchToWebMode();
         
+        // ✅ 加载用户偏好模式
+        const savedMode = this.loadUserPreference();
+        if (savedMode !== null) {
+            this.useWindowMode = savedMode;
+        }
+        
         this.createElement();
         this.attachComponent();
+        
+        // ✅ 根据模式启用拖拽功能
+        if (this.useWindowMode && this.draggable) {
+            this.enableDrag();
+        } else if (!this.useWindowMode && this.useDragInFullscreen) {
+            this.enableDrag();
+        }
     }
     
     /**
@@ -79,10 +107,32 @@ export class FloatingPanel {
      * 创建元素
      */
     createElement() {
-        // 创建全屏容器
+        // 创建容器（根据模式设置不同样式）
         this.element = createElement('div', {
-            className: 'floating-panel'
+            className: `floating-panel ${this.useWindowMode ? 'window-mode' : 'fullscreen-mode'}`
         });
+        
+        // 窗口模式样式
+        if (this.useWindowMode) {
+            this.element.style.width = '80%';
+            this.element.style.height = '80%';
+            this.element.style.maxWidth = '800px';
+            this.element.style.maxHeight = '600px';
+            this.element.style.left = '50%';
+            this.element.style.top = '50%';
+            this.element.style.transform = 'translate(-50%, -50%)';
+            this.element.style.position = 'fixed';
+            this.element.style.zIndex = '9999';
+        } else {
+            // 全屏模式样式
+            this.element.style.width = '100vw';
+            this.element.style.height = '100vh';
+            this.element.style.left = '0';
+            this.element.style.top = '0';
+            this.element.style.transform = 'none';
+            this.element.style.position = 'fixed';
+            this.element.style.zIndex = '9999';
+        }
         
         // 创建头部
         const header = this.createHeader();
@@ -125,16 +175,14 @@ export class FloatingPanel {
             className: 'floating-panel-buttons'
         });
         
-        // 全屏按钮
-        if (this.options.showFullscreenButton) {
-            const fullscreenBtn = createElement('button', {
-                className: 'floating-panel-button fullscreen-button',
-                textContent: '◱',
-                title: '全屏'
-            });
-            fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-            buttonContainer.appendChild(fullscreenBtn);
-        }
+        // ✅ 窗口/全屏切换按钮（替换原来的全屏按钮）
+        const modeToggleBtn = createElement('button', {
+            className: 'floating-panel-button mode-toggle-button',
+            textContent: this.useWindowMode ? '◱' : '⛶',  // 窗口模式显示全屏图标，全屏模式显示窗口图标
+            title: this.useWindowMode ? '切换到全屏模式' : '切换到窗口模式'
+        });
+        modeToggleBtn.addEventListener('click', () => this.toggleWindowMode());
+        buttonContainer.appendChild(modeToggleBtn);
         
         // 关闭按钮
         const closeBtn = createElement('button', {
@@ -191,28 +239,177 @@ export class FloatingPanel {
     }
     
     /**
-     * 切换全屏
+     * ✅ 切换窗口/全屏模式
      */
-    toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            // 进入全屏
-            if (this.element.requestFullscreen) {
-                this.element.requestFullscreen();
-            } else if (this.element.webkitRequestFullscreen) {
-                this.element.webkitRequestFullscreen();
-            } else if (this.element.msRequestFullscreen) {
-                this.element.msRequestFullscreen();
+    toggleWindowMode() {
+        this.useWindowMode = !this.useWindowMode;
+        
+        // 切换 CSS 类
+        this.element.classList.remove('window-mode', 'fullscreen-mode');
+        this.element.classList.add(this.useWindowMode ? 'window-mode' : 'fullscreen-mode');
+        
+        // 应用模式样式
+        if (this.useWindowMode) {
+            // 窗口模式
+            this.element.style.width = '80%';
+            this.element.style.height = '80%';
+            this.element.style.maxWidth = '800px';
+            this.element.style.maxHeight = '600px';
+            this.element.style.left = '50%';
+            this.element.style.top = '50%';
+            this.element.style.transform = 'translate(-50%, -50%)';
+            this.element.style.position = 'fixed';
+            this.element.style.zIndex = '9999';
+            
+            // 启用拖拽（窗口模式下需要）
+            if (this.draggable) {
+                this.enableDrag();
             }
+            
+            // 更新按钮图标和提示
+            const modeToggleBtn = this.element.querySelector('.mode-toggle-button');
+            if (modeToggleBtn) {
+                modeToggleBtn.textContent = '⛶';
+                modeToggleBtn.title = '切换到全屏模式';
+            }
+            
+            console.log('[FloatingPanel] 切换到窗口模式');
         } else {
-            // 退出全屏
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
+            // 全屏模式
+            this.element.style.width = '100vw';
+            this.element.style.height = '100vh';
+            this.element.style.left = '0';
+            this.element.style.top = '0';
+            this.element.style.transform = 'none';
+            this.element.style.position = 'fixed';
+            this.element.style.zIndex = '9999';
+            
+            // 启用拖拽（全屏模式下可选）
+            if (this.useDragInFullscreen) {
+                this.enableDrag();
             }
+            
+            // 更新按钮图标和提示
+            const modeToggleBtn = this.element.querySelector('.mode-toggle-button');
+            if (modeToggleBtn) {
+                modeToggleBtn.textContent = '◱';
+                modeToggleBtn.title = '切换到窗口模式';
+            }
+            
+            console.log('[FloatingPanel] 切换到全屏模式');
         }
+        
+        // 保存用户偏好
+        this.saveUserPreference();
+    }
+    
+    /**
+     * ✅ 保存用户偏好到 localStorage
+     */
+    saveUserPreference() {
+        const preference = {
+            useWindowMode: this.useWindowMode,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('floatingPanelModePreference', JSON.stringify(preference));
+    }
+    
+    /**
+     * ✅ 从 localStorage 加载用户偏好
+     */
+    loadUserPreference() {
+        try {
+            const preference = JSON.parse(localStorage.getItem('floatingPanelModePreference'));
+            if (preference && preference.useWindowMode !== undefined) {
+                return preference.useWindowMode;
+            }
+        } catch (error) {
+            console.error('[FloatingPanel] 加载用户偏好失败:', error);
+        }
+        return null;
+    }
+    
+    /**
+     * ✅ 启用拖拽功能（仅窗口模式）
+     */
+    enableDrag() {
+        if (!this.element) return;
+        
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let initialLeft = 0;
+        let initialTop = 0;
+        
+        const header = this.element.querySelector('.floating-panel-header');
+        if (!header) return;
+        
+        // Pointer Down
+        header.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.close-button') || e.target.closest('.mode-toggle-button')) {
+                return; // 点击按钮时不拖拽
+            }
+            
+            e.preventDefault();
+            header.setPointerCapture(e.pointerId);
+            
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            // 获取当前位置
+            const rect = this.element.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            this.element.style.transition = 'none';
+            this.element.classList.add('dragging');
+        });
+        
+        // Pointer Move (绑定到 document 以确保在 header 外也能捕获)
+        document.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            
+            const newLeft = initialLeft + deltaX;
+            const newTop = initialTop + deltaY;
+            
+            // 约束在视口内
+            const maxX = window.innerWidth - this.element.offsetWidth;
+            const maxY = window.innerHeight - this.element.offsetHeight;
+            
+            this.element.style.left = `${Math.max(0, Math.min(newLeft, maxX))}px`;
+            this.element.style.top = `${Math.max(0, Math.min(newTop, maxY))}px`;
+            this.element.style.transform = 'none';
+        });
+        
+        // Pointer Up (绑定到 document)
+        document.addEventListener('pointerup', (e) => {
+            if (!isDragging) return;
+            
+            header.releasePointerCapture(e.pointerId);
+            isDragging = false;
+            this.element.classList.remove('dragging');
+            this.element.style.transition = 'all 0.3s';
+        });
+        
+        // Pointer Cancel (绑定到 document)
+        document.addEventListener('pointercancel', () => {
+            isDragging = false;
+            this.element.classList.remove('dragging');
+            this.element.style.transition = 'all 0.3s';
+        });
+    }
+    
+    /**
+     * ✅ 禁用拖拽功能
+     */
+    disableDrag() {
+        console.log('[FloatingPanel] 拖拽功能已禁用');
     }
     
     /**

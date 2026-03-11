@@ -1526,3 +1526,88 @@ button[type="submit"]:active {
     }
 }
 
+/* ==================== 浮动面板窗口模式样式 ==================== */
+
+.floating-panel.window-mode {
+    width: 80%;
+    height: 80%;
+    max-width: 800px;
+    max-height: 600px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    position: fixed;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0px 0px 10px #0000007d;
+}
+
+.floating-panel.window-mode.dragging {
+    cursor: grab;
+    transition: none;
+}
+
+.floating-panel.window-mode .floating-panel-header {
+    cursor: grab;
+    user-select: none;
+}
+
+.floating-panel.window-mode .floating-panel-header:active {
+    cursor: grabbing;
+}
+
+/* 全屏模式样式 */
+.floating-panel.fullscreen-mode {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    left: 0 !important;
+    top: 0 !important;
+    transform: none !important;
+}
+
+/* 禁用全屏按钮（窗口模式） */
+.floating-panel.window-mode .fullscreen-button {
+    display: none;
+}
+
+/* 窗口/全屏切换按钮 */
+.floating-panel .mode-toggle-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.floating-panel .mode-toggle-button:hover {
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(1.1);
+}
+
+.floating-panel .mode-toggle-button:active {
+    transform: scale(0.95);
+}
+
+/* 拖拽时的样式 */
+.floating-panel.dragging {
+    cursor: grab;
+    transition: none;
+}
+
+.floating-panel.dragging .floating-panel-header {
+    cursor: grab;
+}
+
+.floating-panel.dragging .floating-panel-header:active {
+    cursor: grabbing;
+}
+
