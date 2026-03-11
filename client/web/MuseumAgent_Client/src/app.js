@@ -29,7 +29,7 @@ class App {
         this.container = null;
         this.currentView = null;
         this.client = null;
-        this.agentController = null;  // ✅ AgentController 实例
+        this.agentController = null;
         
         this.init();
     }
@@ -47,13 +47,10 @@ class App {
             document.body.appendChild(this.container);
         }
         
-        // ✅ 防止 Unity 捕获输入框的键盘事件
-        this.preventUnityKeyboardCapture();
-
-        // ✅ 清理错误的 localStorage 缓存（修复路径问题）
+        // 清理错误的 localStorage 缓存（修复路径问题）
         this.cleanupInvalidSession();
 
-        // ✅ 尝试从保存的会话恢复
+        // 尝试从保存的会话恢复
         const client = new MuseumAgentClient({
             serverUrl: getAgentServerUrl(),
             functionCalling: this.getPetFunctions()
@@ -64,7 +61,7 @@ class App {
             console.log('[App] 会话恢复成功');
             this.client = client;
             
-            // ✅ 创建 AgentController
+            // 创建 AgentController
             this.agentController = new AgentController(this.client);
             console.log('[App] AgentController 已创建');
             
@@ -96,41 +93,6 @@ class App {
             }
         } catch (error) {
             console.error('[App] 清理会话缓存失败:', error);
-        }
-    }
-    
-    /**
-     * ✅ 防止 Unity 捕获输入框的键盘事件
-     * 简化方案：不需要任何复杂的事件拦截，Unity 几乎不需要键盘输入
-     */
-    preventUnityKeyboardCapture() {
-        // 什么都不做！
-        // 面板打开时会通过 disableUnityInput() 禁用 Unity
-        // 面板关闭时会通过 enableUnityInput() 恢复 Unity
-        console.log('[App] 键盘事件保护已简化，由面板控制 Unity 输入状态');
-    }
-    
-    /**
-     * ✅ 禁用 Unity 输入（面板打开时调用）
-     */
-    disableUnityInput() {
-        const canvas = document.querySelector('#unity-canvas');
-        if (canvas) {
-            canvas.style.pointerEvents = 'none';  // 禁用所有鼠标事件
-            canvas.setAttribute('tabindex', '-1');  // 禁用焦点
-            console.log('[App] Unity 输入已禁用');
-        }
-    }
-    
-    /**
-     * ✅ 启用 Unity 输入（面板关闭时调用）
-     */
-    enableUnityInput() {
-        const canvas = document.querySelector('#unity-canvas');
-        if (canvas) {
-            canvas.style.pointerEvents = 'auto';  // 恢复所有鼠标事件
-            canvas.setAttribute('tabindex', '0');  // 恢复焦点
-            console.log('[App] Unity 输入已启用');
         }
     }
     
@@ -302,12 +264,12 @@ class App {
     }
 
     /**
-     * ✅ 登出（清理 AgentController）
+     * 登出（清理 AgentController）
      */
     async logout() {
         console.log('[App] 登出');
         
-        // ✅ 销毁 AgentController
+        // 销毁 AgentController
         if (this.agentController) {
             this.agentController.destroy();
             this.agentController = null;
@@ -315,7 +277,7 @@ class App {
         
         // 断开连接并清除保存的会话
         if (this.client) {
-            await this.client.disconnect('用户登出', true);  // ✅ 第二个参数 true 表示清除会话
+            await this.client.disconnect('用户登出', true);
             this.client.cleanup();
             this.client = null;
         }

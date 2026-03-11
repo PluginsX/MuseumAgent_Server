@@ -68,9 +68,29 @@ export class UnityContainer {
         this.unityCanvas.setAttribute('tabindex', '-1');
         
         // ✅ 阻止 Unity Canvas 捕获键盘事件（除非它有焦点）
+        // 只在非 web-mode 下阻止键盘事件
         this.unityCanvas.addEventListener('keydown', (e) => {
-            // 如果当前焦点不在 canvas 上，不处理键盘事件
+            // 如果处于 web-mode，允许键盘事件正常传播
+            if (document.body.classList.contains('web-mode')) {
+                return;
+            }
+            // 如果当前焦点是输入框或textarea，不处理键盘事件
+            if (document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'TEXTAREA' ||
+                document.activeElement.isContentEditable) {
+                return;
+            }
+            // 如果事件目标在输入框或textarea内，不处理键盘事件
+            if (e.target.tagName === 'INPUT' || 
+                e.target.tagName === 'TEXTAREA' ||
+                e.target.isContentEditable ||
+                e.target.closest('input') ||
+                e.target.closest('textarea')) {
+                return;
+            }
+            // 如果当前焦点不在 canvas 上，阻止事件继续传播
             if (document.activeElement !== this.unityCanvas) {
+                e.stopPropagation();
                 return;
             }
         }, true);  // 使用捕获阶段
@@ -115,6 +135,7 @@ export class UnityContainer {
     
     /**
      * 设置 Unity 视图的交互限制（禁用右键、选择等）
+     * 只在非 web-mode 下生效
      */
     setupUnityViewInteractions() {
         console.log('[UnityContainer] 设置 Unity 视图交互限制...');
@@ -122,32 +143,48 @@ export class UnityContainer {
         // 获取整个文档 body
         const doc = document.body;
         
-        // 1. 全局阻止右键菜单
+        // 1. 全局阻止右键菜单（只在非 web-mode 下阻止）
         doc.addEventListener('contextmenu', (e) => {
+            // 如果处于 web-mode，允许右键菜单
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
             console.log('[UnityContainer] ⛔ 右键菜单已阻止（Unity 模式）');
             return false;
         }, true);  // 使用捕获阶段，确保优先级最高
         
-        // 2. 阻止所有元素的默认拖拽行为
+        // 2. 阻止所有元素的默认拖拽行为（只在非 web-mode 下阻止）
         const allElements = doc.querySelectorAll('*');
         allElements.forEach(el => {
             el.addEventListener('dragstart', (e) => {
+                // 如果处于 web-mode，允许拖拽
+                if (doc.classList.contains('web-mode')) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 return false;
             }, true);
             
             el.addEventListener('drop', (e) => {
+                // 如果处于 web-mode，允许拖放
+                if (doc.classList.contains('web-mode')) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 return false;
             }, true);
         });
         
-        // 3. 阻止文本选择和复制
+        // 3. 阻止文本选择和复制（只在非 web-mode 下阻止）
         doc.addEventListener('selectstart', (e) => {
+            // 如果处于 web-mode，允许文本选择
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
             console.log('[UnityContainer] ⛔ 文本选择已阻止（Unity 模式）');
@@ -155,6 +192,10 @@ export class UnityContainer {
         }, true);
         
         doc.addEventListener('copy', (e) => {
+            // 如果处于 web-mode，允许复制
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
             console.log('[UnityContainer] ⛔ 复制已阻止（Unity 模式）');
@@ -162,15 +203,23 @@ export class UnityContainer {
         }, true);
         
         doc.addEventListener('cut', (e) => {
+            // 如果处于 web-mode，允许剪切
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
             console.log('[UnityContainer] ⛔ 剪切已阻止（Unity 模式）');
             return false;
         }, true);
         
-        // 4. 阻止长按触发菜单（移动端）
+        // 4. 阻止长按触发菜单（移动端）（只在非 web-mode 下阻止）
         let touchTimer = null;
         doc.addEventListener('touchstart', (e) => {
+            // 如果处于 web-mode，允许长按
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             touchTimer = setTimeout(() => {
                 console.log('[UnityContainer] ⛔ 长按已阻止（Unity 模式）');
                 e.preventDefault();
@@ -185,6 +234,10 @@ export class UnityContainer {
         });
         
         doc.addEventListener('touchmove', (e) => {
+            // 如果处于 web-mode，允许触摸滚动
+            if (doc.classList.contains('web-mode')) {
+                return;
+            }
             e.preventDefault();  // 阻止滚动
         }, { passive: false });
         

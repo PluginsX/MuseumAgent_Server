@@ -56,13 +56,10 @@ export class FloatingPanel {
      * 初始化
      */
     init() {
-        // ✅ 面板打开时禁用 Unity 输入
-        this.disableUnityInput();
-        
-        // ✅ 切换到网页模式（允许右键、选择等）
+        // 切换到网页模式（允许右键、选择等）
         this.switchToWebMode();
         
-        // ✅ 加载用户偏好模式
+        // 加载用户偏好模式
         const savedMode = this.loadUserPreference();
         if (savedMode !== null) {
             this.useWindowMode = savedMode;
@@ -71,7 +68,7 @@ export class FloatingPanel {
         this.createElement();
         this.attachComponent();
         
-        // ✅ 根据模式启用拖拽功能
+        // 根据模式启用拖拽功能
         if (this.useWindowMode && this.draggable) {
             this.enableDrag();
         } else if (!this.useWindowMode && this.useDragInFullscreen) {
@@ -350,6 +347,11 @@ export class FloatingPanel {
                 return; // 点击按钮时不拖拽
             }
             
+            // 如果点击的是输入框或textarea，不阻止默认行为，允许输入
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+                return;
+            }
+            
             e.preventDefault();
             header.setPointerCapture(e.pointerId);
             
@@ -463,13 +465,10 @@ export class FloatingPanel {
      * ✅ 销毁（不销毁外部组件实例）
      */
     destroy() {
-        // ✅ 面板关闭时恢复 Unity 输入
-        this.enableUnityInput();
-        
-        // ✅ 切换到 Unity 模式
+        // 切换到 Unity 模式
         this.switchToUnityMode();
         
-        // ✅ 如果是外部组件，只隐藏，不销毁
+        // 如果是外部组件，只隐藏，不销毁
         if (this.isExternalComponent) {
             if (typeof this.component.hide === 'function') {
                 this.component.hide();

@@ -51,6 +51,9 @@ export class ChatWindow {
         this.messageBubbles.clear();
         console.log('[ChatWindow] 已清空 messageBubbles Map');
         
+        // 添加 chat-view 类以启用正常交互
+        this.container.classList.add('chat-view');
+        
         // 消息容器
         this.messageContainer = createElement('div', {
             className: 'message-container'
