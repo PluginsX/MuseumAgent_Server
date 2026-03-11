@@ -64,11 +64,18 @@ export class ChatWindow {
             className: 'input-container'
         });
 
+        // 输入框包装容器（用于圆角和overflow裁切）
+        const inputWrapper = createElement('div', {
+            className: 'chat-input-wrapper'
+        });
+
         this.inputArea = createElement('textarea', {
             className: 'chat-input',
             placeholder: '输入消息...',
             rows: '1'
         });
+
+        inputWrapper.appendChild(this.inputArea);
 
         this.voiceButton = createElement('button', {
             className: 'voice-button',
@@ -80,7 +87,7 @@ export class ChatWindow {
             textContent: '发送'
         });
 
-        inputContainer.appendChild(this.inputArea);
+        inputContainer.appendChild(inputWrapper);
         inputContainer.appendChild(this.voiceButton);
         inputContainer.appendChild(this.sendButton);
 
@@ -117,7 +124,13 @@ export class ChatWindow {
         // 自动调整输入框高度
         this.inputArea.addEventListener('input', () => {
             this.inputArea.style.height = 'auto';
-            this.inputArea.style.height = Math.min(this.inputArea.scrollHeight, 120) + 'px';
+            const newHeight = Math.min(this.inputArea.scrollHeight, 120);
+            this.inputArea.style.height = newHeight + 'px';
+            // 同时调整wrapper的高度
+            const wrapper = this.inputArea.parentElement;
+            if (wrapper && wrapper.classList.contains('chat-input-wrapper')) {
+                wrapper.style.height = newHeight + 'px';
+            }
         });
 
         // 语音按钮
@@ -295,6 +308,11 @@ export class ChatWindow {
         // 清空输入框
         this.inputArea.value = '';
         this.inputArea.style.height = 'auto';
+        // 同时重置wrapper的高度
+        const wrapper = this.inputArea.parentElement;
+        if (wrapper && wrapper.classList.contains('chat-input-wrapper')) {
+            wrapper.style.height = 'auto';
+        }
 
         try {
             // ✅ 获取 SettingsPanel 的待更新配置
