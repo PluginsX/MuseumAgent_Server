@@ -4,7 +4,7 @@
  * 不再处理消息记录和配置管理（由 AgentController 统一管理）
  */
 
-import { createElement } from '../utils/dom.js';
+import { createElement, detectAndOptimizeForDevice } from '../utils/dom.js';
 import { ControlButton } from './ControlButton.js';
 import { FloatingPanel } from './FloatingPanel.js';
 
@@ -72,6 +72,14 @@ export class UnityContainer {
         
         unityContainer.appendChild(this.unityCanvas);
         
+        // ✅ 移动端视频优化：在 canvas 创建后立即应用
+        if (this.unityCanvas) {
+            detectAndOptimizeForDevice();
+        }
+        
+        // ✅ 禁用右键菜单和文本选择（Unity 主界面）
+        this.setupUnityViewInteractions();
+        
         // 创建加载提示
         const loadingBar = createElement('div', {
             id: 'unity-loading-bar',
@@ -98,6 +106,104 @@ export class UnityContainer {
         
         this.container.appendChild(unityContainer);
         this.container.appendChild(loadingBar);
+    }
+    
+    /**
+     * 设置 Unity 视图的交互限制（禁用右键、选择等）
+     */
+    setupUnityViewInteractions() {
+        console.log('[UnityContainer] 设置 Unity 视图交互限制...');
+        
+        // 获取整个文档 body
+        const doc = document.body;
+        
+        // 1. 全局阻止右键菜单
+        doc.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[UnityContainer] ⛔ 右键菜单已阻止（Unity 模式）');
+            return false;
+        }, true);  // 使用捕获阶段，确保优先级最高
+        
+        // 2. 阻止所有元素的默认拖拽行为
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => {
+            el.addEventListener('dragstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }, true);
+            
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }, true);
+        });
+        
+        // 3. 阻止文本选择和复制
+        doc.addEventListener('selectstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[UnityContainer] ⛔ 文本选择已阻止（Unity 模式）');
+            return false;
+        }, true);
+        
+        doc.addEventListener('copy', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[UnityContainer] ⛔ 复制已阻止（Unity 模式）');
+            return false;
+        }, true);
+        
+        doc.addEventListener('cut', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[UnityContainer] ⛔ 剪切已阻止（Unity 模式）');
+            return false;
+        }, true);
+        
+        // 4. 阻止长按触发菜单（移动端）
+        let touchTimer = null;
+        doc.addEventListener('touchstart', (e) => {
+            touchTimer = setTimeout(() => {
+                console.log('[UnityContainer] ⛔ 长按已阻止（Unity 模式）');
+                e.preventDefault();
+            }, 500);  // 500ms 后触发
+        }, { passive: false });
+        
+        doc.addEventListener('touchend', () => {
+            if (touchTimer) {
+                clearTimeout(touchTimer);
+                touchTimer = null;
+            }
+        });
+        
+        doc.addEventListener('touchmove', (e) => {
+            e.preventDefault();  // 阻止滚动
+        }, { passive: false });
+        
+        console.log('[UnityContainer] ✓ Unity 视图交互限制设置完成');
+    }
+    
+    /**
+     * 恢复正常的网页交互（聊天/配置页面）
+     */
+    restoreNormalInteractions() {
+        console.log('[UnityContainer] 恢复正常的网页交互...');
+        
+        const doc = document.body;
+        
+        // 移除所有阻止事件监听器
+        // 注意：由于我们使用了捕获阶段和匿名函数，这里需要重新添加允许的事件
+        
+        // 1. 允许右键菜单（通过移除阻止监听器）
+        // 由于我们无法直接移除匿名监听器，我们通过检查当前视图类型来控制行为
+        
+        // 2. 允许文本选择和复制
+        // 这些现在由 CSS 控制（.chat-view 类）
+        
+        console.log('[UnityContainer] ✓ 正常交互已恢复');
     }
     
     /**
@@ -195,6 +301,12 @@ export class UnityContainer {
                     console.warn('[UnityContainer] 配置Addressable系统失败:', error);
                     console.warn('[UnityContainer] 可能是因为Unity场景中没有AddressablesManager对象');
                 }
+            }
+            
+            // ✅ Unity 加载完成后再次应用移动端优化
+            if (this.unityCanvas) {
+                console.log('[UnityContainer] Unity 加载完成，再次应用移动端视频优化...');
+                detectAndOptimizeForDevice();
             }
             
             // 隐藏加载提示

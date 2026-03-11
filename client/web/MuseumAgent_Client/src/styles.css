@@ -1,4 +1,50 @@
+/* ======================================== */
+/* ✅ 全局模式控制（Unity 模式 / 网页模式） */
+/* ======================================== */
+
+/* Unity 模式：禁用所有右键、选择、拖拽 */
+body.unity-mode {
+    /* 阻止默认右键菜单 */
+    -webkit-touch-callout: none !important;
+    /* 阻止文本选择 */
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* 阻止图片拖拽 */
+    -webkit-user-drag: none !important;
+    /* 阻止高亮 */
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* 网页模式：允许正常交互 */
+body.web-mode {
+    /* 允许右键菜单 */
+    -webkit-touch-callout: default !important;
+    /* 允许文本选择 */
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    /* 允许拖拽 */
+    -webkit-user-drag: element !important;
+}
+
+/* 默认状态（无类）- 使用 Unity 模式 */
+body:not(.web-mode) {
+    -webkit-touch-callout: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    -webkit-user-drag: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* ======================================== */
 /* 全局样式 */
+/* ======================================== */
+
 * {
     margin: 0;
     padding: 0;
@@ -1066,16 +1112,29 @@ button[type="submit"]:active {
 .unity-view {
     width: 100vw;
     height: 100vh;
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     overflow: hidden;
     background: #000;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    perspective: 1000;
 }
 
 .unity-container {
     width: 100%;
     height: 100%;
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
     z-index: 1;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: auto;
 }
 
 .unity-canvas {
@@ -1083,6 +1142,107 @@ button[type="submit"]:active {
     height: 100%;
     display: block;
     outline: none;
+    border: none;
+    margin: 0;
+    padding: 0;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: auto;
+}
+
+/* ======================================== */
+/* ✅ 全局右键菜单和选择控制 */
+/* ======================================== */
+
+/* Unity 主界面（控制按钮未打开时）- 禁用所有交互 */
+.unity-view {
+    /* 禁用右键菜单 */
+    -webkit-touch-callout: none !important;
+    /* 禁用文本选择 */
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* 禁用拖拽 */
+    -webkit-user-drag: none !important;
+    /* 阻止默认右键行为 */
+    pointer-events: auto !important;
+}
+
+/* Unity 视图下的所有元素都禁用选择 */
+.unity-view * {
+    /* 禁用所有元素的选择 */
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* 禁用拖拽 */
+    -webkit-user-drag: none !important;
+    /* 禁止高亮 */
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none !important;
+}
+
+/* 聊天/配置页面（控制按钮已打开）- 保留正常交互 */
+.chat-view,
+.chat-view * {
+    /* 允许文本选择 */
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    /* 允许拖拽 */
+    -webkit-user-drag: element !important;
+    /* 允许右键菜单 */
+    -webkit-touch-callout: default !important;
+}
+
+/* ======================================== */
+/* ✅ 移动端视频播放优化 */
+/* ======================================== */
+
+@media screen and (max-width: 768px) {
+    .unity-view {
+        /* 防止 iOS Safari 缩放 */
+        touch-action: manipulation;
+        /* 防止双击缩放 */
+        user-select: none !important;
+        -webkit-user-select: none !important;
+    }
+    
+    .unity-container {
+        /* 强制 GPU 加速渲染 */
+        -webkit-transform: translate3d(0, 0, 0);
+        transform: translate3d(0, 0, 0);
+        /* 确保视频层在正确层级 */
+        contain: layout style paint;
+    }
+    
+    .unity-canvas {
+        /* 防止 Android WebView 悬浮播放 */
+        -webkit-playsinline: 1;
+        playsinline: 1;
+        /* 禁用自动全屏 */
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+    }
+}
+
+/* ✅ 针对小米浏览器等 Android WebView 的特殊处理 */
+@supports (-webkit-touch-callout: none) {
+    .unity-canvas video {
+        /* 禁止画中画模式 */
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        /* 强制内联播放 */
+        -webkit-playsinline: 1;
+        playsinline: 1;
+        /* 禁止自动悬浮 */
+        position: static !important;
+        transform: none !important;
+    }
 }
 
 .unity-loading-bar {
@@ -1127,7 +1287,7 @@ button[type="submit"]:active {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
+    background: linear-gradient(135deg, #ff6c04 0%, #ff6a00 100%);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     display: flex;
     align-items: center;
@@ -1137,12 +1297,13 @@ button[type="submit"]:active {
     transition: all 0.3s ease;
     user-select: none;
     font-size: 32px;
-    color: white;
+    color: #ffffff;
     /* ✅ 现代化优化 */
     will-change: transform;
     contain: layout style paint;
     touch-action: none;
 }
+
 
 .control-button::before {
     content: '';
@@ -1150,7 +1311,7 @@ button[type="submit"]:active {
     width: 90%;
     height: 90%;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
+    background: rgb(0 0 0);
     z-index: -1;
 }
 
@@ -1353,15 +1514,15 @@ button[type="submit"]:active {
     }
     
     .control-button {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
+        width: 78px;
+        height: 78px;
+        font-size: 31px;
     }
     
     .control-menu-item {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
+        width: 65px;
+        height: 65px;
+        font-size: 31px;
     }
 }
 

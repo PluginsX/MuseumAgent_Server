@@ -2,14 +2,179 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:; worker-src 'self' blob:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- ======================================== -->
+    <!-- ✅ 全局禁用画中画和悬浮播放功能 -->
+    <!-- ======================================== -->
+    
+    <!-- X5 内核禁用（小米、QQ 浏览器等） -->
+    <meta name="x5-video-player-type" content="inline">
+    <meta name="x5-video-player-fullscreen" content="false">
+    <meta name="x5-playsinline" content="true">
+    <meta name="x5-video-orientation" content="portraint">
+    
+    <!-- iOS Safari 内联播放 -->
+    <meta name="format-detection" content="telephone=no">
+    
+    <!-- Android WebView 禁用悬浮 -->
+    <meta name="x5-page-mode" content="app">
+    <meta name="applicable-device" content="mobile">
+    
+    <!-- 禁止自动全屏和画中画 -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    
+    <!-- 安全策略：禁止媒体全屏 API -->
+    <!-- 注意：frame-ancestors 不能通过 meta 标签设置，需要服务器配置 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none';">
+    
     <title>MuseumAgent</title>
     <link rel="icon" href="res/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
 
+    <!-- ======================================== -->
+    <!-- ✅ 全局禁用画中画和悬浮播放（最高优先级） -->
+    <!-- ======================================== -->
+    <script>
+        (function() {
+            'use strict';
+            
+            console.log('[GlobalPiPBlocker] 🚫 启动全局画中画/悬浮播放禁用器');
+            
+            // 1. 拦截 HTMLVideoElement 的原型方法（使用包装方式，避免直接重写只读属性）
+            const originalVideoPrototype = HTMLVideoElement.prototype;
+            const originalRequestPiP = originalVideoPrototype.requestPictureInPicture;
+            
+            if (originalRequestPiP) {
+                try {
+                    // 尝试重写原型方法（某些浏览器可能不允许）
+                    Object.defineProperty(originalVideoPrototype, 'requestPictureInPicture', {
+                        value: async function() {
+                            console.error('[GlobalPiPBlocker] ⛔ 画中画功能已被全局禁用！');
+                            alert('⛔ 画中画功能已被禁用\n视频必须在 Unity 内部完整播放\n此功能不适用于本项目');
+                            throw new Error('[GlobalPiPBlocker] 画中画功能已被禁用');
+                        },
+                        writable: false,
+                        configurable: true
+                    });
+                    console.log('[GlobalPiPBlocker] ✓ requestPictureInPicture 已拦截');
+                } catch (error) {
+                    console.warn('[GlobalPiPBlocker] ⚠️ 无法重写原型方法，使用包装方式:', error);
+                    // 如果无法重写，我们只能通过事件拦截和属性设置来限制
+                    console.log('[GlobalPiPBlocker] ℹ️ 将通过其他方式限制画中画功能');
+                }
+            }
+            
+            // 2. 禁用 disablePictureInPicture 属性（使用包装方式）
+            try {
+                Object.defineProperty(originalVideoPrototype, 'disablePictureInPicture', {
+                    get: function() {
+                        return true;
+                    },
+                    set: function(value) {
+                        console.warn('[GlobalPiPBlocker] ⚠️ 尝试修改 disablePictureInPicture 被忽略');
+                    },
+                    configurable: true
+                });
+                console.log('[GlobalPiPBlocker] ✓ disablePictureInPicture 已锁定为 true');
+            } catch (error) {
+                console.warn('[GlobalPiPBlocker] ⚠️ 无法重写 disablePictureInPicture 属性:', error);
+            }
+            
+            // 3. 拦截 Document 的 pictureInPictureEnabled 属性
+            const originalDocument = document;
+            Object.defineProperty(originalDocument.constructor.prototype, 'pictureInPictureEnabled', {
+                get: function() {
+                    return false;
+                },
+                configurable: true
+            });
+            console.log('[GlobalPiPBlocker] ✓ document.pictureInPictureEnabled 已设为 false');
+            
+            // 4. 阻止 enterpictureinpicture 事件
+            document.addEventListener('enterpictureinpicture', function(e) {
+                console.error('[GlobalPiPBlocker] ⚠️ 检测到画中画模式被触发！');
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 立即退出画中画
+                if (document.pictureInPictureElement) {
+                    document.exitPictureInPicture().catch(() => {});
+                }
+                
+                alert('⛔ 画中画功能已被禁用\n视频必须在 Unity 内部完整播放');
+                return false;
+            }, true);
+            console.log('[GlobalPiPBlocker] ✓ enterpictureinpicture 事件已拦截');
+            
+            // 5. 全局阻止右键菜单
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }, true);
+            console.log('[GlobalPiPBlocker] ✓ 右键菜单已全局阻止');
+            
+            // 6. 拦截所有 video 元素的创建（使用包装方式）
+            const originalCreateElement = document.createElement.bind(document);
+            document.createElement = function(tagName, options) {
+                const element = originalCreateElement(tagName, options);
+                
+                if (tagName.toLowerCase() === 'video') {
+                    console.log('[GlobalPiPBlocker] ℹ️ 检测到新创建的 video 元素');
+                    
+                    try {
+                        // 尝试重写实例方法
+                        Object.defineProperty(element, 'disablePictureInPicture', {
+                            get: function() {
+                                return true;
+                            },
+                            set: function(value) {
+                                console.warn('[GlobalPiPBlocker] ⚠️ 尝试修改 disablePictureInPicture 被忽略');
+                            },
+                            configurable: true
+                        });
+                        
+                        if ('requestPictureInPicture' in element) {
+                            element.requestPictureInPicture = async function() {
+                                console.error('[GlobalPiPBlocker] ⛔ 画中画功能已被全局禁用！');
+                                alert('⛔ 画中画功能已被禁用\n视频必须在 Unity 内部完整播放');
+                                throw new Error('[GlobalPiPBlocker] 画中画功能已被禁用');
+                            };
+                        }
+                    } catch (error) {
+                        console.warn('[GlobalPiPBlocker] ⚠️ 无法重写实例属性，仅设置 HTML 属性:', error);
+                    }
+                    
+                    // 设置内联播放属性（这些总是有效的）
+                    element.setAttribute('playsinline', '1');
+                    element.setAttribute('webkit-playsinline', '1');
+                    element.setAttribute('x5-playsinline', '1');
+                    element.setAttribute('x5-video-player-type', 'inline');
+                    element.setAttribute('x5-video-player-fullscreen', 'false');
+                    element.setAttribute('disablepictureinpicture', 'true');
+                    
+                    // 阻止右键菜单
+                    element.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                    }, true);
+                }
+                
+                return element;
+            };
+            console.log('[GlobalPiPBlocker] ✓ document.createElement 已拦截');
+            
+            console.log('[GlobalPiPBlocker] ✅ 全局禁用器初始化完成');
+            console.log('[GlobalPiPBlocker] ⚠️ 画中画和悬浮播放功能已彻底禁用');
+            
+        })();
+    </script>
+    <!-- ======================================== -->
+    
     <!-- 使用 SDK 构建产物 -->
     <script src="./lib/museum-agent-sdk.min.js"></script>
     <div id="app"></div>

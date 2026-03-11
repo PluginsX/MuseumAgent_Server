@@ -87,9 +87,10 @@ export class ControlButton {
      * 更新大小
      */
     updateSize() {
-        // 根据视口尺寸计算按钮大小
+        // 根据视口尺寸计算按钮大小（增大30%）
         const minDimension = Math.min(window.innerWidth, window.innerHeight);
-        const size = Math.max(30, Math.min(100, minDimension * 0.1));
+        const baseSize = minDimension * 0.1;
+        const size = Math.max(40, Math.min(130, baseSize));  // 原值: 30-100, 现值: 39-130
         
         this.buttonSize = size;  // ✅ 更新逻辑尺寸
         this.element.style.width = size + 'px';
@@ -457,6 +458,26 @@ export class ControlButton {
         
         if (this.options.onMenuSelect) {
             this.options.onMenuSelect(action);
+        }
+    }
+    
+    /**
+     * 设置视图模式（Unity 模式 / 网页模式）
+     * @param {string} mode - 'unity' 或 'web'
+     */
+    setViewMode(mode) {
+        console.log('[ControlButton] 切换到', mode, '模式');
+        
+        const doc = document.body;
+        
+        if (mode === 'unity') {
+            // Unity 模式：禁用右键、选择等
+            doc.classList.add('unity-mode');
+            doc.classList.remove('web-mode');
+        } else if (mode === 'web') {
+            // 网页模式：允许正常交互
+            doc.classList.add('web-mode');
+            doc.classList.remove('unity-mode');
         }
     }
     

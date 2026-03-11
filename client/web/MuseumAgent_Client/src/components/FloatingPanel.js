@@ -44,6 +44,9 @@ export class FloatingPanel {
         // ✅ 面板打开时禁用 Unity 输入
         this.disableUnityInput();
         
+        // ✅ 切换到网页模式（允许右键、选择等）
+        this.switchToWebMode();
+        
         this.createElement();
         this.attachComponent();
     }
@@ -228,11 +231,46 @@ export class FloatingPanel {
     }
     
     /**
+     * ✅ 切换到网页模式（允许右键、选择等）
+     */
+    switchToWebMode() {
+        console.log('[FloatingPanel] 切换到网页模式');
+        
+        const doc = document.body;
+        doc.classList.add('web-mode');
+        doc.classList.remove('unity-mode');
+        
+        // 通知 ControlButton 切换模式
+        if (window.controlButton && typeof window.controlButton.setViewMode === 'function') {
+            window.controlButton.setViewMode('web');
+        }
+    }
+    
+    /**
+     * ✅ 切换到 Unity 模式（禁用右键、选择等）
+     */
+    switchToUnityMode() {
+        console.log('[FloatingPanel] 切换到 Unity 模式');
+        
+        const doc = document.body;
+        doc.classList.add('unity-mode');
+        doc.classList.remove('web-mode');
+        
+        // 通知 ControlButton 切换模式
+        if (window.controlButton && typeof window.controlButton.setViewMode === 'function') {
+            window.controlButton.setViewMode('unity');
+        }
+    }
+    
+    /**
      * ✅ 销毁（不销毁外部组件实例）
      */
     destroy() {
         // ✅ 面板关闭时恢复 Unity 输入
         this.enableUnityInput();
+        
+        // ✅ 切换到 Unity 模式
+        this.switchToUnityMode();
         
         // ✅ 如果是外部组件，只隐藏，不销毁
         if (this.isExternalComponent) {

@@ -143,6 +143,285 @@ export function formatTime(timestamp) {
 }
 
 /**
+ * 优化移动端视频播放兼容性
+ * 彻底禁用画中画和悬浮播放功能
+ * 适用于 Unity WebGL 项目中的 HTML5 Video 元素
+ */
+export function optimizeMobileVideoPlayback(canvas) {
+    if (!canvas) return;
+    
+    // 查找 canvas 内的所有 video 元素
+    const videos = canvas.querySelectorAll('video');
+    
+    videos.forEach(video => {
+        console.log('[optimizeMobileVideoPlayback] 彻底禁用画中画/悬浮播放:', video);
+        
+        // ========================================
+        // ✅ 第一部分：API 级别禁用（最优先）
+        // ========================================
+        
+        // 1. 禁用 Picture-in-Picture API
+        if (video.disablePictureInPicture !== undefined) {
+            video.disablePictureInPicture = true;
+            console.log('[optimizeMobileVideoPlayback] ✓ disablePictureInPicture = true');
+        }
+        
+        // 2. 阻止 requestPictureInPicture 方法调用
+        if ('requestPictureInPicture' in video) {
+            const originalRequestPiP = video.requestPictureInPicture.bind(video);
+            video.requestPictureInPicture = async () => {
+                console.error('[optimizeMobileVideoPlayback] ⛔ 画中画功能已被禁用！');
+                throw new Error('[Unity WebGL] 画中画功能已被禁用，视频必须在 Unity 内部播放');
+            };
+            console.log('[optimizeMobileVideoPlayback] ✓ requestPictureInPicture 已拦截');
+        }
+        
+        // ========================================
+        // ✅ 第二部分：HTML 属性级别禁用
+        // ========================================
+        
+        // 3. 强制内联播放（所有浏览器）
+        video.setAttribute('playsinline', '1');
+        video.setAttribute('webkit-playsinline', '1');
+        video.setAttribute('x5-playsinline', '1');
+        console.log('[optimizeMobileVideoPlayback] ✓ playsinline 属性已设置');
+        
+        // 4. 禁止 X5 内核的悬浮播放（小米、QQ 浏览器等）
+        video.setAttribute('x5-video-player-type', 'inline');
+        video.setAttribute('x5-video-player-fullscreen', 'false');
+        video.setAttribute('x5-video-fullscreen-orientation', 'portrait');
+        console.log('[optimizeMobileVideoPlayback] ✓ X5 悬浮播放已禁用');
+        
+        // 5. 移除所有可能触发悬浮的属性
+        video.removeAttribute('x5-video-airplay');
+        video.removeAttribute('disablepictureinpicture');
+        console.log('[optimizeMobileVideoPlayback] ✓ 已清理悬浮相关属性');
+        
+        // ========================================
+        // ✅ 第三部分：事件级别拦截
+        // ========================================
+        
+        // 6. 阻止右键菜单（防止手动触发画中画）
+        video.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[optimizeMobileVideoPlayback] ⛔ 右键菜单已阻止');
+            return false;
+        }, true);  // 使用捕获阶段
+        
+        // 7. 拦截 enterpictureinpicture 事件
+        video.addEventListener('enterpictureinpicture', (e) => {
+            console.error('[optimizeMobileVideoPlayback] ⚠️ 检测到画中画模式被触发！');
+            e.preventDefault();
+            e.stopPropagation();
+            // 立即退出画中画
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture().catch(() => {});
+            }
+            alert('⛔ 画中画功能已被禁用\n视频必须在 Unity 内部完整播放');
+            return false;
+        }, true);
+        
+        // 8. 阻止离开画中画时的某些行为
+        video.addEventListener('leavepictureinpicture', (e) => {
+            console.log('[optimizeMobileVideoPlayback] ℹ️ 画中画模式已退出');
+        }, true);
+        
+        // 9. 阻止触摸长按触发菜单
+        video.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // 10. 阻止双击缩放
+        video.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+        });
+        
+        // ========================================
+        // ✅ 第四部分：CSS 样式级别锁定
+        // ========================================
+        
+        // 11. 强制设置 CSS 样式（最高优先级）
+        Object.assign(video.style, {
+            // 防止层叠上下文变化
+            '-webkit-backface-visibility': 'hidden !important',
+            'backface-visibility': 'hidden !important',
+            
+            // 固定位置，防止被抽离
+            'position': 'static !important',
+            'top': '0 !important',
+            'left': '0 !important',
+            'right': 'auto !important',
+            'bottom': 'auto !important',
+            'margin': '0 !important',
+            'padding': '0 !important',
+            
+            // 禁止变换
+            'transform': 'none !important',
+            '-webkit-transform': 'none !important',
+            '-moz-transform': 'none !important',
+            '-o-transform': 'none !important',
+            
+            // 层级锁定在 Unity Canvas 内
+            'z-index': 'auto !important',
+            
+            // 防止 GPU 加速导致的问题
+            'will-change': 'auto !important',
+            
+            // 禁止动画
+            'animation': 'none !important',
+            '-webkit-animation': 'none !important',
+            
+            // 确保显示正常
+            'display': 'block !important',
+            'opacity': '1 !important',
+            'visibility': 'visible !important',
+            
+            // 禁止选择
+            'user-select': 'none !important',
+            '-webkit-user-select': 'none !important',
+            '-moz-user-select': 'none !important',
+            '-ms-user-select': 'none !important',
+            
+            // 禁止拖拽
+            'pointer-events': 'auto !important',
+            '-webkit-touch-callout': 'none !important',
+            
+            // 禁止图片替换
+            '-webkit-user-modify': 'read-only !important',
+            
+            // 禁止滚动
+            'overflow': 'hidden !important',
+            
+            // 禁止内容溢出
+            'max-width': '100% !important',
+            'max-height': '100% !important',
+            
+            // 强制不透明
+            'filter': 'none !important',
+            '-webkit-filter': 'none !important',
+            
+            // 禁止混合模式
+            'mix-blend-mode': 'normal !important',
+            
+            // 禁止遮罩
+            '-webkit-mask': 'none !important',
+            'mask': 'none !important',
+            
+            // 禁止阴影
+            'box-shadow': 'none !important',
+            '-webkit-box-shadow': 'none !important',
+            
+            // 禁止边框
+            'border': 'none !important',
+            '-webkit-border-radius': '0 !important',
+            'border-radius': '0 !important',
+            
+            // 禁止 outline
+            'outline': 'none !important',
+            
+            // 禁止 focus 效果
+            ':focus': {
+                'outline': 'none !important'
+            }
+        });
+        
+        console.log('[optimizeMobileVideoPlayback] ✓ CSS 样式已锁定');
+    });
+    
+    // ========================================
+    // ✅ 第五部分：Canvas 容器级别保护
+    // ========================================
+    
+    // 12. 为整个 canvas 容器添加保护样式
+    Object.assign(canvas.style, {
+        '-webkit-transform': 'translateZ(0) !important',
+        'transform': 'translateZ(0) !important',
+        'contain': 'layout style paint size !important',
+        'overflow': 'hidden !important',
+        'position': 'relative !important',
+        'width': '100% !important',
+        'height': '100% !important',
+        'max-width': '100% !important',
+        'max-height': '100% !important',
+        'min-width': '100% !important',
+        'min-height': '100% !important',
+        'margin': '0 !important',
+        'padding': '0 !important',
+        'border': 'none !important',
+        'z-index': '1 !important'
+    });
+    
+    console.log('[optimizeMobileVideoPlayback] ✓ Canvas 容器已锁定');
+    console.log('[optimizeMobileVideoPlayback] 🎯 视频优化完成，共处理', videos.length, '个视频元素');
+    console.log('[optimizeMobileVideoPlayback] ⚠️ 画中画和悬浮播放功能已彻底禁用');
+}
+
+/**
+ * 检测设备类型并应用相应优化
+ */
+export function detectAndOptimizeForDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // 检测 Android 设备
+    const isAndroid = /android/i.test(userAgent);
+    // 检测 iOS 设备
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !(window.MSStream);
+    // 检测小米浏览器（X5 内核）
+    const isMiBrowser = /miuibrowser|x5browser|micromessenger/i.test(userAgent);
+    // 检测微信内置浏览器
+    const isWeChat = /micromessenger/i.test(userAgent);
+    
+    console.log('[detectAndOptimizeForDevice] 设备检测:', {
+        isAndroid,
+        isIOS,
+        isMiBrowser,
+        isWeChat,
+        userAgent
+    });
+    
+    // 获取 Unity Canvas
+    const unityCanvas = document.getElementById('unity-canvas');
+    
+    if (unityCanvas) {
+        if (isAndroid || isIOS) {
+            console.log('[detectAndOptimizeForDevice] 检测到移动设备，应用优化...');
+            optimizeMobileVideoPlayback(unityCanvas);
+            
+            // 针对小米浏览器的特殊处理
+            if (isMiBrowser) {
+                console.log('[detectAndOptimizeForDevice] 检测到小米浏览器，应用 X5 特殊处理...');
+                
+                // 添加 X5 特定的 meta 标签
+                let x5Meta = document.querySelector('meta[name="x5-video-player-type"]');
+                if (!x5Meta) {
+                    x5Meta = document.createElement('meta');
+                    x5Meta.name = 'x5-video-player-type';
+                    x5Meta.content = 'inline';
+                    document.head.appendChild(x5Meta);
+                }
+                
+                x5Meta = document.querySelector('meta[name="x5-video-player-fullscreen"]');
+                if (!x5Meta) {
+                    x5Meta = document.createElement('meta');
+                    x5Meta.name = 'x5-video-player-fullscreen';
+                    x5Meta.content = 'false';
+                    document.head.appendChild(x5Meta);
+                }
+                
+                x5Meta = document.querySelector('meta[name="x5-playsinline"]');
+                if (!x5Meta) {
+                    x5Meta = document.createElement('meta');
+                    x5Meta.name = 'x5-playsinline';
+                    x5Meta.content = 'true';
+                    document.head.appendChild(x5Meta);
+                }
+            }
+        }
+    }
+}
+
+/**
  * 格式化时长
  */
 export function formatDuration(seconds) {
