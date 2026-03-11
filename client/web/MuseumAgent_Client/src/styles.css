@@ -273,7 +273,6 @@ button[type="submit"]:active {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    background: #f5f7fa;
 }
 
 .message-container::-webkit-scrollbar {
@@ -321,9 +320,10 @@ button[type="submit"]:active {
 }
 
 .message-bubble.sent .bubble-content {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%);
     color: white;
     border-bottom-right-radius: 4px;
+    border: 2px solid #fff;
 }
 
 .message-bubble.received .bubble-content {
@@ -383,13 +383,12 @@ button[type="submit"]:active {
 /* 输入区域 */
 .input-container {
     padding: 20px;
-    background: white;
-    border-top: 1px solid #e0e0e0;
+    background: #e57216;
     display: flex;
     gap: 12px;
     align-items: flex-end;
     z-index: 999;
-    box-shadow: 0px 0px 5px 0px rgb(0 0 0 / 30%);
+    box-shadow: 0px 0px 5px 0px rgb(0 0 0 / 50%);
 }
 
 .chat-input {
@@ -441,11 +440,11 @@ button[type="submit"]:active {
 }
 
 .send-button {
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 11px 22px;
+    background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%);
     color: white;
-    border: none;
-    border-radius: 24px;
+    border: 2px solid #fff;
+    border-radius: 20px;
     cursor: pointer;
     font-size: 15px;
     font-weight: 500;
@@ -607,15 +606,17 @@ button[type="submit"]:active {
     align-items: center;
     justify-content: space-between;
     padding: 15px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%);
     color: white;
     user-select: none;
-    transition: all 0.3s;
+    /* transition: all 0.3s; */
     border-radius: 8px;
 }
 
 .section-header:hover {
-    background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+    /* background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%); */
+    border: 2px solid #fff;
+    padding: 13px 18px;
 }
 
 .section-header-left {
@@ -946,10 +947,7 @@ button[type="submit"]:active {
 
 /* ==================== 三种消息类型的视觉区分 ==================== */
 
-/* 文本消息 - 默认样式 */
-.message-bubble.message-text .bubble-content {
-    /* 已有默认样式 */
-}
+
 
 /* 语音消息 - 特殊样式 */
 .message-bubble.message-voice .bubble-content {
@@ -1223,7 +1221,6 @@ button[type="submit"]:active {
     .unity-canvas {
         /* 防止 Android WebView 悬浮播放 */
         -webkit-playsinline: 1;
-        playsinline: 1;
         /* 禁用自动全屏 */
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
@@ -1238,7 +1235,6 @@ button[type="submit"]:active {
         backface-visibility: hidden;
         /* 强制内联播放 */
         -webkit-playsinline: 1;
-        playsinline: 1;
         /* 禁止自动悬浮 */
         position: static !important;
         transform: none !important;
@@ -1266,11 +1262,12 @@ button[type="submit"]:active {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 10px;
     overflow: hidden;
+    border: 2px solid #fff;
 }
 
 .unity-progress-bar-full {
     height: 100%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%);
     border-radius: 10px;
     transition: width 0.3s;
     width: 0%;
@@ -1352,8 +1349,9 @@ button[type="submit"]:active {
     flex-direction: column;
     gap: 10px;
     padding: 10px;
-    background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
+    background: black;
     border-radius: 40px;
+    border: 5px solid #ff6b02;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     z-index: 999;
     animation: menuFadeIn 0.3s ease-out;
@@ -1402,7 +1400,7 @@ button[type="submit"]:active {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: white;
+    background: #ffffff00;
     z-index: 2000;
     display: flex;
     flex-direction: column;
@@ -1418,12 +1416,13 @@ button[type="submit"]:active {
 
 .floating-panel-header {
     padding: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ffa02b 0%, #c94300 100%);
     color: white;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 5px rgb(0 0 0 / 50%);
+    z-index: 999;
 }
 
 .floating-panel-title {
@@ -1470,6 +1469,8 @@ button[type="submit"]:active {
     justify-content: flex-start;
     align-content: space-between;
     align-items: stretch;
+    background: #ffffff82;
+    backdrop-filter: blur(20px);
 }
 
 /* 响应式 */
@@ -1610,4 +1611,3 @@ button[type="submit"]:active {
 .floating-panel.dragging .floating-panel-header:active {
     cursor: grabbing;
 }
-

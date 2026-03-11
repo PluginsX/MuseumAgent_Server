@@ -93,7 +93,7 @@ export class UnityContainer {
         
         const loadingText = createElement('div', {
             className: 'unity-loading-text',
-            textContent: '正在加载 Unity...'
+            textContent: '加载中请稍等...'
         });
         
         const progressBarEmpty = createElement('div', {
