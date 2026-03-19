@@ -233,6 +233,39 @@ export class FloatingPanel {
             // 旧模式：创建新组件实例
             this.component = new this.ComponentClass(this.contentContainer, this.client);
         }
+        
+        // ✅ 关键修复：在面板内容区域捕获所有键盘事件，阻止冒泡到 Unity WebGL 框架
+        // Unity WebGL 在全局注册了键盘监听器并调用 preventDefault()，会导致面板内
+        // 所有输入框的英文输入和退格键失效（中文 IME 不受影响，故仅英文/退格失效）
+        // 
+        // 注意：Unity 的监听器注册在 window 上（捕获阶段），仅用 stopPropagation() 无法阻止。
+        // 必须在 window 上用捕获阶段 + stopImmediatePropagation() 才能在 Unity 之前拦截。
+        if (this.element) {
+            // 在面板元素上阻止冒泡（兜底）
+            this.element.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+            }, true);
+            this.element.addEventListener('keyup', (e) => {
+                e.stopPropagation();
+            }, true);
+            this.element.addEventListener('keypress', (e) => {
+                e.stopPropagation();
+            }, true);
+            
+            // ✅ 核心修复：在 window 上注册捕获阶段监听器
+            // 当焦点在面板内的输入框时，拦截键盘事件，阻止 Unity 的监听器执行
+            this._keyboardGuard = (e) => {
+                // 只拦截焦点在面板内的键盘事件
+                if (this.element && this.element.contains(document.activeElement)) {
+                    e.stopImmediatePropagation();  // 阻止同级的所有其他监听器（包括 Unity）
+                    // 注意：不调用 preventDefault()，保留浏览器默认的字符输入行为
+                }
+            };
+            
+            window.addEventListener('keydown', this._keyboardGuard, true);
+            window.addEventListener('keyup', this._keyboardGuard, true);
+            window.addEventListener('keypress', this._keyboardGuard, true);
+        }
     }
     
     /**
@@ -467,6 +500,14 @@ export class FloatingPanel {
     destroy() {
         // 切换到 Unity 模式
         this.switchToUnityMode();
+        
+        // ✅ 清理 window 上注册的键盘守卫监听器，防止内存泄漏
+        if (this._keyboardGuard) {
+            window.removeEventListener('keydown', this._keyboardGuard, true);
+            window.removeEventListener('keyup', this._keyboardGuard, true);
+            window.removeEventListener('keypress', this._keyboardGuard, true);
+            this._keyboardGuard = null;
+        }
         
         // 如果是外部组件，只隐藏，不销毁
         if (this.isExternalComponent) {

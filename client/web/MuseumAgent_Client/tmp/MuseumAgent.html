@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
+<!-- saved from url=(0034)https://localhost:12302/index.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
     <!-- ======================================== -->
@@ -26,13 +26,13 @@
     
     <!-- 安全策略：禁止媒体全屏 API -->
     <!-- 注意：frame-ancestors 不能通过 meta 标签设置，需要服务器配置 -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src &#39;self&#39;; script-src &#39;self&#39; &#39;unsafe-inline&#39; &#39;unsafe-eval&#39; &#39;wasm-unsafe-eval&#39; blob:; style-src &#39;self&#39; &#39;unsafe-inline&#39;; connect-src &#39;self&#39; ws: wss:; media-src &#39;self&#39; blob:; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;;">
     
     <title>MuseumAgent</title>
-    <link rel="icon" href="res/favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="./src/styles.css">
+    <link rel="icon" href="https://localhost:12302/res/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="./MuseumAgent_files/styles.css">
 </head>
-<body>
+<body class="web-mode">
 
     <!-- ======================================== -->
     <!-- ✅ 全局禁用画中画和悬浮播放（最高优先级） -->
@@ -173,87 +173,21 @@
             
             console.log('[GlobalPiPBlocker] ✅ 全局禁用器初始化完成');
             console.log('[GlobalPiPBlocker] ⚠️ 画中画和悬浮播放功能已彻底禁用');
-
-            // ======================================================
-            // ✅ 键盘守卫：在页面最早期 patch EventTarget.prototype.addEventListener
-            // 目的：拦截 Unity WebGL 注册的所有键盘监听器（无论注册在 window/document/canvas）
-            //       当浮动面板打开（body.web-mode）且焦点在面板内时，跳过 Unity 的键盘处理，
-            //       使面板内的输入框可以正常接收英文/退格/大写等所有按键。
-            // 原理：patch EventTarget.prototype.addEventListener（所有 addEventListener 调用
-            //       的底层实现），这样无论 Unity 用哪个对象注册键盘事件都会被拦截。
-            // ======================================================
-            (function patchKeyboardForUnity() {
-                const _origAEL = EventTarget.prototype.addEventListener;
-                const _origREL = EventTarget.prototype.removeEventListener;
-
-                // 键盘事件类型集合
-                const KEY_EVENTS = new Set(['keydown', 'keyup', 'keypress']);
-                
-                // 用 WeakMap 存储 原始listener -> 包装listener 的映射，供 removeEventListener 使用
-                const _wrapperMap = new WeakMap();
-
-                EventTarget.prototype.addEventListener = function(type, listener, options) {
-                    if (KEY_EVENTS.has(type) && typeof listener === 'function') {
-                        // 检查是否已有包装（避免重复包装）
-                        let wrappers = _wrapperMap.get(listener);
-                        if (!wrappers) {
-                            wrappers = new Map();
-                            _wrapperMap.set(listener, wrappers);
-                        }
-                        
-                        const target = this;
-                        if (!wrappers.has(target)) {
-                            const wrapped = function(e) {
-                                // 判断：body 有 web-mode 类 且 焦点在浮动面板内
-                                const panel = document.querySelector('.floating-panel');
-                                if (
-                                    document.body && 
-                                    document.body.classList.contains('web-mode') &&
-                                    panel &&
-                                    panel.contains(document.activeElement)
-                                ) {
-                                    // 面板打开且焦点在内：跳过此键盘回调
-                                    return;
-                                }
-                                // 否则正常执行原始监听器
-                                listener.call(this, e);
-                            };
-                            wrappers.set(target, wrapped);
-                        }
-                        
-                        _origAEL.call(this, type, wrappers.get(target), options);
-                    } else {
-                        _origAEL.call(this, type, listener, options);
-                    }
-                };
-
-                EventTarget.prototype.removeEventListener = function(type, listener, options) {
-                    if (KEY_EVENTS.has(type) && typeof listener === 'function') {
-                        const wrappers = _wrapperMap.get(listener);
-                        const wrapped = wrappers && wrappers.get(this);
-                        _origREL.call(this, type, wrapped || listener, options);
-                    } else {
-                        _origREL.call(this, type, listener, options);
-                    }
-                };
-
-                console.log('[KeyboardGuard] ✅ EventTarget.prototype.addEventListener 已 patch，Unity 全部键盘监听器将被守卫拦截');
-            })();
-            // ======================================================
             
         })();
     </script>
     <!-- ======================================== -->
     
     <!-- 使用 SDK 构建产物 -->
-    <script src="./lib/museum-agent-sdk.min.js"></script>
-    <div id="app"></div>
+    <script src="https://localhost:12302/lib/museum-agent-sdk.min.js"></script>
+    <div id="app" style="display: block; height: 100vh; width: 100vw; overflow: hidden;" class="unity-view"><div id="unity-container" class="unity-container"><canvas id="unity-canvas" class="unity-canvas" tabindex="-1" width="750" height="743" style="cursor: default;"></canvas></div><div id="unity-loading-bar" class="unity-loading-bar" style="display: none;"><div class="unity-loading-text">加载中请稍等...</div><div class="unity-progress-bar-empty"><div id="unity-progress-bar-full" class="unity-progress-bar-full" style="width: 100%;"></div></div></div></div>
 
     <!-- 加载公共函数 -->
-    <script type="module" src="./src/commonFunction.js"></script>
+    <script type="module" src="https://localhost:12302/src/commonFunction.js"></script>
     
     <!-- 加载应用 -->
-    <script type="module" src="./src/app.js"></script>
+    <script type="module" src="https://localhost:12302/src/app.js"></script>
 
-</body>
-</html>
+
+
+<script src="https://localhost:12302/unity/Build/build.loader.js"></script><script src="blob:https://localhost:12302/f3a27b35-1d83-4afd-b07a-34a1f924074b"></script><div class="control-button" style="width: 74.3px; height: 74.3px; font-size: 37.15px; transform: translate(614.8px, 579.7px); display: none;">🎤</div><div class="floating-panel window-mode visible" style="width: 80%; height: 80%; max-width: 800px; max-height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); position: fixed; z-index: 9999;"><div class="floating-panel-header"><h2 class="floating-panel-title">MuseumAgent 智能体</h2><div class="floating-panel-buttons"><button class="floating-panel-button mode-toggle-button" title="切换到全屏模式">◱</button><button class="floating-panel-button close-button" title="关闭">✕</button></div></div><div class="floating-panel-content chat-view" style="display: flex; flex-direction: column; height: 100%; padding: 0px;"><div class="message-container"></div><div class="input-container"><div class="chat-input-wrapper" style="height: 44px;"><textarea class="chat-input" placeholder="输入消息..." rows="1" style="height: 44px;"></textarea></div><button class="voice-button">🎤</button><button class="send-button">发送</button></div></div></div></body></html>

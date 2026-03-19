@@ -14,14 +14,28 @@ import { createElement, $, showNotification } from './utils/dom.js';
 
 /**
  * 自动推导智能体服务端地址
- * 从当前页面 URL 推导出 WebSocket 地址
- * 通过 Nginx 代理路径 /agent 访问
- * @returns {string} WebSocket 服务端地址
+ * 自适应本地开发环境和线上部署环境：
+ * - 本地环境（localhost / 127.0.0.1）：直接连接本地智能体服务器 ws://localhost:12301
+ *   最终 WebSocket 路径：ws://localhost:12301/ws/agent/stream
+ * - 线上环境：通过 Nginx 反代路径 /agent 访问
+ *   最终 WebSocket 路径：wss://host/agent/ws/agent/stream
+ * @returns {string} WebSocket 服务端地址（baseUrl，WebSocketClient 会自动拼接 /ws/agent/stream）
  */
 function getAgentServerUrl() {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+
+    if (isLocal) {
+        // 本地开发环境：直接连接智能体服务器（端口 12301），跳过前端静态服务器（端口 12302）
+        // WebSocketClient 会自动拼接 /ws/agent/stream，最终：ws://localhost:12301/ws/agent/stream
+        return 'ws://localhost:12301';
+    }
+
+    // 线上环境：通过 Nginx 反代，路径 /agent/ws/ 转发到 127.0.0.1:12301/ws/
+    // WebSocketClient 会自动拼接 /ws/agent/stream，最终：wss://host/agent/ws/agent/stream
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;  // 包含域名和端口
-    return `${protocol}//${host}/agent`;  // ✅ 移除末尾斜杠
+    const host = window.location.host;
+    return `${protocol}//${host}/agent`;
 }
 
 class App {
