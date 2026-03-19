@@ -21,6 +21,11 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         # 添加Content Security Policy头，允许unsafe-eval以支持Unity通信
         self.send_header('Content-Security-Policy', "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:")
+        # ✅ 启用 SharedArrayBuffer 支持（COOP + COEP）
+        # 这是 @ricky0123/vad-web (Silero VAD) 和其他 WASM 库的必要条件
+        # 同时也是 AudioWorklet 在某些浏览器上的性能优化条件
+        self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
+        self.send_header('Cross-Origin-Embedder-Policy', 'require-corp')
         super().end_headers()
         
     def send_head(self):

@@ -113,9 +113,9 @@
   },
   "tts": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
-    "api_key": "sk-a7558f9302974d1891906107f6033939",
-    "model": "cosyvoice-v1",
-    "voice": "zhixiaomei",
+    "api_key": "sk-e2c9be27aa92405cae636028e1edd53d",
+    "model": "cosyvoice-v2",
+    "voice": "longlaotie_v2",
     "format": "PCM_16000HZ_MONO_16BIT"
   },
   "stt": {

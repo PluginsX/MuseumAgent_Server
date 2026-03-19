@@ -131,12 +131,21 @@ export class SettingsPanel {
             vadEnabled: client.vadEnabled !== false,
             functionCalling: client.config.functionCalling.length > 0 ? client.config.functionCalling : defaultFunctionCalling,
             vadParams: client.config.vadParams || {
-                silenceThreshold: 0.005,
-                silenceDuration: 500,
-                speechThreshold: 0.015,
-                minSpeechDuration: 150,
-                preSpeechPadding: 100,
-                postSpeechPadding: 200
+                // ✅ v2.0 自适应参数
+                calibrationDuration : 1500,
+                speechRatio         : 3.5,
+                silenceRatio        : 1.8,
+                minSpeechThreshold  : 0.010,
+                minSilenceThreshold : 0.004,
+                silenceDuration     : 800,
+                minSpeechDuration   : 200,
+                confirmFrames       : 3,
+                preSpeechPadding    : 300,
+                postSpeechPadding   : 300,
+                zcrMin              : 3,
+                zcrMax              : 60,
+                voiceBandRatioMin   : 0.20,
+                noiseUpdateRate     : 0.015,
             },
             // 智能体角色配置
             roleDescription: client.config.roleDescription || '你叫韩立，辽宁省博物馆智能讲解员，男性。性格热情、阳光、开朗、健谈、耐心。你精通辽博的历史文物、展览背景、文化知识，擅长用通俗的语言讲解复杂的知识。只回答与辽宁省博物馆、文物、历史文化、参观导览相关的内容，保持专业又友好的讲解员形象。',
@@ -658,89 +667,214 @@ export class SettingsPanel {
     }
 
     /**
-     * 渲染VAD设置
+     * 渲染VAD设置（v2.0 自适应参数）
+     * 
+     * 分为两个层次：
+     *   1. 开关层：EnableVAD + 自动环境噪声适应（autoNoise）
+     *   2. 手动参数层：仅在关闭「自动适应」时可编辑
      */
     renderVADSettings() {
         const container = createElement('div', {
             className: 'settings-fields'
         });
 
+        // ── 第一层：主开关 ──────────────────────────────
         // EnableVAD
-        const enableVADGroup = this.createCheckboxGroup(
+        container.appendChild(this.createCheckboxGroup(
             'EnableVAD',
             'vadEnabled',
             this.config.vadEnabled,
-            '是否启用语音活动检测'
+            '是否启用语音活动检测（VAD）'
+        ));
+
+        // 自动环境噪声适应开关
+        const autoNoiseEnabled = this.config.vadParams.autoNoiseAdaptation !== false; // 默认开启
+        const autoNoiseGroup = this.createCheckboxGroup(
+            '自动环境噪声适应',
+            'vadParams.autoNoiseAdaptation',
+            autoNoiseEnabled,
+            '开启后系统自动校准环境噪声并动态调整检测阈值（推荐），关闭后可手动配置各项参数'
         );
-        container.appendChild(enableVADGroup);
+        container.appendChild(autoNoiseGroup);
 
-        // Silence Threshold
-        container.appendChild(this.createNumberGroup(
-            'Silence Threshold',
-            'vadParams.silenceThreshold',
-            this.config.vadParams.silenceThreshold,
-            '静音阈值（0-1）',
-            0,
-            1,
-            0.01
+        // ── 第二层：手动参数区（由自动适应开关控制是否禁用）──
+        const manualParamsContainer = createElement('div', {
+            className: 'vad-manual-params'
+        });
+        // 初始状态：自动适应开启则禁用手动参数
+        manualParamsContainer.style.opacity = autoNoiseEnabled ? '0.4' : '1';
+        manualParamsContainer.style.pointerEvents = autoNoiseEnabled ? 'none' : 'auto';
+        if (autoNoiseEnabled) {
+            const hint = createElement('div', {
+                className: 'vad-auto-hint',
+                textContent: '自动适应已开启，以下参数由系统自动管理，无需手动调整'
+            });
+            hint.style.cssText = 'font-size:11px;color:#888;font-style:italic;margin-bottom:8px;padding:6px 8px;background:#f5f5f5;border-radius:4px;border-left:3px solid #ccc;';
+            manualParamsContainer.appendChild(hint);
+        }
+
+        // 监听自动适应开关变化，动态切换手动参数区的可用状态
+        const autoNoiseCheckbox = autoNoiseGroup.querySelector('input[type="checkbox"]');
+        if (autoNoiseCheckbox) {
+            autoNoiseCheckbox.addEventListener('change', (e) => {
+                const isAuto = e.target.checked;
+                manualParamsContainer.style.opacity = isAuto ? '0.4' : '1';
+                manualParamsContainer.style.pointerEvents = isAuto ? 'none' : 'auto';
+                // 更新提示文字
+                const existingHint = manualParamsContainer.querySelector('.vad-auto-hint');
+                if (isAuto && !existingHint) {
+                    const hint = createElement('div', {
+                        className: 'vad-auto-hint',
+                        textContent: '自动适应已开启，以下参数由系统自动管理，无需手动调整'
+                    });
+                    hint.style.cssText = 'font-size:11px;color:#888;font-style:italic;margin-bottom:8px;padding:6px 8px;background:#f5f5f5;border-radius:4px;border-left:3px solid #ccc;';
+                    manualParamsContainer.insertBefore(hint, manualParamsContainer.firstChild);
+                } else if (!isAuto && existingHint) {
+                    existingHint.remove();
+                }
+            });
+        }
+
+        // ── 校准 ──────────────────────────────────────
+        manualParamsContainer.appendChild(this.createSectionLabel('── 自适应校准 ──'));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '校准时长 Calibration (ms)',
+            'vadParams.calibrationDuration',
+            this.config.vadParams.calibrationDuration ?? 1500,
+            '开启录音后采集环境噪声的时长，建议 1000-2000ms',
+            500, 3000, 100
         ));
 
-        // Silence Duration
-        container.appendChild(this.createNumberGroup(
-            'Silence Duration (ms)',
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '噪声追踪速率 Noise Update Rate',
+            'vadParams.noiseUpdateRate',
+            this.config.vadParams.noiseUpdateRate ?? 0.015,
+            '静音帧更新噪声基线的速率，越小越稳定（推荐 0.01-0.03）',
+            0.005, 0.1, 0.005
+        ));
+
+        // ── 动态阈值比率 ──────────────────────────────
+        manualParamsContainer.appendChild(this.createSectionLabel('── 动态阈值（相对噪声基线的倍率）──'));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '语音触发比率 Speech Ratio',
+            'vadParams.speechRatio',
+            this.config.vadParams.speechRatio ?? 3.5,
+            '语音阈值 = 噪声基线 × 此值，越大越难触发（推荐 2.5-5.0）',
+            1.5, 10.0, 0.5
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '静音判定比率 Silence Ratio',
+            'vadParams.silenceRatio',
+            this.config.vadParams.silenceRatio ?? 1.8,
+            '静音阈值 = 噪声基线 × 此值，越小越容易判断为静音（推荐 1.2-2.5）',
+            1.0, 5.0, 0.1
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '最小语音阈值 Min Speech Thr',
+            'vadParams.minSpeechThreshold',
+            this.config.vadParams.minSpeechThreshold ?? 0.010,
+            '语音阈值的绝对下限（防止极安静环境过度敏感）',
+            0.002, 0.1, 0.001
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '最小静音阈值 Min Silence Thr',
+            'vadParams.minSilenceThreshold',
+            this.config.vadParams.minSilenceThreshold ?? 0.004,
+            '静音阈值的绝对下限',
+            0.001, 0.05, 0.001
+        ));
+
+        // ── 时序参数 ──────────────────────────────────
+        manualParamsContainer.appendChild(this.createSectionLabel('── 时序参数 ──'));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '防抖帧数 Confirm Frames',
+            'vadParams.confirmFrames',
+            this.config.vadParams.confirmFrames ?? 3,
+            '连续多少帧超阈值才确认语音开始（防止瞬时噪声误触发）',
+            1, 10, 1
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '静音结束时长 Silence Duration (ms)',
             'vadParams.silenceDuration',
-            this.config.vadParams.silenceDuration,
-            '静音持续时长（毫秒）',
-            100,
-            5000,
-            100
+            this.config.vadParams.silenceDuration ?? 800,
+            '静音持续多久后结束本次语音（ms）',
+            200, 3000, 100
         ));
 
-        // Speech Threshold
-        container.appendChild(this.createNumberGroup(
-            'Speech Threshold',
-            'vadParams.speechThreshold',
-            this.config.vadParams.speechThreshold,
-            '语音阈值（0-1）',
-            0,
-            1,
-            0.01
-        ));
-
-        // Min Speech Duration
-        container.appendChild(this.createNumberGroup(
-            'Min Speech Duration (ms)',
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '最短语音时长 Min Speech Duration (ms)',
             'vadParams.minSpeechDuration',
-            this.config.vadParams.minSpeechDuration,
-            '最小语音持续时长（毫秒）',
-            100,
-            3000,
-            100
+            this.config.vadParams.minSpeechDuration ?? 200,
+            '短于此时长的语音将被丢弃（过滤咳嗽/碰撞等短暂噪声）',
+            50, 1000, 50
         ));
 
-        // Pre-Speech Padding
-        container.appendChild(this.createNumberGroup(
-            'Pre-Speech Padding (ms)',
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '语音前填充 Pre-Speech Padding (ms)',
             'vadParams.preSpeechPadding',
-            this.config.vadParams.preSpeechPadding,
-            '语音前填充（毫秒）',
-            0,
-            1000,
-            50
+            this.config.vadParams.preSpeechPadding ?? 300,
+            '语音开始前保留的音频缓冲时长（避免丢失起始音节）',
+            0, 1000, 50
         ));
 
-        // Post-Speech Padding
-        container.appendChild(this.createNumberGroup(
-            'Post-Speech Padding (ms)',
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '语音后填充 Post-Speech Padding (ms)',
             'vadParams.postSpeechPadding',
-            this.config.vadParams.postSpeechPadding,
-            '语音后填充（毫秒）',
-            0,
-            2000,
-            50
+            this.config.vadParams.postSpeechPadding ?? 300,
+            '语音结束后保留的音频缓冲时长（避免丢失尾音）',
+            0, 1000, 50
         ));
+
+        // ── 人声特征过滤 ──────────────────────────────
+        manualParamsContainer.appendChild(this.createSectionLabel('── 人声特征过滤（高级）──'));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '过零率下限 ZCR Min',
+            'vadParams.zcrMin',
+            this.config.vadParams.zcrMin ?? 3,
+            '每帧过零次数下限，低于此值视为冲击噪声/碰撞音',
+            0, 20, 1
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '过零率上限 ZCR Max',
+            'vadParams.zcrMax',
+            this.config.vadParams.zcrMax ?? 60,
+            '每帧过零次数上限，高于此值视为高频噪声/风噪',
+            20, 120, 5
+        ));
+
+        manualParamsContainer.appendChild(this.createNumberGroup(
+            '人声频带能量比 Voice Band Ratio Min',
+            'vadParams.voiceBandRatioMin',
+            this.config.vadParams.voiceBandRatioMin ?? 0.20,
+            '300-3400Hz 人声频带能量占总能量的最低比例（0-1）',
+            0.05, 0.8, 0.05
+        ));
+
+        // 把手动参数区挂入主容器
+        container.appendChild(manualParamsContainer);
 
         return container;
+    }
+
+    /**
+     * 创建分组标签（纯展示，非输入）
+     */
+    createSectionLabel(text) {
+        const el = createElement('div', {
+            className: 'vad-section-label',
+            textContent: text
+        });
+        el.style.cssText = 'margin: 12px 0 4px; font-size: 11px; color: #888; font-weight: 600; letter-spacing: 0.5px;';
+        return el;
     }
 
     /**
