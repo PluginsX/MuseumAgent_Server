@@ -232,6 +232,20 @@ async def process_text_request_with_cancel(
                         if require_tts and sentence_buffer:
                             for sent in sentence_buffer.add_chunk(c):
                                 await tts_queue.put(sent)
+                        # 非阻塞 drain：把已合成好的语音帧交错 yield 出去
+                        if require_tts:
+                            while True:
+                                try:
+                                    item = voice_queue.get_nowait()
+                                    if item is None:
+                                        # 收到结束标记，先放回去，等后面 drain 处理
+                                        await voice_queue.put(None)
+                                        break
+                                    b64, seq = item
+                                    logger.tts.info("Yielding voice chunk (interleaved)", {"seq": seq})
+                                    yield make_voice_payload(b64, seq)
+                                except asyncio.QueueEmpty:
+                                    break
 
                 elif t == "function_call":
                     name = chunk.get("name", "")
@@ -249,6 +263,18 @@ async def process_text_request_with_cancel(
                 if require_tts and sentence_buffer:
                     for sent in sentence_buffer.add_chunk(chunk):
                         await tts_queue.put(sent)
+                # 非阻塞 drain（纯字符串 chunk 分支）
+                if require_tts:
+                    while True:
+                        try:
+                            item = voice_queue.get_nowait()
+                            if item is None:
+                                await voice_queue.put(None)
+                                break
+                            b64, seq = item
+                            yield make_voice_payload(b64, seq)
+                        except asyncio.QueueEmpty:
+                            break
 
     except Exception as e:
         logger.sys.error("LLM stream error", {"error": str(e)})
