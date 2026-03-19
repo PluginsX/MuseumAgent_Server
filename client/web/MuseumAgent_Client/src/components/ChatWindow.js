@@ -314,6 +314,16 @@ export class ChatWindow {
             wrapper.style.height = 'auto';
         }
 
+        // ✅ 在用户手势上下文中提前解锁 AudioContext（浏览器自动播放策略要求）
+        try {
+            if (this.client.audioManager) {
+                await this.client.audioManager.init();
+                console.log('[ChatWindow] AudioContext 已在用户手势中解锁');
+            }
+        } catch (e) {
+            console.warn('[ChatWindow] AudioContext 解锁失败:', e);
+        }
+
         try {
             // ✅ 获取 SettingsPanel 的待更新配置
             const settingsPanel = this.agentController.getSettingsPanel();
@@ -346,6 +356,16 @@ export class ChatWindow {
      */
     async toggleVoiceRecording() {
         console.log('[ChatWindow] toggleVoiceRecording() 被调用，当前状态:', this.client.isRecording);
+        
+        // ✅ 在用户手势上下文中提前解锁 AudioContext
+        try {
+            if (this.client.audioManager) {
+                await this.client.audioManager.init();
+                console.log('[ChatWindow] AudioContext 已在用户手势中解锁（语音）');
+            }
+        } catch (e) {
+            console.warn('[ChatWindow] AudioContext 解锁失败:', e);
+        }
         
         try {
             if (this.client.isRecording) {

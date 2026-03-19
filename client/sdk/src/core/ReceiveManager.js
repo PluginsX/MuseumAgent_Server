@@ -29,7 +29,8 @@ export class ReceiveManager {
             voiceEnded: false,
             hasCheckedStreams: false,
             hasTextStream: false,
-            hasVoiceStream: false,
+            // 如果调用方明确传入 requireTTS=true，则预设有语音流，避免文本结束帧提前触发 onComplete
+            hasVoiceStream: handler.requireTTS === true ? true : false,
             timeoutId: null
         });
         
@@ -166,11 +167,14 @@ export class ReceiveManager {
             handler.voiceEnded = true;
         }
 
-        // 首次检查流类型
+        // 首次检查流类型（累积检测：只要收到过 voice_stream_seq 就标记有语音流）
         if (!handler.hasCheckedStreams) {
             handler.hasTextStream = payload.text_stream_seq !== undefined;
-            handler.hasVoiceStream = payload.voice_stream_seq !== undefined;
             handler.hasCheckedStreams = true;
+        }
+        // 语音流标记：累积检测，不只看第一帧（因为文本帧先到，语音帧后到）
+        if (payload.voice_stream_seq !== undefined) {
+            handler.hasVoiceStream = true;
         }
         
         // 检查是否所有流都结束

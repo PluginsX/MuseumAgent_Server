@@ -324,8 +324,9 @@ export class MuseumAgentClient {
         }
         
         // 立即发送文本消息
+        const effectiveRequireTTS = options.requireTTS !== undefined ? options.requireTTS : this.config.requireTTS;
         const requestId = this.sendManager.sendText(text, {
-            requireTTS: options.requireTTS !== undefined ? options.requireTTS : this.config.requireTTS,
+            requireTTS: effectiveRequireTTS,
             enableSRS: options.enableSRS !== undefined ? options.enableSRS : this.config.enableSRS,
             functionCallingOp: options.functionCalling ? 'REPLACE' : undefined,
             functionCalling: options.functionCalling
@@ -342,6 +343,7 @@ export class MuseumAgentClient {
         
         // 注册响应处理器
         this.receiveManager.registerHandler(requestId, {
+            requireTTS: effectiveRequireTTS || false,
             onTextChunk: (chunk) => {
                 this.eventBus.emit(Events.TEXT_CHUNK, { messageId: requestId, chunk });
             },
@@ -491,6 +493,7 @@ export class MuseumAgentClient {
         
         // 注册响应处理器
         this.receiveManager.registerHandler(requestId, {
+            requireTTS: this.config.requireTTS || false,
             onTextChunk: (chunk) => {
                 this.eventBus.emit(Events.TEXT_CHUNK, { messageId: requestId, chunk });
             },

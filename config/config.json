@@ -113,7 +113,7 @@
   },
   "tts": {
     "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
-    "api_key": "sk-e2c9be27aa92405cae636028e1edd53d",
+    "api_key": "sk-78d48a0851ca496496a9eb657f3cadb3",
     "model": "cosyvoice-v2",
     "voice": "longlaotie_v2",
     "format": "PCM_16000HZ_MONO_16BIT"

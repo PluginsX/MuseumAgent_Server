@@ -19,99 +19,64 @@ from src.session.strict_session_manager import strict_session_manager
 
 class SentenceBuffer:
     """
-    轻量级句子缓冲器 - 用于优化流式TTS
+    语义感知分句缓冲器 v2.0 - 用于优化流式TTS
     
-    设计原则：
-    1. 快速处理，最小化延迟
-    2. 以短句子为单位（5-30字）
-    3. 简单的正则匹配，避免复杂计算
+    分句策略（优先级从高到低）：
+    1. 强边界：。！？\n .!?  → 无论长度，立即分段
+    2. 弱边界：，；、,;    → 仅当已积累 >= weak_break_min_length 字时在此分段
+    3. 硬截断：超过 max_length 字时强制截断（防止超长句拖延TTS）
+    
+    原则：
+    - 宁可稍等（积累到弱边界），绝不硬切句子中间
+    - 弱边界分出来的片段语调完整，TTS 合成自然
+    - 强边界后立即触发，保证句末停顿感
     """
     
-    def __init__(self, min_length: int = 5, max_length: int = 30):
-        """
-        初始化句子缓冲器
-        
-        Args:
-            min_length: 最小句子长度（默认5字，快速发送）
-            max_length: 最大句子长度（默认30字，避免延迟）
-        """
+    def __init__(self,
+                 weak_break_min_length: int = 15,
+                 max_length: int = 60):
         self.buffer = ""
-        self.min_length = min_length
+        self.weak_break_min_length = weak_break_min_length
         self.max_length = max_length
-        
-        # 句子结束标记（中英文）- 强制分段
-        self.sentence_endings = re.compile(r'[。！？\n.!?]+')
-        
-        # 次要分隔符（逗号、分号等）- 优先使用，保持短句
-        self.minor_breaks = re.compile(r'[，；、,;]')
+        self.strong_endings = re.compile(r'[。！？\n.!?]+')
+        self.weak_breaks = re.compile(r'[，；、,;]')
     
-    def add_chunk(self, chunk: str) -> list[str]:
-        """
-        快速添加文本块，返回可以发送的短句子列表
-        
-        优化策略：
-        1. 优先在逗号等次要分隔符处分段（保持短句）
-        2. 遇到句号等强制分段
-        3. 超过最大长度立即分段（避免延迟）
-        
-        Args:
-            chunk: LLM输出的文本块
-            
-        Returns:
-            可以发送给TTS的短句子列表
-        """
+    def add_chunk(self, chunk: str) -> list:
         if not chunk:
             return []
-        
         self.buffer += chunk
         sentences = []
-        
-        # 1. 优先检查次要分隔符（逗号等）- 保持短句，快速发送
-        while len(self.buffer) >= self.min_length:
-            # 先找次要分隔符
-            minor_match = self.minor_breaks.search(self.buffer)
-            # 再找句子结束符
-            ending_match = self.sentence_endings.search(self.buffer)
-            
-            # 选择最近的分隔符
-            if minor_match and (not ending_match or minor_match.start() < ending_match.start()):
-                # 在逗号处分段
-                end_pos = minor_match.end()
+        while self.buffer:
+            strong_match = self.strong_endings.search(self.buffer)
+            if strong_match:
+                end_pos = strong_match.end()
                 sentence = self.buffer[:end_pos].strip()
-                if len(sentence) >= self.min_length:
+                if sentence:
                     sentences.append(sentence)
+                self.buffer = self.buffer[end_pos:]
+                continue
+            if len(self.buffer) >= self.weak_break_min_length:
+                weak_match = self.weak_breaks.search(self.buffer)
+                if weak_match:
+                    end_pos = weak_match.end()
+                    sentence = self.buffer[:end_pos].strip()
+                    if sentence:
+                        sentences.append(sentence)
                     self.buffer = self.buffer[end_pos:]
-                else:
-                    break
-            elif ending_match:
-                # 在句号处分段
-                end_pos = ending_match.end()
-                sentence = self.buffer[:end_pos].strip()
-                if len(sentence) >= self.min_length:
+                    continue
+            if len(self.buffer) >= self.max_length:
+                cut_pos = self.buffer[:self.max_length].rfind(' ')
+                if cut_pos < self.max_length // 2:
+                    cut_pos = self.max_length
+                sentence = self.buffer[:cut_pos].strip()
+                if sentence:
                     sentences.append(sentence)
-                    self.buffer = self.buffer[end_pos:]
-                else:
-                    break
-            else:
-                # 没有分隔符
-                break
-        
-        # 2. 如果缓冲区超过最大长度，强制分段（避免延迟）
-        if len(self.buffer) >= self.max_length:
-            sentence = self.buffer[:self.max_length].strip()
-            if sentence:
-                sentences.append(sentence)
-                self.buffer = self.buffer[self.max_length:]
-        
+                self.buffer = self.buffer[cut_pos:]
+                continue
+            break
         return sentences
     
-    def flush(self) -> Optional[str]:
-        """
-        刷新缓冲区，返回剩余的文本（在流结束时调用）
-        
-        Returns:
-            剩余的文本，如果为空则返回None
-        """
+    def flush(self) -> str | None:
         if self.buffer.strip():
             sentence = self.buffer.strip()
             self.buffer = ""
@@ -125,16 +90,6 @@ async def process_text_request(
     text: str,
     require_tts: bool,
 ) -> AsyncGenerator[Dict[str, Any], None]:
-    """
-    处理文本请求：流式 LLM -> 可选流式 TTS（优化版）
-    
-    优化策略：
-    1. 文本立即流式发送给客户端（保持低延迟）
-    2. TTS使用句子级缓冲，按完整句子合成（保证语音连贯）
-    
-    Yield 协议 RESPONSE payload（不含外层 msg 壳）
-    """
-    # 调用支持取消的版本，但不传入 cancel_event（保持向后兼容）
     async for payload in process_text_request_with_cancel(session_id, request_id, text, require_tts, None):
         yield payload
 
@@ -147,141 +102,137 @@ async def process_text_request_with_cancel(
     cancel_event: Optional[asyncio.Event] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
-    处理文本请求：流式 LLM -> 可选流式 TTS（支持取消）
-    
-    优化策略：
-    1. 文本立即流式发送给客户端（保持低延迟）
-    2. TTS使用句子级缓冲，按完整句子合成（保证语音连贯）
-    3. 支持通过 cancel_event 取消处理
-    
-    Args:
-        session_id: 会话ID
-        request_id: 请求ID
-        text: 用户输入文本
-        require_tts: 是否需要TTS
-        cancel_event: 取消事件（可选）
-    
-    Yield:
-        协议 RESPONSE payload（不含外层 msg 壳）
+    处理文本请求：真正的流式架构
+
+    架构说明：
+    - LLM chunk 收到后立即 yield text payload 给客户端（零缓存，真正流式）
+    - tts_worker 作为独立 Task 与 LLM 并行运行，消费 tts_queue 合成语音
+    - LLM 完成后主协程等待 voice_queue 的 None 结束标记，消费所有语音块
+    - 文本流结束帧在所有文本 yield 后发送
+    - 语音流结束帧在所有语音 yield 后发送
     """
     logger = get_enhanced_logger()
-    text_seq = 0
-    voice_seq = 0
-    tts_service = None
-    sentence_buffer = None
-    
-    if require_tts:
-        try:
-            from src.services.tts_service import UnifiedTTSService
-            tts_service = UnifiedTTSService()
-            # 创建轻量级句子缓冲器（最小5字，最大30字）- 快速处理，短句输出
-            sentence_buffer = SentenceBuffer(min_length=5, max_length=30)
-            logger.tts.info("TTS sentence buffer initialized", {
-                "min_length": 5,
-                "max_length": 30,
-                "strategy": "short_sentence_fast"
-            })
-        except Exception as e:
-            logger.tts.error("TTS init failed", {"error": str(e)})
 
-    from src.core.command_generator import CommandGenerator
-    generator = CommandGenerator()
+    text_seq  = [0]
+    voice_seq = [0]
+    voice_sent = [False]
 
-    async def send_text(content: str, seq: int):
-        payload = {
+    def make_text_payload(content: str, seq: int) -> dict:
+        return {
             "request_id": request_id,
             "text_stream_seq": seq,
             "content": {"text": content} if content else {},
         }
-        yield payload
 
-    voice_sent = [False]  # 用列表实现 closure 可变
-
-    async def send_voice(base64_audio: str, seq: int):
+    def make_voice_payload(b64_audio: str, seq: int) -> dict:
         voice_sent[0] = True
-        payload = {
+        return {
             "request_id": request_id,
             "voice_stream_seq": seq,
-            "content": {"voice": base64_audio} if base64_audio else {},
+            "content": {"voice": b64_audio} if b64_audio else {},
         }
-        yield payload
 
-    async def send_function_call(name: str, parameters: Dict):
-        payload = {
+    def make_function_payload(name: str, parameters: Dict) -> dict:
+        return {
             "request_id": request_id,
-            "text_stream_seq": text_seq,
+            "text_stream_seq": text_seq[0],
             "function_call": {"name": name, "parameters": parameters},
             "content": {},
         }
-        yield payload
-    
-    async def synthesize_and_send(sentence: str):
-        """合成并发送完整句子的语音"""
-        nonlocal voice_seq
-        if not sentence or not tts_service:
-            return
-        
-        try:
-            logger.tts.info("Synthesizing sentence", {
-                "text": sentence[:50],
-                "length": len(sentence)
-            })
-            
-            # ✅ 传递 session_id 和 cancel_event 到 TTS
-            async for audio_chunk in tts_service.stream_synthesize(sentence, session_id=session_id, cancel_event=cancel_event):
-                # ✅ 检查取消信号
-                if cancel_event and cancel_event.is_set():
-                    logger.tts.info("TTS cancelled", {"request_id": request_id[:16]})
-                    return
-                
-                b64 = base64.b64encode(audio_chunk).decode("utf-8")
-                async for p in send_voice(b64, voice_seq):
-                    yield p
-                voice_seq += 1
-        except Exception as e:
-            logger.tts.error("TTS stream failed", {"error": str(e), "text": sentence[:50]})
 
+    def make_interrupted_payload() -> dict:
+        return {
+            "request_id": request_id,
+            "text_stream_seq": -1,
+            "voice_stream_seq": -1 if require_tts else None,
+            "interrupted": True,
+            "interrupt_reason": "USER_NEW_INPUT",
+            "content": {}
+        }
+
+    # ── TTS 初始化 ────────────────────────────────────────────────
+    tts_service     = None
+    sentence_buffer = None
+    tts_queue   = asyncio.Queue()  # str 句子 | None
+    voice_queue = asyncio.Queue()  # (b64_str, seq) | None
+
+    if require_tts:
+        try:
+            from src.services.tts_service import UnifiedTTSService
+            tts_service     = UnifiedTTSService()
+            sentence_buffer = SentenceBuffer(weak_break_min_length=15, max_length=60)
+            logger.tts.info("TTS pipeline initialized", {
+                "weak_break_min_length": 15,
+                "max_length": 60,
+                "strategy": "parallel_pipeline"
+            })
+        except Exception as e:
+            logger.tts.error("TTS init failed, voice disabled", {"error": str(e)})
+            require_tts = False
+
+    # ── TTS Worker ────────────────────────────────────────────────
+    async def tts_worker():
+        """从 tts_queue 取句子，合成后把音频块 put 进 voice_queue。"""
+        try:
+            while True:
+                sentence = await tts_queue.get()
+                if sentence is None:
+                    break
+                if cancel_event and cancel_event.is_set():
+                    break
+                try:
+                    logger.tts.info("TTS synthesizing", {"text": sentence[:50], "len": len(sentence)})
+                    chunk_count = 0
+                    async for audio_chunk in tts_service.stream_synthesize(
+                        sentence, session_id=session_id, cancel_event=cancel_event
+                    ):
+                        if cancel_event and cancel_event.is_set():
+                            return
+                        b64 = base64.b64encode(audio_chunk).decode("utf-8")
+                        await voice_queue.put((b64, voice_seq[0]))
+                        chunk_count += 1
+                        voice_seq[0] += 1
+                    logger.tts.info("TTS sentence done, put to voice_queue", {"text": sentence[:20], "chunks": chunk_count})
+                except Exception as e:
+                    logger.tts.error("TTS synthesis error", {"error": str(e), "text": sentence[:50]})
+        finally:
+            logger.tts.info("tts_worker finishing, putting None to voice_queue")
+            # 无论正常结束还是异常，都发送结束标记
+            await voice_queue.put(None)
+
+    # ── 提前启动 TTS worker ───────────────────────────────────────
+    worker_task = None
+    if require_tts and tts_service:
+        worker_task = asyncio.create_task(tts_worker())
+
+    # ── LLM 流式消费：chunk 到即 yield，同时投句子入 tts_queue ────
+    from src.core.command_generator import CommandGenerator
+    generator = CommandGenerator()
+
+    llm_cancelled = False
     try:
-        # ✅ 传递 cancel_event 到 LLM 生成器
         async for chunk in generator.stream_generate(
-            user_input=text, 
-            session_id=session_id, 
+            user_input=text,
+            session_id=session_id,
             cancel_event=cancel_event
         ):
-            # ✅ 检查取消信号（双重保险）
             if cancel_event and cancel_event.is_set():
-                logger.ws.info("Request cancelled during LLM generation", {"request_id": request_id[:16]})
-                # 发送中断标记的最后一帧
-                yield {
-                    "request_id": request_id,
-                    "text_stream_seq": -1,
-                    "voice_stream_seq": -1 if require_tts else None,
-                    "interrupted": True,
-                    "interrupt_reason": "USER_NEW_INPUT",
-                    "content": {}
-                }
-                return
-            
+                llm_cancelled = True
+                break
+
             if isinstance(chunk, dict):
                 t = chunk.get("type")
                 if t == "text":
                     c = chunk.get("content", "")
-                    
-                    # 1. 立即发送文本给客户端（保持低延迟）
-                    async for p in send_text(c, text_seq):
-                        yield p
-                    text_seq += 1
-                    
-                    # 2. 使用句子缓冲器处理TTS（保证连贯性）
-                    if c and require_tts and sentence_buffer:
-                        # 将文本块添加到缓冲器
-                        complete_sentences = sentence_buffer.add_chunk(c)
-                        
-                        # 对每个完整句子进行TTS合成
-                        for sentence in complete_sentences:
-                            async for p in synthesize_and_send(sentence):
-                                yield p
-                
+                    if c:
+                        # 立即 yield 给客户端（真正流式，零缓存）
+                        yield make_text_payload(c, text_seq[0])
+                        text_seq[0] += 1
+                        # 同时投入 TTS 分句缓冲
+                        if require_tts and sentence_buffer:
+                            for sent in sentence_buffer.add_chunk(c):
+                                await tts_queue.put(sent)
+
                 elif t == "function_call":
                     name = chunk.get("name", "")
                     args = chunk.get("arguments", "{}")
@@ -290,54 +241,80 @@ async def process_text_request_with_cancel(
                             args = json.loads(args) if args else {}
                         except json.JSONDecodeError:
                             args = {}
-                    async for p in send_function_call(name, args):
-                        yield p
-                    text_seq += 1
-            
-            elif isinstance(chunk, str):
-                # 1. 立即发送文本给客户端
-                async for p in send_text(chunk, text_seq):
-                    yield p
-                text_seq += 1
-                
-                # 2. 使用句子缓冲器处理TTS
-                if chunk and require_tts and sentence_buffer:
-                    complete_sentences = sentence_buffer.add_chunk(chunk)
-                    for sentence in complete_sentences:
-                        async for p in synthesize_and_send(sentence):
-                            yield p
-        
-        # ✅ 最后检查取消信号
-        if cancel_event and cancel_event.is_set():
-            logger.ws.info("Request cancelled before completion", {"request_id": request_id[:16]})
-            yield {
-                "request_id": request_id,
-                "text_stream_seq": -1,
-                "voice_stream_seq": -1 if require_tts else None,
-                "interrupted": True,
-                "interrupt_reason": "USER_NEW_INPUT",
-                "content": {}
-            }
-            return
-        
-        # 3. 流结束时，刷新缓冲器中剩余的文本
+                    yield make_function_payload(name, args)
+
+            elif isinstance(chunk, str) and chunk:
+                yield make_text_payload(chunk, text_seq[0])
+                text_seq[0] += 1
+                if require_tts and sentence_buffer:
+                    for sent in sentence_buffer.add_chunk(chunk):
+                        await tts_queue.put(sent)
+
+    except Exception as e:
+        logger.sys.error("LLM stream error", {"error": str(e)})
+        raise
+    finally:
+        # 刷新 sentence_buffer 剩余内容，发送 tts_queue 结束标记
         if require_tts and sentence_buffer:
             remaining = sentence_buffer.flush()
             if remaining:
-                logger.tts.info("Flushing remaining text", {
-                    "text": remaining[:50],
-                    "length": len(remaining)
-                })
-                async for p in synthesize_and_send(remaining):
-                    yield p
+                await tts_queue.put(remaining)
+        if require_tts:
+            await tts_queue.put(None)
 
-        # 文本流结束
-        async for p in send_text("", -1):
-            yield p
+    # ── 处理取消 ──────────────────────────────────────────────────
+    if llm_cancelled or (cancel_event and cancel_event.is_set()):
+        logger.ws.info("Request cancelled", {"request_id": request_id[:16]})
+        if worker_task and not worker_task.done():
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+        yield make_interrupted_payload()
+        return
+
+    # ── 文本流结束帧 ──────────────────────────────────────────────
+    yield make_text_payload("", -1)
+
+    # ── 消费 voice_queue，yield 所有语音块 ────────────────────────
+    # 必须等到 None 结束标记才能退出，不能用 worker_task.done() 提前判断
+    if require_tts and tts_service and worker_task:
+        logger.tts.info("Entering voice_queue drain loop", {"worker_done": worker_task.done()})
+        try:
+            voice_chunk_count = 0
+            while True:
+                if cancel_event and cancel_event.is_set():
+                    if not worker_task.done():
+                        worker_task.cancel()
+                    break
+
+                try:
+                    item = await asyncio.wait_for(voice_queue.get(), timeout=60.0)
+                except asyncio.TimeoutError:
+                    logger.tts.error("Voice queue timeout (60s), aborting", {"chunks_sent": voice_chunk_count})
+                    break
+
+                if item is None:  # tts_worker finally 发来的结束标记
+                    logger.tts.info("Voice queue drain complete", {"chunks_sent": voice_chunk_count})
+                    break
+
+                b64, seq = item
+                voice_chunk_count += 1
+                logger.tts.info("Yielding voice chunk", {"seq": seq, "b64_len": len(b64)})
+                yield make_voice_payload(b64, seq)
+
+        except Exception as e:
+            logger.tts.error("Voice queue error", {"error": str(e)})
+        finally:
+            if not worker_task.done():
+                worker_task.cancel()
+                try:
+                    await worker_task
+                except asyncio.CancelledError:
+                    pass
+
+        # 语音流结束帧
         if voice_sent[0]:
-            async for p in send_voice("", -1):
-                yield p
-    except Exception as e:
-        logger.sys.error("Text request process failed", {"error": str(e)})
-        raise
-
+            logger.tts.info("Sending voice end frame")
+            yield make_voice_payload("", -1)

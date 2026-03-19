@@ -186,8 +186,12 @@ class UnifiedTTSService:
         """
         真正的流式语音合成（使用 DashScope callback 机制，支持取消）
         
+        使用 asyncio.Queue + loop.call_soon_threadsafe 桥接 TTS 回调线程与 asyncio 事件循环，
+        避免 queue.Queue.get(timeout) 阻塞 event loop。
+        
         Args:
             text: 要合成的文本
+            session_id: 会话ID（用于中断管理器注册）
             cancel_event: 取消事件（可选）
         
         Yields:
@@ -208,14 +212,17 @@ class UnifiedTTSService:
         
         try:
             from dashscope.audio.tts_v2 import AudioFormat, ResultCallback
-            import queue
             import threading
             
-            # 创建队列用于在 callback 和 async generator 之间传递数据
-            audio_queue = queue.Queue()
-            synthesis_complete = threading.Event()
-            synthesis_error = [None]  # 使用列表以便在闭包中修改
-            synthesizer_ref = [None]  # 用于存储 synthesizer 实例，以便取消时关闭
+            # 获取当前正在运行的 event loop，用于线程安全地投递数据
+            # 必须用 get_running_loop()，不能用 get_event_loop()
+            # get_event_loop() 在 Python 3.10+ 的 async 上下文中可能返回错误的 loop
+            loop = asyncio.get_running_loop()
+            
+            # 使用 asyncio.Queue，通过 loop.call_soon_threadsafe 从 callback 线程安全投递
+            audio_queue: asyncio.Queue = asyncio.Queue()
+            synthesis_error = [None]
+            synthesizer_ref = [None]
             
             # 定义 callback 类来接收实时音频流
             class StreamingCallback(ResultCallback):
@@ -228,35 +235,20 @@ class UnifiedTTSService:
                 
                 def on_complete(self):
                     self.logger.tts.info('TTS synthesis completed')
-                    audio_queue.put(None)  # 结束标记
-                    synthesis_complete.set()
+                    # 线程安全地将结束标记投入 asyncio.Queue
+                    loop.call_soon_threadsafe(audio_queue.put_nowait, None)
                 
                 def on_error(self, message: str):
                     self.logger.tts.error('TTS synthesis error', {'error': str(message)})
                     synthesis_error[0] = str(message)
-                    audio_queue.put(None)
-                    synthesis_complete.set()
+                    loop.call_soon_threadsafe(audio_queue.put_nowait, None)
                 
                 def on_data(self, data: bytes):
-                    """实时接收音频数据（正确的回调方法）"""
+                    """实时接收音频数据，线程安全地推入 asyncio.Queue"""
                     if data:
-                        # 检测音频帧是否包含静音
-                        import struct
-                        samples = struct.unpack(f'<{len(data)//2}h', data)
-                        non_zero = sum(1 for s in samples if abs(s) > 100)
-                        max_amplitude = max(abs(s) for s in samples) if samples else 0
-                        
-                        self.logger.tts.debug('Received audio data', {
-                            'size': len(data),
-                            'non_zero_samples': non_zero,
-                            'total_samples': len(samples),
-                            'max_amplitude': max_amplitude,
-                            'is_silent': non_zero < len(samples) * 0.1
-                        })
-                        audio_queue.put(data)
+                        loop.call_soon_threadsafe(audio_queue.put_nowait, data)
                 
                 def on_event(self, message):
-                    """事件回调（用于其他事件）"""
                     self.logger.tts.debug('TTS event', {'message': str(message)[:100]})
             
             # 创建 callback 实例
@@ -272,58 +264,48 @@ class UnifiedTTSService:
             )
             synthesizer_ref[0] = synthesizer
             
-            # ✅ 注册到中断管理器
+            # 注册到中断管理器
             if session_id:
                 self.interrupt_manager.register_tts(session_id, synthesizer)
             
-            # 在后台线程启动合成（非阻塞）
+            # 在后台线程启动合成（非阻塞，不阻塞 event loop）
             def run_synthesis():
                 try:
                     synthesizer.call(processed_text)
                 except Exception as e:
                     synthesis_error[0] = str(e)
-                    audio_queue.put(None)
-                    synthesis_complete.set()
+                    loop.call_soon_threadsafe(audio_queue.put_nowait, None)
             
             synthesis_thread = threading.Thread(target=run_synthesis, daemon=True)
             synthesis_thread.start()
             
-            # 实时从队列中取出音频数据并 yield
+            # 实时从 asyncio.Queue 取出音频数据并 yield（不阻塞 event loop）
             try:
                 while True:
-                    # ✅ 检查取消信号
+                    # 检查取消信号
                     if cancel_event and cancel_event.is_set():
                         self.logger.tts.info('TTS cancelled by user')
-                        # 尝试关闭 synthesizer（如果支持）
-                        try:
-                            if synthesizer_ref[0]:
-                                # DashScope SDK 可能没有显式的 close 方法，但我们可以停止读取
-                                pass
-                        except Exception as e:
-                            self.logger.tts.debug('Error closing synthesizer', {'error': str(e)})
-                        return  # 立即退出
+                        return
                     
-                    # 非阻塞检查队列
                     try:
-                        chunk = audio_queue.get(timeout=0.1)
-                        if chunk is None:  # 结束标记
-                            break
-                        
-                        # ✅ 再次检查取消信号（在 yield 之前）
-                        if cancel_event and cancel_event.is_set():
-                            self.logger.tts.info('TTS cancelled before yielding chunk')
-                            return
-                        
-                        yield chunk
-                        self.logger.tts.debug('Yielded audio chunk', {'size': len(chunk)})
-                    except queue.Empty:
-                        # 检查是否已完成或出错
-                        if synthesis_complete.is_set():
-                            break
-                        await asyncio.sleep(0.01)  # 短暂等待
+                        # await asyncio.Queue.get() 不阻塞 event loop，正确让出控制权
+                        chunk = await asyncio.wait_for(audio_queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        self.logger.tts.error('TTS stream timeout (30s), aborting')
+                        break
+                    
+                    if chunk is None:  # 结束标记
+                        break
+                    
+                    # 再次检查取消信号
+                    if cancel_event and cancel_event.is_set():
+                        self.logger.tts.info('TTS cancelled before yielding chunk')
+                        return
+                    
+                    yield chunk
             finally:
-                # 清理：确保线程结束
-                synthesis_complete.set()
+                # 确保合成线程能感知到退出（通过 synthesis_error 不会死锁）
+                pass
             
             # 检查是否有错误
             if synthesis_error[0]:
