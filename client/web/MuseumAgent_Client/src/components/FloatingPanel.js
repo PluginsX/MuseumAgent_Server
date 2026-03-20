@@ -86,6 +86,11 @@ export class FloatingPanel {
         if (this.useWindowMode && this.resizable) {
             this.enableResize();
         }
+        
+        // ✅ 监听浏览器窗口大小变化（仅在窗口模式）
+        if (this.useWindowMode) {
+            this._bindWindowResizeListener();
+        }
     }
     
     /**
@@ -485,6 +490,9 @@ export class FloatingPanel {
                 modeToggleBtn.title = '切换到全屏模式';
             }
             
+            // ✅ 重新绑定窗口大小变化监听器
+            this._bindWindowResizeListener();
+            
             console.log('[FloatingPanel] 切换到窗口模式');
         } else {
             // 全屏模式
@@ -585,6 +593,105 @@ export class FloatingPanel {
     clearUserWindowSize() {
         localStorage.removeItem('floatingPanelWindowSize');
         console.log('[FloatingPanel] 已清除窗口尺寸记忆');
+    }
+    
+    /**
+     * ✅ 绑定浏览器窗口大小变化监听器
+     */
+    _bindWindowResizeListener() {
+        // 使用防抖，避免频繁触发
+        let resizeTimeout;
+        
+        window.addEventListener('resize', () => {
+            if (!this.useWindowMode) return;
+            
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this._adjustToViewport();
+            }, 100); // 100ms 防抖
+        });
+        
+        console.log('[FloatingPanel] 已绑定窗口大小变化监听器');
+    }
+    
+    /**
+     * ✅ 调整窗口位置以确保在视口内（浏览器窗口大小变化时调用）
+     */
+    _adjustToViewport() {
+        if (!this.element || !this.useWindowMode) return;
+        
+        const rect = this.element.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let newLeft = rect.left;
+        let newTop = rect.top;
+        let newWidth = rect.width;
+        let newHeight = rect.height;
+        
+        let needsAdjustment = false;
+        
+        // ✅ 检测并调整宽度
+        if (rect.right > viewportWidth) {
+            // 右侧超出
+            if (rect.width > viewportWidth) {
+                // 窗口比视口宽 → 缩小窗口（但不小于最小宽度）
+                newWidth = Math.max(this.minWindowWidth, viewportWidth);
+                newLeft = 0;
+                needsAdjustment = true;
+                console.log(`[FloatingPanel] 窗口宽度超出视口，缩小窗口到 ${newWidth}px`);
+            } else {
+                // 窗口可以容纳 → 只移动位置
+                newLeft = Math.max(0, viewportWidth - rect.width);
+                needsAdjustment = true;
+                console.log('[FloatingPanel] 窗口右侧超出，向左移动');
+            }
+        } else if (rect.left < 0) {
+            // 左侧超出
+            newLeft = 0;
+            needsAdjustment = true;
+            console.log('[FloatingPanel] 窗口左侧超出，向右移动');
+        }
+        
+        // ✅ 检测并调整高度
+        if (rect.bottom > viewportHeight) {
+            // 底部超出
+            if (rect.height > viewportHeight) {
+                // 窗口比视口高 → 缩小窗口（但不小于最小高度）
+                newHeight = Math.max(this.minWindowHeight, viewportHeight);
+                newTop = 0;
+                needsAdjustment = true;
+                console.log(`[FloatingPanel] 窗口高度超出视口，缩小窗口到 ${newHeight}px`);
+            } else {
+                // 窗口可以容纳 → 只移动位置
+                newTop = Math.max(0, viewportHeight - rect.height);
+                needsAdjustment = true;
+                console.log('[FloatingPanel] 窗口底部超出，向上移动');
+            }
+        } else if (rect.top < 0) {
+            // 顶部超出
+            newTop = 0;
+            needsAdjustment = true;
+            console.log('[FloatingPanel] 窗口顶部超出，向下移动');
+        }
+        
+        // ✅ 应用调整
+        if (needsAdjustment) {
+            this.element.style.left = newLeft + 'px';
+            this.element.style.top = newTop + 'px';
+            
+            if (newWidth !== rect.width) {
+                this.element.style.width = newWidth + 'px';
+            }
+            if (newHeight !== rect.height) {
+                this.element.style.height = newHeight + 'px';
+            }
+            
+            console.log(`[FloatingPanel] 调整完成：left=${newLeft}, top=${newTop}, width=${newWidth}, height=${newHeight}`);
+            
+            // ✅ 保存调整后的尺寸
+            this.saveUserWindowSize();
+        }
     }
     
     /**
