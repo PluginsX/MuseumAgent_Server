@@ -1,13 +1,19 @@
 /**
- * VAD AudioWorklet 处理器 v2.0
- * 
- * 核心升级：
+ * VAD AudioWorklet 处理器 v2.1
+ *
+ * 核心升级（v2.1）：
+ * 0. 内置降采样器 —— 支持任意输入采样率（如48kHz）自动降采样到16kHz再处理
+ *    这是 AEC 修复的关键配套：AudioContext 运行在系统原生采样率（48kHz），
+ *    Chrome 硬件 AEC 能在 48kHz 下正确对齐参考信号；
+ *    本处理器负责将 48kHz 麦克风信号降采样到 16kHz，再做 VAD 和 PCM 输出。
+ *
+ * 原有功能保持不变：
  * 1. 自适应噪声基线估计 —— 冷启动校准 + 实时慢速追踪，动态计算阈值
  * 2. 多特征融合检测 —— RMS能量 + 过零率(ZCR) + 人声频带能量比(FFT)
  * 3. 5状态机 + 连续帧防抖 —— 彻底消除瞬时噪声/碰撞音/咳嗽音误触发
  * 4. 完全向后兼容旧参数格式
  *
- * 运行于 AudioWorklet 独立线程，零外部依赖，O(n) 计算，适配移动端低端设备。
+ * 运行于 AudioWorklet 独立线程，零外部依赖，O(n) 计算。
  */
 
 'use strict';
@@ -18,7 +24,6 @@
 // ─────────────────────────────────────────────
 function fft256(re, im) {
     const n = 256;
-    // Bit-reversal permutation
     for (let i = 1, j = 0; i < n; i++) {
         let bit = n >> 1;
         for (; j & bit; bit >>= 1) j ^= bit;
@@ -28,10 +33,9 @@ function fft256(re, im) {
             t = im[i]; im[i] = im[j]; im[j] = t;
         }
     }
-    // Butterfly
     for (let len = 2; len <= n; len <<= 1) {
         const half = len >> 1;
-        const ang = -Math.PI / half; // -2π/len
+        const ang = -Math.PI / half;
         const wBaseRe = Math.cos(ang);
         const wBaseIm = Math.sin(ang);
         for (let i = 0; i < n; i += len) {
@@ -51,6 +55,54 @@ function fft256(re, im) {
 }
 
 // ─────────────────────────────────────────────
+// 流式线性插值降采样器（AudioWorklet 线程内）
+// 将任意输入采样率降采样到 targetRate，跨帧追踪相位保证连续性
+// ─────────────────────────────────────────────
+class Downsampler {
+    /**
+     * @param {number} inputRate  - 输入采样率（如 48000）
+     * @param {number} outputRate - 目标采样率（如 16000）
+     */
+    constructor(inputRate, outputRate) {
+        this.ratio = inputRate / outputRate;  // 每个输出样本对应的输入样本数（如 3.0）
+        this.phase = 0;                       // 当前输入序列中的浮点位置（跨帧持续累积）
+        this.lastSample = 0;                  // 上一帧最后一个样本，用于跨帧插值
+    }
+
+    /**
+     * 处理一帧输入，返回降采样后的 Float32Array
+     * @param {Float32Array} input
+     * @returns {Float32Array}
+     */
+    process(input) {
+        const ratio = this.ratio;
+        const outLen = Math.ceil((input.length - this.phase) / ratio) + 2;
+        const output = new Float32Array(outLen);
+        let outIdx = 0;
+
+        while (this.phase < input.length) {
+            const idx = Math.floor(this.phase);
+            const frac = this.phase - idx;
+            // 取当前位置前后两个样本做线性插值
+            // idx=0 时 prev 使用上一帧最后样本实现跨帧连续
+            const prev = idx > 0 ? input[idx - 1] : this.lastSample;
+            const curr = input[idx] !== undefined ? input[idx] : prev;
+            const next = input[idx + 1] !== undefined ? input[idx + 1] : curr;
+            // 在 curr 和 next 之间插值
+            output[outIdx++] = curr + frac * (next - curr);
+            this.phase += ratio;
+        }
+
+        // 保存本帧最后一个样本，供下帧跨帧插值
+        this.lastSample = input[input.length - 1] || 0;
+        // 将 phase 减去已消耗的输入长度，保留小数余数给下帧
+        this.phase -= input.length;
+
+        return output.subarray(0, outIdx);
+    }
+}
+
+// ─────────────────────────────────────────────
 // VAD 状态枚举
 // ─────────────────────────────────────────────
 const S = { IDLE: 0, CALIBRATING: 1, SILENCE: 2, SPEAKING: 3, ENDING: 4 };
@@ -66,6 +118,10 @@ class VADProcessor extends AudioWorkletProcessor {
         this.p           = null;   // 规范化后的参数
         this.state       = S.IDLE;
 
+        // ✅ v2.1：降采样器（当 sampleRate !== targetSampleRate 时启用）
+        this.downsampler      = null;
+        this.targetSampleRate = 16000;  // 输出PCM采样率，始终为16kHz
+
         // 噪声基线
         this.noiseEst    = 0.01;
 
@@ -75,8 +131,8 @@ class VADProcessor extends AudioWorkletProcessor {
         this.calTarget   = 0;
 
         // 防抖计数
-        this.speechCnt   = 0;  // 连续超阈值帧数
-        this.silenceCnt  = 0;  // 连续低于阈值帧数
+        this.speechCnt   = 0;
+        this.silenceCnt  = 0;
 
         // 时间戳（ms）
         this.speechStartMs  = 0;
@@ -90,10 +146,10 @@ class VADProcessor extends AudioWorkletProcessor {
         this.postBufMax  = 0;
 
         // 防抖目标帧数（由参数换算）
-        this.confirmTarget = 3;
+        this.confirmTarget  = 3;
         this.silFrameTarget = 40;
 
-        // FFT 累积缓冲（256 点）
+        // FFT 累积缓冲（256 点，基于 targetSampleRate=16kHz）
         this.fftAccum    = new Float32Array(256);
         this.fftFill     = 0;
 
@@ -111,11 +167,20 @@ class VADProcessor extends AudioWorkletProcessor {
         this.isStopped  = false;
         this.vadEnabled = !!data.vadEnabled;
 
+        // ✅ v2.1：读取目标采样率，按需初始化降采样器
+        this.targetSampleRate = data.targetSampleRate || 16000;
+        if (sampleRate !== this.targetSampleRate) {
+            this.downsampler = new Downsampler(sampleRate, this.targetSampleRate);
+        } else {
+            this.downsampler = null;
+        }
+
         if (this.vadEnabled && data.vadParams) {
             this.p = this._norm(data.vadParams);
 
-            // 每帧固定 128 样本
-            const fd = (128 / sampleRate) * 1000; // 帧时长 ms
+            // 帧时长基于 targetSampleRate（16kHz），每帧128样本经降采样后约8ms
+            // 若无降采样（native=16k），则仍是 128/16000*1000 ≈ 8ms
+            const fd = (128 / this.targetSampleRate) * 1000;
 
             this.calTarget      = Math.max(10, Math.ceil(this.p.calibrationDuration / fd));
             this.preBufMax      = Math.max(1,  Math.ceil(this.p.preSpeechPadding   / fd));
@@ -125,9 +190,7 @@ class VADProcessor extends AudioWorkletProcessor {
 
             this._reset();
 
-            // ✅ autoNoiseAdaptation 关闭时：跳过校准，直接用手动阈值计算固定噪声基线
             if (this.p.autoNoiseAdaptation === false) {
-                // 从手动阈值反推噪声基线：noise = minSpeechThreshold / speechRatio
                 const derivedNoise = this.p.minSpeechThreshold / this.p.speechRatio;
                 this.noiseEst = Math.max(derivedNoise, this.p.minSilenceThreshold * 0.5);
                 this.state = S.SILENCE;
@@ -157,12 +220,10 @@ class VADProcessor extends AudioWorkletProcessor {
 
     // ── 参数规范化（兼容新旧格式）────────────────
     _norm(p) {
-        // 兼容旧版绝对阈值参数：若没有新参数则推算比率
         const speechRatio  = p.speechRatio  ?? (p.speechThreshold  ? null : 3.5);
         const silenceRatio = p.silenceRatio ?? (p.silenceThreshold ? null : 1.8);
 
         return {
-            // ✅ 自动环境噪声适应开关（默认开启）
             autoNoiseAdaptation : p.autoNoiseAdaptation !== false,
             calibrationDuration : p.calibrationDuration  ?? 1500,
             speechRatio         : speechRatio             ?? 3.5,
@@ -212,7 +273,7 @@ class VADProcessor extends AudioWorkletProcessor {
         return Math.sqrt(s / f32.length);
     }
 
-    /** 过零率（每帧过零次数，不归一化，直接与 zcrMin/zcrMax 比较） */
+    /** 过零率（每帧过零次数） */
     _zcr(f32) {
         let c = 0;
         for (let i = 1; i < f32.length; i++) {
@@ -223,25 +284,22 @@ class VADProcessor extends AudioWorkletProcessor {
 
     /**
      * 人声频带能量比（300-3400 Hz 占总能量的比例）
-     * 使用累积 FFT 缓冲：当累积满 256 样本时计算一次，否则返回 -1（跳过检查）
+     * 基于 targetSampleRate(16kHz) 域的数据计算，FFT bin分辨率 = 16000/256 = 62.5Hz
      */
     _voiceBandRatio(f32) {
-        // 累积样本到 FFT 缓冲
         const need = 256 - this.fftFill;
         const take = Math.min(need, f32.length);
         this.fftAccum.set(f32.subarray(0, take), this.fftFill);
         this.fftFill += take;
 
-        if (this.fftFill < 256) return -1; // 数据不足，本帧跳过
+        if (this.fftFill < 256) return -1;
 
-        // 执行 FFT
-        const re = new Float32Array(this.fftAccum); // 拷贝，避免污染
+        const re = new Float32Array(this.fftAccum);
         const im = new Float32Array(256);
         fft256(re, im);
 
-        // 计算各频带能量（只用前 128 个正频率 bin）
-        // bin 分辨率 = sampleRate / 256
-        const binRes = sampleRate / 256;
+        // bin分辨率基于 targetSampleRate
+        const binRes = this.targetSampleRate / 256;
         let voiceE = 0, totalE = 0;
         for (let k = 1; k < 128; k++) {
             const freq = k * binRes;
@@ -250,7 +308,6 @@ class VADProcessor extends AudioWorkletProcessor {
             if (freq >= 300 && freq <= 3400) voiceE += mag2;
         }
 
-        // 重置 FFT 缓冲（滑动：保留后半段，下次继续累积）
         this.fftAccum.copyWithin(0, 128);
         this.fftFill = 128;
 
@@ -264,15 +321,19 @@ class VADProcessor extends AudioWorkletProcessor {
         const ch = inputs[0]?.[0];
         if (!ch) return true;
 
-        // 转 PCM Int16
-        const pcm = new Int16Array(ch.length);
-        for (let i = 0; i < ch.length; i++) {
-            const s = ch[i] < -1 ? -1 : ch[i] > 1 ? 1 : ch[i];
+        // ✅ v2.1：若已初始化降采样器，先将原生采样率数据降采样到 targetSampleRate(16kHz)
+        // 后续所有处理（VAD特征计算、PCM输出）均基于降采样后的16kHz数据
+        const f32 = this.downsampler ? this.downsampler.process(ch) : ch;
+
+        // 将 Float32 转为 PCM Int16（基于16kHz数据）
+        const pcm = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+            const s = f32[i] < -1 ? -1 : f32[i] > 1 ? 1 : f32[i];
             pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
 
         if (this.vadEnabled && this.p) {
-            this._vad(ch, pcm.buffer);
+            this._vad(f32, pcm.buffer);
         } else {
             this.port.postMessage({ type: 'audioData', data: pcm.buffer }, [pcm.buffer]);
         }
@@ -283,7 +344,7 @@ class VADProcessor extends AudioWorkletProcessor {
     _vad(f32, pcmBuf) {
         const rms = this._rms(f32);
         const zcr = this._zcr(f32);
-        const vbr = this._voiceBandRatio(f32); // -1 表示本帧数据不足，跳过频域检查
+        const vbr = this._voiceBandRatio(f32);
         const nowMs = currentTime * 1000;
 
         // 节流调试日志（每 2.5 秒一次）
@@ -299,6 +360,8 @@ class VADProcessor extends AudioWorkletProcessor {
                     noise      : +this.noiseEst.toFixed(5),
                     spThr      : +this._speechThr().toFixed(5),
                     silThr     : +this._silenceThr().toFixed(5),
+                    nativeSR   : sampleRate,
+                    targetSR   : this.targetSampleRate,
                 }
             });
         }
@@ -318,9 +381,7 @@ class VADProcessor extends AudioWorkletProcessor {
         this._pushPre(pcmBuf);
 
         if (this.calFrames >= this.calTarget) {
-            // 校准完成：以均值作为噪声基线（加一点裕量避免过于敏感）
             this.noiseEst = (this.calSum / this.calFrames) * 1.1;
-            // 保证噪声估计有下限
             this.noiseEst = Math.max(this.noiseEst, this.p.minSilenceThreshold * 0.5);
 
             this.state = S.SILENCE;
@@ -335,50 +396,38 @@ class VADProcessor extends AudioWorkletProcessor {
 
     // ── 状态：SILENCE ─────────────────────────────
     _doSilence(f32, pcmBuf, rms, zcr, vbr, nowMs) {
-        // ✅ 仅在自动噪声适应开启时才动态更新噪声基线
         if (this.p.autoNoiseAdaptation !== false) {
-            // 更新噪声基线（慢速追踪）
             this.noiseEst = this.noiseEst * (1 - this.p.noiseUpdateRate)
                           + rms            *      this.p.noiseUpdateRate;
-            // 保证下限
             this.noiseEst = Math.max(this.noiseEst, this.p.minSilenceThreshold * 0.5);
         }
 
-        // 维护前填充缓冲
         this._pushPre(pcmBuf);
 
-        // 判断是否是人声（多特征融合）
         const isVoiceLike = this._isVoiceLike(rms, zcr, vbr);
 
         if (isVoiceLike) {
             this.speechCnt++;
             if (this.speechCnt >= this.confirmTarget) {
-                // 连续 N 帧确认：进入 SPEAKING
                 this.speechCnt  = 0;
                 this.silenceCnt = 0;
                 this.speechStartMs = nowMs;
                 this.state = S.SPEAKING;
 
-                // 发送语音开始事件
                 this.port.postMessage({ type: 'speechStart' });
 
-                // 发送前填充缓冲（包含语音起始前的音频，当前帧已在 _pushPre 中拷贝入 preBuf）
                 for (const buf of this.preBuf) {
                     this.port.postMessage({ type: 'audioData', data: buf }, [buf]);
                 }
                 this.preBuf = [];
-                // ✅ 不再单独发送 pcmBuf：当前帧已经作为拷贝存入 preBuf 并在上面发出，
-                //    避免对同一个 ArrayBuffer 二次转移导致 DataCloneError
             }
         } else {
-            // 不像人声：重置防抖计数
             this.speechCnt = 0;
         }
     }
 
     // ── 状态：SPEAKING ────────────────────────────
     _doSpeaking(f32, pcmBuf, rms, zcr, nowMs) {
-        // 持续发送音频
         this.port.postMessage({ type: 'audioData', data: pcmBuf }, [pcmBuf]);
 
         const isSilent = rms < this._silenceThr();
@@ -386,14 +435,12 @@ class VADProcessor extends AudioWorkletProcessor {
         if (isSilent) {
             this.silenceCnt++;
             if (this.silenceCnt >= this.silFrameTarget) {
-                // 持续静音达标：进入 ENDING（发送后填充）
                 this.silenceCnt = 0;
                 this.speechCnt  = 0;
                 this.state      = S.ENDING;
                 this.postBuf    = [];
             }
         } else {
-            // 继续说话：重置静音计数
             this.silenceCnt = 0;
         }
     }
@@ -403,10 +450,8 @@ class VADProcessor extends AudioWorkletProcessor {
         const isSilent = rms < this._silenceThr();
 
         if (!isSilent) {
-            // 又检测到声音：返回 SPEAKING
             this.state      = S.SPEAKING;
             this.silenceCnt = 0;
-            // 把后填充缓冲里的帧补发
             for (const buf of this.postBuf) {
                 this.port.postMessage({ type: 'audioData', data: buf }, [buf]);
             }
@@ -415,24 +460,18 @@ class VADProcessor extends AudioWorkletProcessor {
             return;
         }
 
-        // 仍然静音：累积后填充帧
         this.postBuf.push(pcmBuf);
 
         if (this.postBuf.length >= this.postBufMax) {
-            // 后填充已满：语音真正结束
             const speechDurationMs = nowMs - this.speechStartMs;
 
             if (speechDurationMs >= this.p.minSpeechDuration) {
-                // 发送后填充缓冲
                 for (const buf of this.postBuf) {
                     this.port.postMessage({ type: 'audioData', data: buf }, [buf]);
                 }
-                // 发送语音结束事件
                 this.port.postMessage({ type: 'speechEnd' });
             }
-            // 不满足最短时长：静默丢弃（短暂噪声/咳嗽），不发 speechEnd
 
-            // 回到 SILENCE
             this.postBuf    = [];
             this.speechCnt  = 0;
             this.silenceCnt = 0;
@@ -441,33 +480,18 @@ class VADProcessor extends AudioWorkletProcessor {
     }
 
     // ── 辅助：人声判断（多特征融合）─────────────
-    /**
-     * 综合 RMS、ZCR、频带能量比判断是否像人声
-     * 任一特征明显排除则返回 false
-     */
     _isVoiceLike(rms, zcr, vbr) {
-        // 1. 能量必须超过动态语音阈值
         if (rms < this._speechThr()) return false;
-
-        // 2. ZCR 过滤：
-        //    - ZCR 极低（< zcrMin）：冲击音/碰撞噪声（单次爆破）
-        //    - ZCR 极高（> zcrMax）：高频噪声/风噪
         if (zcr < this.p.zcrMin || zcr > this.p.zcrMax) return false;
-
-        // 3. 频带能量比过滤（仅在 FFT 数据充足时检查）
-        //    人声主要集中在 300-3400 Hz，该频带能量占比应 > voiceBandRatioMin
         if (vbr >= 0 && vbr < this.p.voiceBandRatioMin) return false;
-
         return true;
     }
 
     // ── 辅助：前填充环形缓冲 ─────────────────────
-    // ✅ 修复 DataCloneError：存入前必须拷贝 ArrayBuffer，
-    //    防止原始 pcmBuf 被 postMessage 转移后 preBuf 中留有 detached 引用
     _pushPre(pcmBuf) {
         this.preBuf.push(pcmBuf.slice(0));
         if (this.preBuf.length > this.preBufMax) {
-            this.preBuf.shift(); // 丢弃最旧帧（环形）
+            this.preBuf.shift();
         }
     }
 }
