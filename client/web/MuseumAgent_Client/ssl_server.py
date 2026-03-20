@@ -15,6 +15,15 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # 设置默认目录为当前目录
         super().__init__(*args, directory=os.path.dirname(os.path.abspath(__file__)), **kwargs)
+        
+        # ✅ 添加 SVG 文件的 MIME 类型支持
+        self.extensions_map.update({
+            '.svg': 'image/svg+xml',
+            '.wasm': 'application/wasm',
+            '.data': 'application/octet-stream',
+            '.framework.js': 'application/javascript',
+            '.loader.js': 'application/javascript',
+        })
 
     def end_headers(self):
         # 添加CORS头，允许跨域请求

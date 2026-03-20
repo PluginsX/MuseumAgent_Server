@@ -78,9 +78,11 @@ export class ChatWindow {
         inputWrapper.appendChild(this.inputArea);
 
         this.voiceButton = createElement('button', {
-            className: 'voice-button',
-            textContent: '🎤'
+            className: 'voice-button'
         });
+        
+        // ✅ 设置默认图标（语音按钮）
+        this.setVoiceIcon('normal');
 
         this.sendButton = createElement('button', {
             className: 'send-button',
@@ -101,7 +103,40 @@ export class ChatWindow {
     }
 
     /**
-     * ✅ 绑定 UI 事件（每次 render 后调用）
+     * 设置语音按钮图标
+     * @param {string} state - 'normal' 或 'highlight'
+     */
+    setVoiceIcon(state) {
+        if (!this.voiceButton) return;
+        
+        this.voiceButton.innerHTML = '';
+        const img = document.createElement('img');
+        
+        const iconPath = state === 'highlight' 
+            ? './res/svg/bu_voice_highlight.svg'
+            : './res/svg/bu_voice_normal.svg';
+        
+        // ✅ 解析为相对于页面根目录的绝对路径
+        const absolutePath = iconPath.startsWith('./') ? iconPath.substring(2) : iconPath;
+        const fullUrl = new URL(absolutePath, window.location.origin).href;
+        
+        img.src = fullUrl;
+        img.alt = '';
+        img.draggable = false;
+        
+        this.voiceButton.appendChild(img);
+        
+        // ✅ 监听加载和错误
+        img.onload = () => {
+            console.log('[ChatWindow] 语音按钮 SVG 加载成功:', fullUrl);
+        };
+        img.onerror = () => {
+            console.error('[ChatWindow] 语音按钮 SVG 加载失败:', fullUrl);
+        };
+    }
+    
+    /**
+     * 绑定 UI 事件（每次 render 后调用）
      */
     bindUIEvents() {
         console.log('[ChatWindow] 绑定 UI 事件');
@@ -155,7 +190,7 @@ export class ChatWindow {
         this.client.on(Events.RECORDING_START, () => {
             console.log('[ChatWindow] 录音开始，更新按钮状态');
             if (this.voiceButton) {
-                this.voiceButton.textContent = '⏹️';
+                this.setVoiceIcon('highlight');  // ✅ 录音时显示高亮图标
                 this.voiceButton.classList.add('recording');
             }
         });
@@ -163,7 +198,7 @@ export class ChatWindow {
         this.client.on(Events.RECORDING_STOP, () => {
             console.log('[ChatWindow] 录音停止，更新按钮状态');
             if (this.voiceButton) {
-                this.voiceButton.textContent = '🎤';
+                this.setVoiceIcon('normal');  // ✅ 停止录音时显示普通图标
                 this.voiceButton.classList.remove('recording');
             }
         });
@@ -435,11 +470,11 @@ export class ChatWindow {
         if (this.voiceButton) {
             if (this.client.isRecording) {
                 console.log('[ChatWindow] 同步语音按钮状态：录音中');
-                this.voiceButton.textContent = '⏹️';
+                this.setVoiceIcon('highlight');  // ✅ 录音中显示高亮图标
                 this.voiceButton.classList.add('recording');
             } else {
                 console.log('[ChatWindow] 同步语音按钮状态：未录音');
-                this.voiceButton.textContent = '🎤';
+                this.setVoiceIcon('normal');  // ✅ 未录音显示普通图标
                 this.voiceButton.classList.remove('recording');
             }
         }

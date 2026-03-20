@@ -192,6 +192,22 @@ export class FloatingPanel {
         
         header.appendChild(buttonContainer);
         
+        // ✅ 双击标题栏切换窗口/全屏模式
+        // 仅在非按钮区域双击时触发，避免与按钮点击冲突
+        header.addEventListener('dblclick', (e) => {
+            // 排除按钮区域
+            if (e.target.closest('.floating-panel-button')) {
+                return;
+            }
+            
+            // 排除标题文本的三连击选中等情况
+            if (e.target.closest('.floating-panel-title')) {
+                e.preventDefault();
+            }
+            
+            this.toggleWindowMode();
+        });
+        
         return header;
     }
     
@@ -370,6 +386,7 @@ export class FloatingPanel {
         let dragStartY = 0;
         let initialLeft = 0;
         let initialTop = 0;
+        let totalDragDistance = 0;  // ✅ 记录总拖拽距离，防止拖拽时误触发双击
         
         const header = this.element.querySelector('.floating-panel-header');
         if (!header) return;
@@ -391,6 +408,7 @@ export class FloatingPanel {
             isDragging = true;
             dragStartX = e.clientX;
             dragStartY = e.clientY;
+            totalDragDistance = 0;  // ✅ 重置拖拽距离
             
             // 获取当前位置
             const rect = this.element.getBoundingClientRect();
@@ -409,6 +427,7 @@ export class FloatingPanel {
             
             const deltaX = e.clientX - dragStartX;
             const deltaY = e.clientY - dragStartY;
+            totalDragDistance += Math.sqrt(deltaX * deltaX + deltaY * deltaY);  // ✅ 累计拖拽距离
             
             const newLeft = initialLeft + deltaX;
             const newTop = initialTop + deltaY;
@@ -429,14 +448,20 @@ export class FloatingPanel {
             header.releasePointerCapture(e.pointerId);
             isDragging = false;
             this.element.classList.remove('dragging');
-            this.element.style.transition = 'all 0.3s';
+            
+            // ✅ 如果拖拽距离过大，禁用本次双击（防止拖拽后立即双击误触发）
+            if (totalDragDistance > 5) {
+                header.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    header.style.pointerEvents = 'auto';
+                }, 100);
+            }
         });
         
         // Pointer Cancel (绑定到 document)
         document.addEventListener('pointercancel', () => {
             isDragging = false;
             this.element.classList.remove('dragging');
-            this.element.style.transition = 'all 0.3s';
         });
     }
     

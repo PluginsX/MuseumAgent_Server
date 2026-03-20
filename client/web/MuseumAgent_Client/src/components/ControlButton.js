@@ -61,6 +61,14 @@ export class ControlButton {
         });
     }
     
+    // SVG 图标路径常量
+    static ICONS = {
+        voice:          './res/svg/bu_voice_normal.svg',      // 未录音时的语音图标
+        voiceHighlight: './res/svg/bu_voice_highlight.svg',   // 录音中的高亮图标
+        settings:       './res/svg/bu_settings_normal.svg',
+        chat:           './res/svg/bu_message_normal.svg'
+    };
+
     /**
      * 创建元素
      */
@@ -69,18 +77,38 @@ export class ControlButton {
             className: 'control-button'
         });
         
-        // 设置默认图标
-        this.setIcon('🎤');
+        // 设置默认图标（语音按钮）
+        this.setIcon(ControlButton.ICONS.voice);
         
         // 添加到页面
         document.body.appendChild(this.element);
     }
     
     /**
-     * 设置图标
+     * 设置图标（替换为 SVG img）
+     * @param {string} src - SVG 文件路径
      */
-    setIcon(icon) {
-        this.element.textContent = icon;
+    setIcon(src) {
+        this.element.innerHTML = '';
+        const img = document.createElement('img');
+        
+        // ✅ 解析为相对于页面根目录的绝对路径
+        const absolutePath = src.startsWith('./') ? src.substring(2) : src;
+        const fullUrl = new URL(absolutePath, window.location.origin).href;
+        
+        img.src = fullUrl;
+        img.alt = '';
+        img.draggable = false;
+        // ✅ 不设置内联样式，让 CSS 完全控制
+        this.element.appendChild(img);
+        
+        // ✅ 监听加载和错误
+        img.onload = () => {
+            console.log('[ControlButton] SVG 加载成功:', fullUrl, '尺寸:', img.naturalWidth, 'x', img.naturalHeight);
+        };
+        img.onerror = () => {
+            console.error('[ControlButton] SVG 加载失败:', fullUrl, '当前页面 URL:', window.location.href);
+        };
     }
     
     /**
@@ -300,12 +328,12 @@ export class ControlButton {
     bindClientEvents() {
         // 监听录音状态
         this.client.on(Events.RECORDING_START, () => {
-            this.setIcon('⏹️');
+            this.setIcon(ControlButton.ICONS.voiceHighlight);  // ✅ 录音时显示高亮图标
             this.element.classList.add('recording');
         });
         
         this.client.on(Events.RECORDING_STOP, () => {
-            this.setIcon('🎤');
+            this.setIcon(ControlButton.ICONS.voice);  // ✅ 停止录音时显示普通图标
             this.element.classList.remove('recording');
         });
     }
@@ -363,6 +391,7 @@ export class ControlButton {
     
     /**
      * 显示菜单
+     * ✅ 四方位智能定位：以控制按钮为中心，根据四周可用空间选择最优角落展开菜单
      */
     showMenu() {
         // 如果菜单已存在，先移除
@@ -375,25 +404,61 @@ export class ControlButton {
             className: 'control-menu'
         });
         
-        // 计算菜单方向
+        // ── 步骤1：获取按钮几何信息 ──
         const buttonRect = this.element.getBoundingClientRect();
-        const spaceAbove = buttonRect.top;
-        const spaceBelow = window.innerHeight - buttonRect.bottom;
-        const direction = spaceBelow >= spaceAbove ? 'down' : 'up';
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
         
-        this.menu.classList.add('menu-' + direction);
+        // 按钮中心坐标
+        const cx = buttonRect.left + buttonRect.width / 2;
+        const cy = buttonRect.top  + buttonRect.height / 2;
         
-        // 创建菜单项
+        // 中心到四边的距离
+        const Dis_Top    = cy;
+        const Dis_Bottom = vh - cy;
+        const Dis_Left   = cx;
+        const Dis_Right  = vw - cx;
+        
+        // ── 步骤2：决策方向 ──
+        // ToB: true = 菜单在按钮下方，false = 菜单在按钮上方
+        const ToB = Dis_Bottom >= Dis_Top;
+        // LoR: true = 菜单在按钮右侧，false = 菜单在按钮左侧
+        const LoR = Dis_Right  >= Dis_Left;
+        
+        // ── 步骤3：设置排列方向 ──
+        // ToB=true(下方)：从上到下排列，第一项最靠近按钮
+        // ToB=false(上方)：从下到上排列，第一项最靠近按钮
+        this.menu.style.flexDirection = ToB ? 'column' : 'column-reverse';
+        
+        // ── 步骤4：创建菜单项 ──
         const menuItems = [
-            { icon: '⚙', action: 'settings', label: '设置' },
-            { icon: '✉', action: 'chat', label: '聊天' }
+            { icon: ControlButton.ICONS.settings, action: 'settings', label: '设置' },
+            { icon: ControlButton.ICONS.chat,     action: 'chat',     label: '聊天' }
         ];
         
         menuItems.forEach(item => {
             const menuItem = createElement('button', {
-                className: 'control-menu-item',
-                textContent: item.icon
+                className: 'control-menu-item'
             });
+            const img = document.createElement('img');
+            
+            // ✅ 解析为相对于页面根目录的绝对路径
+            const absolutePath = item.icon.startsWith('./') ? item.icon.substring(2) : item.icon;
+            const fullUrl = new URL(absolutePath, window.location.origin).href;
+            
+            img.src = fullUrl;
+            img.alt = '';
+            img.draggable = false;
+            // ✅ 不设置内联样式，让 CSS 完全控制
+            menuItem.appendChild(img);
+            
+            // ✅ 监听加载和错误
+            img.onload = () => {
+                console.log('[ControlButton] 菜单项 SVG 加载成功:', fullUrl, '尺寸:', img.naturalWidth, 'x', img.naturalHeight);
+            };
+            img.onerror = () => {
+                console.error('[ControlButton] 菜单项 SVG 加载失败:', fullUrl, '当前页面 URL:', window.location.href);
+            };
             
             menuItem.setAttribute('data-action', item.action);
             menuItem.setAttribute('title', item.label);
@@ -406,23 +471,47 @@ export class ControlButton {
             this.menu.appendChild(menuItem);
         });
         
-        // ✅ 添加到页面（先添加才能获取尺寸）
+        // ── 步骤5：添加到页面并设置宽度 ──
         document.body.appendChild(this.menu);
         
-        // ✅ 设置菜单宽度与按钮宽度一致
+        // 菜单容器宽度与按钮一致
         this.menu.style.width = buttonRect.width + 'px';
         
-        // ✅ 计算菜单位置（与按钮左右对齐）
-        const menuLeft = buttonRect.left;
+        // ── 步骤6：计算菜单容器定位 ──
+        // 九宫格逻辑：
+        //   LoR=true  → 菜单在按钮右侧 → 菜单左边缘对齐按钮右边缘（即 left = buttonRect.right）
+        //   LoR=false → 菜单在按钮左侧 → 菜单右边缘对齐按钮左边缘（即 right = vw - buttonRect.left）
+        //   ToB=true  → 菜单在按钮下方 → 菜单上边缘对齐按钮下边缘（即 top = buttonRect.bottom）
+        //   ToB=false → 菜单在按钮上方 → 菜单下边缘对齐按钮上边缘（即 bottom = vh - buttonRect.top）
         
-        // ✅ 设置菜单位置
-        if (direction === 'down') {
-            this.menu.style.left = menuLeft + 'px';
-            this.menu.style.top = (buttonRect.bottom + 10) + 'px';
+        if (LoR) {
+            this.menu.style.left  = buttonRect.right + 'px';
+            this.menu.style.right = '';
         } else {
-            this.menu.style.left = menuLeft + 'px';
-            this.menu.style.bottom = (window.innerHeight - buttonRect.top + 10) + 'px';
+            this.menu.style.right = (vw - buttonRect.left) + 'px';
+            this.menu.style.left  = '';
         }
+        
+        if (ToB) {
+            this.menu.style.top    = buttonRect.bottom + 'px';
+            this.menu.style.bottom = '';
+        } else {
+            this.menu.style.bottom = (vh - buttonRect.top) + 'px';
+            this.menu.style.top    = '';
+        }
+        
+        // ── 步骤7：靠近按钮的角圆角归零（气泡效果）──
+        // ToB=true,  LoR=true  → 菜单从左上角展开 → 左上角归零
+        // ToB=true,  LoR=false → 菜单从右上角展开 → 右上角归零
+        // ToB=false, LoR=true  → 菜单从左下角展开 → 左下角归零
+        // ToB=false, LoR=false → 菜单从右下角展开 → 右下角归零
+        // 圆角值使用固定像素（容器宽的一半），避免非正方形容器用百分比导致椭圆拉伸
+        const r = (buttonRect.width / 2) + 'px';
+        const zero = '0';
+        this.menu.style.borderTopLeftRadius     = ( ToB &&  LoR) ? zero : r;
+        this.menu.style.borderTopRightRadius    = ( ToB && !LoR) ? zero : r;
+        this.menu.style.borderBottomLeftRadius  = (!ToB &&  LoR) ? zero : r;
+        this.menu.style.borderBottomRightRadius = (!ToB && !LoR) ? zero : r;
         
         // 点击其他地方关闭菜单
         setTimeout(() => {
