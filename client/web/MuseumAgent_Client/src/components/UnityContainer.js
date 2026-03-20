@@ -502,7 +502,7 @@ export class UnityContainer {
         
         // 创建浮动面板包装
         this.currentPanel = new FloatingPanel(chatWindow, {
-            title: 'MuseumAgent 智能体',
+            title: '博物馆智能体',
             deviceInfo: this.deviceInfo,
             useWindowMode: useWindowMode,
             onClose: () => this.closePanel()
