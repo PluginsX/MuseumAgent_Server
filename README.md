@@ -131,25 +131,86 @@
 - **TTS/STT服务**: 阿里云DashScope SDK标准
 - **SRS服务**: SRS标准API
 
+## 环境要求
+
+- **Python**: 3.12.5
+- **操作系统**: Windows / Linux
+
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 创建虚拟环境
 ```bash
-pip install fastapi uvicorn aiohttp pyjwt passlib[bcrypt] python-multipart
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# Linux
+source venv/bin/activate
 ```
 
-### 2. 配置文件
-编辑 `config/config.json` 文件，配置各项服务参数。
+### 2. 安装依赖
+```bash
+pip install -r requirements.txt
+```
 
-### 3. 启动服务
+### 3. 配置文件
+编辑 `config/config.json` 文件，配置各项服务参数。也可参考 `config.example.yaml` 模板。
+
+### 4. 启动服务
 ```bash
 python main.py
 ```
 
-### 4. 运行测试
-```bash
-python -m pytest tests/system_test.py
-```
+## 依赖说明
+
+### Web框架
+| 库 | 版本 | 说明 |
+|---|------|------|
+| fastapi | >=0.104.0 | 高性能异步Web框架 |
+| uvicorn | >=0.24.0 | ASGI服务器 |
+| pydantic | >=2.4.0 | 数据验证与序列化 |
+| python-multipart | >=0.0.6 | 文件上传支持 |
+
+### 数据库
+| 库 | 版本 | 说明 |
+|---|------|------|
+| sqlalchemy | >=2.0.0 | ORM框架 |
+| alembic | >=1.12.0 | 数据库迁移工具 |
+| pymysql | >=1.1.0 | MySQL驱动 |
+
+### 认证与安全
+| 库 | 版本 | 说明 |
+|---|------|------|
+| pyjwt | >=2.8.0 | JWT Token生成与验证 |
+| passlib | >=1.7.4 | 密码哈希工具 |
+| bcrypt | >=4.0.0,<5.0.0 | 密码加密算法 |
+| cryptography | ==46.0.5 | 加密基础库 |
+| cffi | ==2.0.0 | C FFI接口（cryptography依赖） |
+| pycparser | ==3.0 | C语言解析器（cffi依赖） |
+| itsdangerous | >=2.0.0 | 数据签名工具 |
+
+### AI服务SDK
+| 库 | 版本 | 说明 |
+|---|------|------|
+| dashscope | ==1.25.12 | 阿里云DashScope SDK（TTS/STT/LLM） |
+
+### 语义检索
+| 库 | 版本 | 说明 |
+|---|------|------|
+| chromadb | ==0.4.24 | 向量数据库客户端 |
+| numpy | <2.0 | 数值计算（chromadb依赖） |
+| onnxruntime | ==1.17.0 | ONNX推理引擎（chromadb依赖） |
+
+### 工具库
+| 库 | 版本 | 说明 |
+|---|------|------|
+| requests | >=2.31.0 | HTTP请求库 |
+| python-dotenv | >=1.0.0 | 环境变量加载 |
+| pillow | >=10.0.0 | 图像处理库 |
+
+### 本地包
+| 包 | 说明 |
+|---|------|
+| semantic_retrieval_client | SRS语义检索客户端（从 `semantic_retrieval_client_package/` 本地安装） |
 
 ## 配置说明
 
